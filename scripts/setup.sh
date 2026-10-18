@@ -314,7 +314,7 @@ if (( with_services )); then
 fi
 
 log "Verifying Python dependencies"
-run "$venv_python" -c 'import fastapi, uvicorn, httpx, dotenv, sqlite3; print("Backend imports OK")'
+run "$venv_python" -c 'import fastapi, uvicorn, httpx, dotenv, sqlite3, psycopg, jsonschema; print("Backend and catalog imports OK")'
 if (( with_reranker )); then
     run "$venv_python" -c 'import torch, sentence_transformers, huggingface_hub; print("Reranker libraries OK; model setup remains separate")'
 fi

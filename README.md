@@ -1,7 +1,7 @@
 # Conversational Commerce Backend
 
-A local FastAPI backend for persistent conversations with Ollama, plus a local
-1.54B-parameter reranker and scripts for downloading fashion/beauty metadata.
+A local FastAPI backend for persistent conversations with Ollama, a local
+1.54B-parameter reranker, and a versioned PostgreSQL fashion/beauty catalog.
 
 - Chat model: `ministral-3:8b` through Ollama.
 - Conversation memory: SQLite transcripts, recent turns, and rolling summaries.
@@ -157,9 +157,55 @@ and writes record counts to `data/public_sources/download_report.json`.
 
 The compressed archives total about 975 MB. These are historical product
 metadata, including image URLs; product images and review archives are not
-downloaded. Records still need normalization, deduplication, and indexing.
+downloaded. Normalization and quality sampling are handled by the separate
+[ETL project](https://github.com/Vijayaadhithan/conversational_commerce_etl).
 Do not treat historical prices or availability as current commerce facts.
 Check source terms before redistributing third-party data or weights.
+
+## PostgreSQL catalog
+
+After running the ETL project, import its quality-eligible subset. The default
+paths expect the ETL checkout beside this backend. Configure
+`CATALOG_DATABASE_URL` and `CATALOG_ETL_OUTPUT_DIR` in `.env`; see
+[.env.example](.env.example). Existing conversation storage remains SQLite.
+
+```bash
+# Install the catalog driver and schema-validation dependencies
+.venv/bin/python -m pip install -r requirements.txt
+
+# Create the dedicated database if missing, then apply versioned migrations
+.venv/bin/python scripts/init_catalog.py --create-database
+
+# Optional: validate the entire subset without connecting to PostgreSQL
+.venv/bin/python scripts/import_catalog.py --check-only
+
+# Import, publish, and independently compare all products with their source
+.venv/bin/python scripts/import_catalog.py
+.venv/bin/python scripts/verify_catalog.py
+```
+
+The default database is `conversational_commerce`. Local socket authentication
+uses your current PostgreSQL user; use a password-protected connection URL in
+the ignored `.env` for another installation. Creating a database requires the
+appropriate PostgreSQL privilege. Omit `--create-database` when an administrator
+has already created it; an optional `CATALOG_ADMIN_DATABASE_URL` can select the
+administrative connection for creation.
+
+Imports validate the pinned JSON Schema, subset checksum/size/count, IDs,
+eligibility, positive historical USD prices, and source-observation references.
+Complete normalized records and unknown attributes are preserved. Typed columns
+are generated from the same JSONB record for category, brand, and price filters.
+The current dataset is available through `commerce.active_products`.
+
+Each completed manifest identifies an immutable snapshot. A single transaction
+loads and verifies all products before switching the active snapshot. Failed
+imports preserve the previous catalog. Repeating an import verifies and reuses
+its records; it does not append duplicates. Older snapshots remain available
+for deliberate rollback and are never pruned automatically.
+
+See [docs/catalog.md](docs/catalog.md) for the schema, sample queries, validation
+boundaries, and test commands. Product embeddings and automatic conversation
+retrieval are separate implementation steps.
 
 ## API
 

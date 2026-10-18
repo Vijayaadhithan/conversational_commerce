@@ -53,8 +53,18 @@ complete coverage of product variants, ages, genders, ingredients, or sizes.
 Use a dedicated PostgreSQL database with pgvector for catalog records and
 vectors, and Redis for bounded caches. `scripts/setup.sh --with-services` can
 install PostgreSQL, matching pgvector extension files, and Redis. Creating a
-dedicated database, enabling its vector extension, catalog ingestion, vector
-generation, and retrieval wiring remain separate implementation work.
+dedicated database and importing the normalized subset are implemented through
+`scripts/init_catalog.py` and `scripts/import_catalog.py`. Enabling the vector
+extension, generating embeddings, and wiring retrieval remain subsequent work.
+
+The catalog uses the `commerce` schema in its own PostgreSQL database. Immutable
+import snapshots preserve each normalized JSONB product, source provenance,
+unknown fields, historical prices, and the ETL manifest. Generated typed columns
+provide consistent filter values. Importing uses validated client-side COPY,
+transaction-scoped writer coordination, and an atomic active-snapshot pointer;
+repeated imports verify and reuse existing records. The active-products view
+contains only the chosen snapshot, so removed products cannot leak in from old
+imports. See [catalog.md](catalog.md).
 
 PostgreSQL can keep authoritative product filters and vectors together, using
 SQL for category, brand, price, and variant constraints. It stores data on disk
