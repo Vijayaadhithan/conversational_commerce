@@ -18,9 +18,10 @@ def main():
     parser.add_argument("query")
     parser.add_argument("--filters", default="{}", help="JSON object with structured mandatory filters")
     parser.add_argument("--limit", type=int, default=5)
+    parser.add_argument("--no-rerank", action="store_true", help="Explicitly return the RRF baseline without local reranking")
     args = parser.parse_args()
     try:
-        request = ProductSearchRequest(query=args.query, filters=json.loads(args.filters), limit=args.limit)
+        request = ProductSearchRequest(query=args.query, filters=json.loads(args.filters), limit=args.limit, rerank=not args.no_rerank)
         print(json.dumps(ProductSearch().search(request), indent=2, ensure_ascii=False))
         return 0
     except (CatalogError, ValidationError, ValueError, psycopg.Error, OSError) as exc:

@@ -65,16 +65,24 @@ class LocalReranker:
         self.model = model
         self.device = device
 
-    def rank(self, query, documents, top_k):
+    def rank(self, query, documents, top_k, *, preserve_query=False):
         with self.lock:
             self._load()
+            # The template places query before document. Reserve its full UTF-8
+            # byte length plus template/suffix headroom so right truncation cannot
+            # silently shorten an accepted product-search query (at most 1000 bytes).
+            pair_length = max(self.max_length, len(query.encode("utf-8")) + 256) if preserve_query else self.max_length
+            if preserve_query and self.model.tokenizer.truncation_side != "right":
+                raise RuntimeError("Product reranking requires right truncation to preserve query text")
+            kwargs = {"processing_kwargs": {"text": {"max_length": pair_length, "truncation": True}}} if preserve_query else {}
             scores = self.model.predict([(query, doc) for doc in documents],
-                                        batch_size=self.batch_size, show_progress_bar=False)
+                                        batch_size=self.batch_size, show_progress_bar=False, **kwargs)
             # Reject invalid scores instead of returning a misleading ordering.
             if not all(math.isfinite(float(score)) for score in scores):
                 raise RuntimeError("Local reranker returned non-finite scores")
             ranked = sorted(enumerate(scores), key=lambda item: float(item[1]), reverse=True)
-            return {"model": MODEL_ID, "device": self.device,
+            return {"model": MODEL_ID, "revision": MODEL_REVISION, "device": self.device,
+                    "max_pair_tokens": pair_length,
                     "device_note": self.device_note,
                     "results": [{"index": index, "score": float(score), "text": documents[index]}
                                 for index, score in ranked[:top_k]]}

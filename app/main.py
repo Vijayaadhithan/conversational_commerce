@@ -199,7 +199,7 @@ def create_app(settings=None, transport=None):
         # One worker serializes GPU calls and prevents lost/overlapping turns.
         app.state.generation_lock = asyncio.Lock()
         app.state.reranker = LocalReranker()
-        app.state.product_search = ProductSearch()
+        app.state.product_search = ProductSearch(reranker=app.state.reranker)
         async with httpx.AsyncClient(
             base_url=settings.ollama_url, timeout=httpx.Timeout(settings.timeout, connect=5),
             transport=transport, trust_env=False,

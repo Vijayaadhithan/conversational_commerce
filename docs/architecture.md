@@ -35,8 +35,9 @@ the project has no comprehensive fashion/beauty relevance benchmark yet.
 Raw log-odds scores are retained instead of applying sigmoid, avoiding artificial
 ties when strong matches saturate to 1.0 in float16.
 
-The `/products/search` endpoint retrieves catalog products. `/rerank` ranks
-caller-supplied documents. Conversation requests do not automatically invoke
+The `/products/search` endpoint retrieves catalog products and reranks the top
+20 eligible RRF candidates by default. `/rerank` ranks caller-supplied documents.
+Both share one lazy local reranker and the API generation lock. Conversation requests do not automatically invoke
 catalog search or reranking yet.
 
 ## Catalog inputs
@@ -93,3 +94,10 @@ index, and RRF (constant 60) over up to 50 candidates per path. It uses PostgreS
 text ranking, not BM25. Identical SQL constraints apply before both candidate
 limits. An active search build must match the active catalog, local input
 contract, model name, and Ollama digest. See [search.md](search.md).
+
+Product reranking can only reorder candidates already admitted by the SQL
+filters; it cannot introduce product IDs or change mandatory constraints. It
+runs after hydration and after releasing the PostgreSQL read transaction.
+Responses retain the pinned catalog/build, RRF ranks, reranker scores, model
+revision, device, and bounded candidate count. Invalid/incomplete reranker output
+fails explicitly. See [product_reranking.md](product_reranking.md).

@@ -9,8 +9,8 @@ A local FastAPI backend for persistent conversations with Ollama, a local
   running through PyTorch on Apple MPS or CPU.
 - Catalog inputs: All Beauty, Amazon Fashion, and Beauty & Personal Care.
 
-`POST /products/search` retrieves products using keyword and vector search with
-structured mandatory filters. Conversation turns do not invoke product search
+`POST /products/search` retrieves products using keyword/vector search and the
+local reranker, with structured mandatory filters. Conversation turns do not invoke product search
 automatically yet. `POST /rerank` scores documents supplied by the caller.
 
 ## Setup
@@ -239,6 +239,21 @@ contract prevent mixed generations. At this 20,000-product scale, semantic searc
 uses exact cosine distance; PostgreSQL full-text search provides keyword matches,
 and reciprocal rank fusion combines the two candidate rankings.
 
+The existing local reranker scores the best 20 eligible RRF candidates before
+selecting the requested results. Reranking is enabled by default and uses the
+same lazy model instance as `/rerank`. Install the optional reranker libraries
+and local weights using the earlier setup instructions if missing. To explicitly
+use the RRF baseline without that dependency:
+
+```bash
+.venv/bin/python scripts/search_products.py 'running shoes' \
+  --filters '{"domain":"fashion","family":"footwear","max_price":"75.00"}' --no-rerank
+```
+
+HTTP accepts `"rerank":false` for the same comparison. A requested rerank that
+fails returns 503 instead of silently falling back. `PRODUCT_RERANK_CANDIDATES`
+sets the server-side pool size (20-50). See [docs/product_reranking.md](docs/product_reranking.md).
+
 ```bash
 # Force selected products, or force an entirely new embedding generation
 .venv/bin/python scripts/build_search_index.py --reembed-product amazon:YOURASIN01
@@ -276,10 +291,10 @@ excluded product IDs. Attribute text matching is exact and case-insensitive;
 `fragrance_free` requires a boolean. Unknown values never satisfy a required
 attribute. Empty matches stay empty; constraints are not relaxed.
 
-Results include ranking signals, historical price, explicit attribute claims,
+Results include RRF/reranker ranking signals, historical price, explicit attribute claims,
 listing excerpts, and observation provenance. Similarity and excerpts do not
-establish medical suitability or live stock. Reranking and conversation-level
-preference handling remain subsequent integration steps. See
+establish medical suitability or live stock. Conversation-level preference
+handling remains a subsequent integration step. See
 [docs/search.md](docs/search.md) for build behavior and limitations.
 
 ## API

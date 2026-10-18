@@ -10,6 +10,8 @@ from pydantic import BaseModel, ConfigDict, Field, StrictBool, StringConstraints
 from app.catalog import CatalogError, connect_database
 from app.embedding_text import QUERY_PREFIX, contract
 from app.embeddings import EmbeddingSettings, OllamaEmbedder, vector_literal
+from app.product_reranking import rerank_candidates as apply_reranking, rerank_document
+from app.reranker import LocalReranker
 
 AttributeName = Literal["color", "size", "material", "department", "age_range", "skin_type",
     "hair_type", "ingredients", "active_ingredients", "benefits", "material_type_free",
@@ -59,6 +61,7 @@ class ProductSearchRequest(BaseModel):
     filters: ProductFilters = Field(default_factory=ProductFilters,
                                    description="Mandatory constraints applied to both retrieval paths; never relaxed.")
     limit: int = Field(default=5, ge=1, le=20)
+    rerank: StrictBool = Field(default=True, description="Rerank eligible candidates with the installed local model. False explicitly returns the RRF baseline.")
 
     @field_validator("query")
     @classmethod
@@ -143,7 +146,7 @@ def listing_evidence(record, query):
     return evidence
 
 
-def search_catalog(db, request, embedder, pinned=None):
+def search_catalog(db, request, embedder, pinned=None, *, candidate_limit=None, candidate_texts=None):
     pinned = pinned or pin_search_build(db)
     config = pinned["config"]
     if embedder.settings.model != config["model"]:
@@ -177,11 +180,13 @@ def search_catalog(db, request, embedder, pinned=None):
          vector_literal(vector), pinned["build_id"]]).fetchall()
     keyword = sorted([(key, score) for kind, key, score in rows if kind == "keyword"], key=lambda item: (-item[1], item[0]))
     semantic = sorted([(key, score) for kind, key, score in rows if kind == "vector"], key=lambda item: (item[1], item[0]))
-    fused = reciprocal_rank_fusion(keyword, semantic)[:request.limit]
+    fused = reciprocal_rank_fusion(keyword, semantic)[:candidate_limit or request.limit]
     records = dict(db.execute("SELECT product_id,document FROM commerce.catalog_products WHERE import_id=%s AND product_id=ANY(%s)",
                               (pinned["import_id"], [item[0] for item in fused])).fetchall())
     for product_id, ranking in fused:
         record = records[product_id]
+        if candidate_texts is not None:
+            candidate_texts[product_id] = rerank_document(record)
         base["results"].append({"product_id": product_id, "title": record["title"],
             "category": record["category"], "brand": record["brand"], "price": record["price"],
             "attributes": record["attributes"], "availability": record["availability"],
@@ -191,13 +196,26 @@ def search_catalog(db, request, embedder, pinned=None):
 
 
 class ProductSearch:
-    def __init__(self, database_url=None, settings=None):
+    def __init__(self, database_url=None, settings=None, reranker=None, rerank_candidates=None):
         self.database_url = database_url or os.getenv("CATALOG_DATABASE_URL", "postgresql:///conversational_commerce")
         self.settings = settings or EmbeddingSettings.from_env()
+        self.reranker = reranker if reranker is not None else LocalReranker()
+        self.rerank_candidates = rerank_candidates if rerank_candidates is not None else int(os.getenv("PRODUCT_RERANK_CANDIDATES", "20"))
+        if not 20 <= self.rerank_candidates <= 50:
+            raise CatalogError("PRODUCT_RERANK_CANDIDATES must be between 20 and 50")
 
     def search(self, request):
+        texts = {} if request.rerank else None
         with connect_database(self.database_url) as db:
             db.execute("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY")
             pinned = pin_search_build(db)
             with OllamaEmbedder(self.settings) as embedder:
-                return search_catalog(db, request, embedder, pinned)
+                result = search_catalog(db, request, embedder, pinned,
+                    candidate_limit=self.rerank_candidates if request.rerank else request.limit,
+                    candidate_texts=texts)
+        # All product data was hydrated from one pinned snapshot; release PostgreSQL
+        # before potentially slow cold model loading/scoring.
+        if request.rerank:
+            return apply_reranking(result, texts, request, self.reranker)
+        result["reranking"] = {"requested": False, "applied": False, "reason": "disabled", "candidate_count": 0}
+        return result

@@ -33,7 +33,7 @@ def main():
     observed = []
     for query, filters in CASES:
         start = time.monotonic()
-        response = service.search(ProductSearchRequest(query=query, filters=filters, limit=5))
+        response = service.search(ProductSearchRequest(query=query, filters=filters, limit=5, rerank=False))
         seconds = time.monotonic() - start
         rows = response["results"]
         assert len(rows) == len({row["product_id"] for row in rows})

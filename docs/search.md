@@ -81,7 +81,8 @@ not the semantic correctness of the model's embedding values.
     "max_price": "30.00",
     "attributes": {"fragrance_free": true}
   },
-  "limit": 5
+  "limit": 5,
+  "rerank": true
 }
 ```
 
@@ -119,6 +120,8 @@ Both retrieval paths use identical eligible IDs before their top-50 limits:
    or post-ANN filtering that could lose restrictive-filter candidates here.
 3. Reciprocal rank fusion with constant 60 and product-ID tie breaks.
 4. Hydration from the same pinned catalog snapshot.
+5. By default, local cross-encoder reranking of the best 20 RRF candidates before
+   applying the requested result limit. `rerank:false` returns the RRF baseline.
 
 See [pgvector exact search and indexing](https://github.com/pgvector/pgvector#indexing).
 Exact search is a baseline for 20,000 records; larger catalogs need measured
@@ -138,22 +141,26 @@ return an empty result; the backend does not relax constraints to fill a page.
 ```bash
 CATALOG_TEST_ADMIN_URL=postgresql:///postgres .venv/bin/python -m pytest -q
 .venv/bin/python scripts/check_search.py
+.venv/bin/python scripts/check_product_reranking.py
 ```
 
 Tests use fake vectors to exercise protocol validation, source-contract bounds,
 resume, publication, snapshot isolation, hard filters, null claims, rank fusion,
 API validation, and query parameterization against a temporary PostgreSQL DB.
-The live smoke script uses the real model/catalog and writes a local report to
+The baseline live smoke script explicitly disables reranking and uses the real
+embedding model/catalog, writing a local report to
 `data/search/smoke_report.json`. Its category/price/attribute checks verify
 constraints and execution. They are not human relevance judgments or qrels and
 must not be reported as recommendation accuracy, Recall, or NDCG.
 
-Connecting the existing reranker, maintaining conversational requirements,
-grounded user-facing explanations, and human-judged relevance evaluation remain
-subsequent work. Redis caching can follow measured latency and correctness.
+The existing reranker is connected; see [product_reranking.md](product_reranking.md).
+Maintaining conversational requirements, grounded user-facing explanations, and
+human-judged relevance evaluation remain subsequent work. Redis caching can
+follow measured latency and correctness.
 
-The first live smoke run also exposed relevance limitations: a shoelace listing
+The original baseline smoke run exposed relevance limitations: a shoelace listing
 ranked above a running shoe, and a scraper-blade listing appeared for razor
 blades. Broad source-derived families are noisy. These observations are retained
-in the local smoke report and require product-type evaluation and reranking;
+in the local smoke report and motivated the reranker integration. Product-type
+evaluation is still needed;
 passing structured-filter checks does not establish correct product suitability.
