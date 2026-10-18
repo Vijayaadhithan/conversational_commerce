@@ -98,6 +98,21 @@ def test_rank_fusion_combines_independent_ranks_deterministically():
     assert fused[0][1]["keyword_rank"] == 2 and fused[0][1]["vector_rank"] == 1
 
 
+def test_brand_exclusions_are_sql_constraints_and_unknown_brands_do_not_match(pg, scratch_database, tmp_path):
+    rows = [product(), product("B000000002"), product("B000000003")]
+    rows[1]["brand"] = {"value": "Acme", "field": "/details/Brand", "status": "listing_claim"}
+    rows[2]["brand"] = {"value": "Other", "field": "/details/Brand", "status": "listing_claim"}
+    make_source(tmp_path, rows)
+    with validated_source(tmp_path) as source: import_catalog(pg, source)
+    pg.commit()
+    with connect_database(scratch_database, autocommit=True) as db:
+        build_index(db, FakeEmbedder(), lambda *args, **kwargs: None)
+    request = ProductSearchRequest(query="moisturizer", filters={"exclude_brands": ["aCmE"]})
+    result = search_catalog(pg, request, FakeEmbedder())
+    assert result["eligible_products"] == 1
+    assert [row["product_id"] for row in result["results"]] == ["amazon:B000000003"]
+
+
 def test_filtered_search_excludes_unknowns_wrong_categories_and_over_budget(pg, scratch_database, tmp_path):
     rows = [product(), product("B000000002"), product("B000000003", "100.00"), product("B000000004", "8.00")]
     rows[1]["title"] = "Fragrance free moisturizer"

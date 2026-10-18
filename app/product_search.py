@@ -29,6 +29,7 @@ class ProductFilters(BaseModel):
     max_price: Decimal | None = Field(default=None, ge=0, max_digits=20, decimal_places=2)
     attributes: dict[AttributeName, AttributeValue] = Field(default_factory=dict)
     exclude_product_ids: list[ProductID] = Field(default_factory=list, max_length=100)
+    exclude_brands: list[Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=160)]] = Field(default_factory=list, max_length=10)
 
     @field_validator("brand", "family")
     @classmethod
@@ -44,6 +45,8 @@ class ProductFilters(BaseModel):
 
     @model_validator(mode="after")
     def check_constraints(self):
+        for brand in self.exclude_brands:
+            self.valid_text(brand)
         if self.min_price is not None and self.max_price is not None and self.min_price > self.max_price:
             raise ValueError("min_price must not exceed max_price")
         for key, value in self.attributes.items():
@@ -97,6 +100,9 @@ def filter_sql(filters):
     if filters.exclude_product_ids:
         clauses.append("NOT (p.product_id=ANY(%s))")
         values.append(filters.exclude_product_ids)
+    if filters.exclude_brands:
+        clauses.append("p.brand IS NOT NULL AND NOT (lower(p.brand)=ANY(%s))")
+        values.append([brand.lower() for brand in filters.exclude_brands])
     return (" AND " + " AND ".join(clauses)) if clauses else "", values
 
 

@@ -4,20 +4,24 @@ import asyncio
 from contextlib import asynccontextmanager, contextmanager
 from dataclasses import dataclass
 from datetime import datetime, timezone
+from decimal import InvalidOperation
 import json
 import os
 from pathlib import Path
 import sqlite3
+from typing import Literal
 from uuid import UUID, uuid4
 
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Query, Response
 import httpx
 import psycopg
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, ValidationError, field_validator
 
 from app.reranker import LocalReranker
-from app.catalog import CatalogError
+from app.catalog import CatalogError, strict_json
+from app.commerce import IntentError, direct_plan, handle_turn
+from app.commerce_models import IntentPlan, PLANNER_PROMPT, ShoppingState, planner_context, planner_examples, preference_view
 from app.product_search import ProductSearch, ProductSearchRequest
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -86,7 +90,20 @@ class Store:
                 );
                 CREATE INDEX IF NOT EXISTS messages_conversation
                     ON messages(conversation_id, id);
+                CREATE TABLE IF NOT EXISTS commerce_turns (
+                    message_id INTEGER PRIMARY KEY REFERENCES messages(id) ON DELETE CASCADE,
+                    metadata TEXT NOT NULL
+                );
             """)
+            # Additive migration also supports conversations created by earlier versions.
+            columns = {row[1] for row in db.execute("PRAGMA table_info(conversations)")}
+            for name, declaration in {
+                "mode": "TEXT NOT NULL DEFAULT 'chat'",
+                "shopping_state": "TEXT NOT NULL DEFAULT '{}'",
+                "state_version": "INTEGER NOT NULL DEFAULT 0",
+            }.items():
+                if name not in columns:
+                    db.execute(f"ALTER TABLE conversations ADD COLUMN {name} {declaration}")
 
     @contextmanager
     def connect(self):
@@ -99,11 +116,11 @@ class Store:
         finally:
             db.close()
 
-    def create(self, title):
-        record = dict(id=str(uuid4()), title=title, created_at=now(), updated_at=now())
+    def create(self, title, mode="chat"):
+        record = dict(id=str(uuid4()), title=title, mode=mode, created_at=now(), updated_at=now())
         with self.connect() as db:
             db.execute(
-                "INSERT INTO conversations(id,title,created_at,updated_at) VALUES (:id,:title,:created_at,:updated_at)",
+                "INSERT INTO conversations(id,title,mode,created_at,updated_at) VALUES (:id,:title,:mode,:created_at,:updated_at)",
                 record,
             )
         return record
@@ -113,21 +130,48 @@ class Store:
             row = db.execute("SELECT * FROM conversations WHERE id=?", (conversation_id,)).fetchone()
         if row is None:
             raise HTTPException(404, "Conversation not found")
-        return dict(row)
+        record = dict(row)
+        record["shopping_state"] = json.loads(record["shopping_state"])
+        return record
 
     def list(self, limit, offset):
         with self.connect() as db:
             return [dict(r) for r in db.execute(
-                "SELECT id,title,created_at,updated_at FROM conversations ORDER BY updated_at DESC LIMIT ? OFFSET ?",
+                "SELECT id,title,mode,created_at,updated_at FROM conversations ORDER BY updated_at DESC LIMIT ? OFFSET ?",
                 (limit, offset),
             )]
 
     def messages(self, conversation_id, after=0, limit=100):
         with self.connect() as db:
-            return [dict(r) for r in db.execute(
-                "SELECT id,role,content,created_at FROM messages WHERE conversation_id=? AND id>? ORDER BY id LIMIT ?",
+            rows = db.execute(
+                """SELECT m.id,m.role,m.content,m.created_at,c.metadata FROM messages m
+                   LEFT JOIN commerce_turns c ON c.message_id=m.id
+                   WHERE m.conversation_id=? AND m.id>? ORDER BY m.id LIMIT ?""",
                 (conversation_id, after, limit),
-            )]
+            ).fetchall()
+        messages = []
+        for row in rows:
+            item = dict(row)
+            metadata = item.pop("metadata")
+            if metadata is not None: item["commerce"] = json.loads(metadata)
+            messages.append(item)
+        return messages
+
+    def commit_commerce_turn(self, conversation_id, user, state, metadata, expected_version):
+        with self.connect() as db:
+            stamp = now()
+            changed = db.execute("""UPDATE conversations SET shopping_state=?,state_version=state_version+1,
+                updated_at=? WHERE id=? AND state_version=?""",
+                (state.model_dump_json(), stamp, conversation_id, expected_version)).rowcount
+            if changed != 1:
+                raise HTTPException(409, "Conversation changed during this request; reload before retrying")
+            db.execute("INSERT INTO messages(conversation_id,role,content,created_at) VALUES (?, 'user', ?, ?)",
+                       (conversation_id, user, stamp))
+            cursor = db.execute("INSERT INTO messages(conversation_id,role,content,created_at) VALUES (?, 'assistant', ?, ?)",
+                                (conversation_id, metadata["reply"], stamp))
+            db.execute("INSERT INTO commerce_turns(message_id,metadata) VALUES (?,?)",
+                       (cursor.lastrowid, json.dumps(metadata, ensure_ascii=False)))
+            return cursor.lastrowid
 
     def commit_turn(self, conversation_id, user, answer, summary, boundary):
         # Save the whole turn and its memory together, only after successful inference.
@@ -150,6 +194,7 @@ class Store:
 
 class NewConversation(BaseModel):
     title: str = Field(default="New conversation", min_length=1, max_length=120)
+    mode: Literal["chat", "commerce"] = "chat"
 
 
 class ChatRequest(BaseModel):
@@ -242,6 +287,29 @@ def create_app(settings=None, transport=None):
             raise HTTPException(502, "Local model returned no completed answer; turn was not saved")
         return content, result
 
+    async def shopping_plan(state, user):
+        deterministic = direct_plan(user)
+        if deterministic:
+            return deterministic, {}
+        messages = [{"role": "system", "content": PLANNER_PROMPT}, *planner_examples(),
+                    {"role": "user", "content": planner_context(state, user)}]
+        schema = IntentPlan.model_json_schema()
+        schema["required"] = ["intent", "evidence", "changes"]
+        if byte_size(messages) + byte_size(schema) > settings.prompt_budget:
+            raise HTTPException(413, "Shopping state and message exceed the model context; use a new conversation or increase OLLAMA_CONTEXT_SIZE")
+        result = await ollama_request("POST", "/api/chat", json={
+            "model": settings.model, "messages": messages, "format": schema, "stream": False,
+            "keep_alive": settings.keep_alive,
+            "options": {"temperature": 0, "num_ctx": settings.context_size, "num_predict": settings.max_tokens},
+        })
+        try:
+            if result.get("done") is not True or result.get("done_reason") == "length":
+                raise ValueError("Incomplete extraction")
+            content = result["message"]["content"]
+            return IntentPlan.model_validate(strict_json(content)), result
+        except (ValueError, TypeError, KeyError) as exc:
+            raise HTTPException(502, "Local model returned invalid shopping intent; turn was not saved") from exc
+
     def prompt(summary, history, user):
         messages = [{"role": "system", "content": settings.system_prompt}]
         if summary:
@@ -302,7 +370,7 @@ def create_app(settings=None, transport=None):
 
     @app.post("/conversations", status_code=201)
     async def new_conversation(body: NewConversation):
-        return app.state.store.create(body.title)
+        return app.state.store.create(body.title, body.mode)
 
     @app.get("/conversations")
     async def list_conversations(limit: int = Query(50, ge=1, le=100), offset: int = Query(0, ge=0)):
@@ -311,6 +379,14 @@ def create_app(settings=None, transport=None):
     @app.get("/conversations/{conversation_id}")
     async def get_conversation(conversation_id: UUID):
         return app.state.store.get(str(conversation_id))
+
+    @app.get("/conversations/{conversation_id}/preferences")
+    async def get_preferences(conversation_id: UUID):
+        record = app.state.store.get(str(conversation_id))
+        if record["mode"] != "commerce":
+            raise HTTPException(409, "Create a conversation with mode='commerce' to use shopping preferences")
+        return {"conversation_id": str(conversation_id), "state_version": record["state_version"],
+                "preferences": preference_view(ShoppingState.model_validate(record["shopping_state"]))}
 
     @app.get("/conversations/{conversation_id}/messages")
     async def get_messages(conversation_id: UUID, after: int = Query(0, ge=0), limit: int = Query(100, ge=1, le=500)):
@@ -324,6 +400,26 @@ def create_app(settings=None, transport=None):
         async with app.state.generation_lock:
             key = str(conversation_id)
             record = app.state.store.get(key)
+            if record["mode"] == "commerce":
+                state = ShoppingState.model_validate(record["shopping_state"])
+                plan, result = await shopping_plan(state, body.message)
+                try:
+                    state, commerce = await asyncio.to_thread(
+                        handle_turn, state.model_dump(mode="json"), plan, body.message, app.state.product_search.search)
+                except (IntentError, ValidationError, InvalidOperation) as exc:
+                    raise HTTPException(502, "Local model proposed an unsupported preference change; turn was not saved") from exc
+                except CatalogError as exc:
+                    raise HTTPException(503, str(exc)) from exc
+                except (psycopg.Error, OSError) as exc:
+                    raise HTTPException(503, "Product search unavailable; shopping turn was not saved") from exc
+                commerce.update(intent=plan.model_dump(mode="json"), preferences=preference_view(state),
+                                state_version=record["state_version"] + 1)
+                message_id = app.state.store.commit_commerce_turn(key, body.message, state, commerce, record["state_version"])
+                return {"conversation_id": key, "message_id": message_id, "reply": commerce["reply"],
+                        "model": settings.model, "done_reason": result.get("done_reason", "deterministic"),
+                        "commerce": commerce,
+                        "usage": {"prompt_tokens": result.get("prompt_eval_count"),
+                                  "completion_tokens": result.get("eval_count")}}
             history = app.state.store.messages(key, record["summarized_through"], limit=1000)
             messages, summary, boundary = await prepare_context(record, history, body.message)
             answer, result = await complete(messages)

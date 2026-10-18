@@ -10,6 +10,7 @@ def main():
     parser = argparse.ArgumentParser(description="Talk to your local conversational API")
     parser.add_argument("--url", default="http://127.0.0.1:8000")
     parser.add_argument("--session", help="Resume a saved conversation ID")
+    parser.add_argument("--commerce", action="store_true", help="Create a product recommendation conversation")
     args = parser.parse_args()
 
     def request(method, path, body=None):
@@ -20,9 +21,9 @@ def main():
             return json.load(response)
 
     try:
-        session = args.session or request("POST", "/conversations", {})["id"]
-        request("GET", f"/conversations/{session}")
-        print(f"Conversation: {session}\nCommands: /exit, /new, /history")
+        session = args.session or request("POST", "/conversations", {"mode": "commerce" if args.commerce else "chat"})["id"]
+        mode = request("GET", f"/conversations/{session}")["mode"]
+        print(f"Conversation: {session} ({mode})\nCommands: /exit, /new, /history, /preferences")
         while True:
             text = input("\nYou: ").strip()
             if text == "/exit":
@@ -31,8 +32,10 @@ def main():
                 continue
             try:
                 if text == "/new":
-                    session = request("POST", "/conversations", {})["id"]
+                    session = request("POST", "/conversations", {"mode": mode})["id"]
                     print(f"Conversation: {session}")
+                elif text == "/preferences":
+                    print(json.dumps(request("GET", f"/conversations/{session}/preferences"), indent=2))
                 elif text == "/history":
                     after = 0
                     while True:

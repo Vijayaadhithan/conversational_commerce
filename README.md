@@ -5,13 +5,16 @@ A local FastAPI backend for persistent conversations with Ollama, a local
 
 - Chat model: `ministral-3:8b` through Ollama.
 - Conversation memory: SQLite transcripts, recent turns, and rolling summaries.
+- Commerce mode: structured intent extraction, persistent shopping tasks and preferences,
+  catalog recommendations with listing-based explanations, and follow-up comparisons/refinements.
 - Reranker: [Mixedbread mxbai-rerank-large-v2](https://huggingface.co/mixedbread-ai/mxbai-rerank-large-v2),
   running through PyTorch on Apple MPS or CPU.
 - Catalog inputs: All Beauty, Amazon Fashion, and Beauty & Personal Care.
 
 `POST /products/search` retrieves products using keyword/vector search and the
-local reranker, with structured mandatory filters. Conversation turns do not invoke product search
-automatically yet. `POST /rerank` scores documents supplied by the caller.
+local reranker, with structured mandatory filters. Conversations created with
+`mode: "commerce"` invoke that pipeline after extracting and validating intent.
+`POST /rerank` scores documents supplied by the caller.
 
 ## Setup
 
@@ -104,6 +107,8 @@ In another terminal, start a continuous conversation:
 
 ```bash
 .venv/bin/python scripts/chat.py
+# Or start a product recommendation conversation:
+.venv/bin/python scripts/chat.py --commerce
 ```
 
 The client prints a conversation ID. `/history` shows the transcript, `/new`
@@ -112,6 +117,12 @@ starts another conversation, and `/exit` quits. Resume a saved chat with:
 ```bash
 .venv/bin/python scripts/chat.py --session YOUR_CONVERSATION_ID
 ```
+
+Commerce mode also supports `/preferences`. It remembers requirements across
+turns and restarts, asks for missing product/recipient details, and supports
+“under $20 instead,” “more options,” “cheaper,” and “compare the first two.”
+See [conversational recommendations](docs/conversations.md) for the API, examples,
+state rules, and validation commands.
 
 ## Install the local 1.54B reranker
 

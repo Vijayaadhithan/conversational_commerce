@@ -37,8 +37,11 @@ ties when strong matches saturate to 1.0 in float16.
 
 The `/products/search` endpoint retrieves catalog products and reranks the top
 20 eligible RRF candidates by default. `/rerank` ranks caller-supplied documents.
-Both share one lazy local reranker and the API generation lock. Conversation requests do not automatically invoke
-catalog search or reranking yet.
+Both share one lazy local reranker and the API generation lock. Commerce-mode
+conversations extract evidence-backed intent first, persist separate shopping
+tasks and requirements in SQLite, and invoke filtered search for discovery and
+refinement. Grounded replies retain listing evidence; direct comparisons use
+saved recommendation snapshots. See [conversations.md](conversations.md).
 
 ## Catalog inputs
 
