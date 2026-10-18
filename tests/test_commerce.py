@@ -62,6 +62,7 @@ def harness(tmp_path, plans):
         assert body["options"]["temperature"] == 0
         context = json.loads(body["messages"][-1]["content"])
         answer = plans[context["latest_message"]]
+        if isinstance(answer, list): answer = answer.pop(0)
         if isinstance(answer, Exception): raise answer
         content = answer if isinstance(answer, str) else json.dumps(answer)
         return httpx.Response(200, json={"done": True, "done_reason": "stop", "message": {"content": content}})
@@ -378,3 +379,201 @@ def test_literal_goal_recovery_and_missing_concern_evidence():
     state = ShoppingState(tasks=[ShoppingTask(id=1, need="dry skin")], active_task_id=1)
     _, result = handle_turn(state.model_dump(), proposal, message, lambda _: {"results": [row]})
     assert any("do not explicitly confirm suitability" in text for text in result["products"][0]["why_recommended"])
+
+
+def test_reported_multi_concern_followup_accumulates_and_replays(tmp_path):
+    first = "i need a prduct that lightens my face"
+    second = "that lighten my face, reduce pimble, and so on"
+    plans = {first: plan("clarify", first, change("need", "lightens my face", "lightens my face")),
+             second: plan("clarify", second, change("need", "lighten my face", "lighten my face"),
+                          change("need", "reduce pimble", "reduce pimble"), question_kind="multiple")}
+    config, app, _ = harness(tmp_path, plans)
+    with TestClient(app) as client:
+        search = app.state.product_search = Search()
+        session = new(client)
+        first_result = commerce(client, session, first)
+        assert first_result["preferences"]["pending_kind"] == "skin_profile"
+        result = commerce(client, session, second)
+        assert result["action"] == "clarify" and "skin type" in result["reply"]
+        assert "Which product" not in result["reply"]
+        assert result["preferences"]["tasks"][0]["query"] == ""
+        needs = result["preferences"]["tasks"][0]["needs"]
+        assert [item["value"] for item in needs] == ["lightens my face", "lighten my face", "reduce pimble"]
+        assert needs[-1]["evidence"] == "reduce pimble"
+        repeated = commerce(client, session, second)
+        assert repeated["preferences"]["tasks"][0]["needs"] == needs
+        assert not search.calls
+    with TestClient(create_app(config)) as restarted:
+        saved = restarted.get(f"/conversations/{session}/preferences").json()
+        assert saved["preferences"]["tasks"][0]["needs"] == needs
+        assert len(restarted.get(f"/conversations/{session}/messages").json()["messages"]) == 6
+
+
+@pytest.mark.parametrize("answer", ["oily skin under $20", "show options", "not sure, suggest something"])
+def test_skin_concern_discovery_does_not_require_named_product_type(tmp_path, answer):
+    first = "lighten my face and reduce pimble"
+    plans = {first: plan("clarify", first, change("need", "lighten my face", "lighten my face"),
+                         change("need", "reduce pimble", "reduce pimble")), answer: plan("refine", answer)}
+    _, app, _ = harness(tmp_path, plans)
+    with TestClient(app) as client:
+        search = app.state.product_search = Search()
+        session = new(client)
+        commerce(client, session, first)
+        result = commerce(client, session, answer)
+        assert result["action"] == "recommend" and result["products"]
+        request = search.calls[-1]
+        assert request.filters.family == "skin_care" and request.filters.domain == "beauty"
+        assert "reduce pimble" in request.query and "lighten my face" in request.query
+        assert request.filters.attributes == {}
+        task = result["preferences"]["tasks"][0]
+        assert task["query"] == "skin care"
+        assert task["sources"]["query"]["specific_product_type_selected"] is False
+        if "20" in answer:
+            assert request.filters.max_price == Decimal("19.99")
+            assert any(item["value"] == "oily skin" for item in task["needs"])
+
+
+def test_legacy_concern_and_required_filters_survive_multi_need_update():
+    state = ShoppingState(tasks=[ShoppingTask(id=1, query="moisturizer", need="dry skin",
+        filters=ProductFilters(max_price="20", brand="Acme", attributes={"fragrance_free": True}),
+        sources={"need": {"value": "dry skin", "evidence": "dry skin", "source": "user"}})], active_task_id=1)
+    message = "also dark spots and uneven skin tone"
+    proposal = IntentPlan.model_validate(plan("refine", message, change("need", "dark spots", "dark spots"),
+        change("need", "uneven skin tone", "uneven skin tone")))
+    search = Search()
+    state, _ = handle_turn(state.model_dump(), proposal, message, search.search)
+    assert [item.value for item in state.active().needs] == ["dry skin", "dark spots", "uneven skin tone"]
+    assert state.active().needs[0].evidence == "dry skin"
+    assert search.calls[-1].filters.max_price == Decimal("20")
+    assert search.calls[-1].filters.brand == "Acme"
+    assert search.calls[-1].filters.attributes == {"fragrance_free": True}
+
+
+def test_multi_need_validation_still_rejects_invented_evidence_atomically(tmp_path):
+    message = "lighten my face and reduce pimble"
+    _, app, _ = harness(tmp_path, {message: plan("clarify", message, change("need", "lighten my face", "lighten my face"),
+        change("need", "cure eczema", "cure eczema"))})
+    with TestClient(app) as client:
+        session = new(client)
+        assert send(client, session, message).status_code == 502
+        assert client.get(f"/conversations/{session}/preferences").json()["preferences"]["tasks"] == []
+        assert client.get(f"/conversations/{session}/messages").json()["messages"] == []
+
+
+def test_multiple_different_products_still_require_selection():
+    message = "I need shampoo and a moisturizer"
+    proposal = IntentPlan.model_validate(plan("clarify", message, question_kind="multiple"))
+    state, result = handle_turn({}, proposal, message, Search().search)
+    assert result["action"] == "clarify" and state.pending_kind == "multiple"
+
+
+def test_removing_one_concern_does_not_clear_the_others():
+    message = "dry skin and dark spots"
+    proposal = IntentPlan.model_validate(plan("clarify", message, change("need", "dry skin", "dry skin"), change("need", "dark spots", "dark spots")))
+    state, _ = handle_turn({}, proposal, message, Search().search)
+    message = "remove my dark spots concern"
+    proposal = IntentPlan.model_validate(plan("refine", message, change("need", None, message)))
+    state, _ = handle_turn(state.model_dump(), proposal, message, Search().search)
+    assert [item.value for item in state.active().needs] == ["dry skin"]
+
+
+def test_conflicting_scalar_filters_are_still_rejected(tmp_path):
+    message = "under $20 or under $30"
+    _, app, _ = harness(tmp_path, {message: plan("refine", message, change("max_price", "20", "under $20"), change("max_price", "30", "under $30"))})
+    with TestClient(app) as client:
+        session = new(client)
+        assert send(client, session, message).status_code == 502
+
+
+def test_generic_corrected_product_word_does_not_become_a_concrete_goal():
+    message = "i need a prduct that lightens my face"
+    proposal = IntentPlan.model_validate(plan("clarify", message, change("query", "product", "prduct"),
+        change("need", "lightens my face", "lightens my face")))
+    search = Search()
+    state, result = handle_turn({}, proposal, message, search.search)
+    assert result["action"] == "clarify" and state.pending_kind == "skin_profile"
+    assert not state.active().query and state.active().need == "lightens my face" and not search.calls
+
+
+def test_concern_mislabelled_as_query_is_saved_as_a_concern():
+    message = "that lighten my face, reduce pimble, and so on"
+    proposal = IntentPlan.model_validate(plan("refine", message, change("need", "reduce pimble", "reduce pimble"),
+        change("query", "lighten my face", "that lighten my face")))
+    search = Search()
+    state, result = handle_turn({}, proposal, message, search.search)
+    assert result["action"] == "clarify" and state.pending_kind == "skin_profile"
+    assert {item.value for item in state.active().needs} == {"lighten my face", "reduce pimble"}
+    assert not state.active().query and not search.calls
+
+
+@pytest.mark.parametrize("inferred", ["skin care", "serum", "face cream"])
+def test_inferred_product_type_is_not_invented_from_a_literal_skin_concern(inferred):
+    message = "lighten my face"
+    proposal = IntentPlan.model_validate(plan("search", message, change("query", inferred, message)))
+    search = Search()
+    state, result = handle_turn({}, proposal, message, search.search)
+    assert state.active().need == message and state.active().query == ""
+    assert result["action"] == "clarify" and not search.calls
+
+
+def test_one_repair_attempt_revalidates_without_saving_partial_state(tmp_path):
+    message = "moisturizer under $20"
+    answers = [plan("search", message, change("query", "moisturizer", "moisturizer"), change("brand", "Invented", "moisturizer")),
+               plan("search", message, change("query", "moisturizer", "moisturizer"))]
+    _, app, calls = harness(tmp_path, {message: answers})
+    with TestClient(app) as client:
+        search = app.state.product_search = Search()
+        session = new(client)
+        result = commerce(client, session, message)
+        assert result["intent_attempts"] == 2 and len(calls) == 2 and len(search.calls) == 1
+        assert any("Validation feedback" in item["content"] for item in calls[-1]["messages"] if item["role"] == "system")
+        assert result["preferences"]["tasks"][0]["filters"]["brand"] is None
+        assert search.calls[-1].filters.max_price == Decimal("19.99")
+        assert len(client.get(f"/conversations/{session}/messages").json()["messages"]) == 2
+        assert client.get(f"/conversations/{session}/preferences").json()["state_version"] == 1
+
+
+def test_repeated_concern_wrongly_labelled_reset_preserves_task():
+    message = "lighten my face, reduce pimble"
+    state, _ = handle_turn({}, IntentPlan.model_validate(plan("clarify", message,
+        change("need", "lighten my face", "lighten my face"), change("need", "reduce pimble", "reduce pimble"))), message, Search().search)
+    state.active().filters.max_price = Decimal("20")
+    proposal = IntentPlan(intent="reset", evidence=message)
+    state, result = handle_turn(state.model_dump(), proposal, message, Search().search)
+    assert result["action"] == "clarify" and len(state.tasks) == 1
+    assert len(state.active().needs) == 2 and state.active().filters.max_price == Decimal("20")
+
+
+def test_profile_answer_ignores_old_subspan_restatements_and_inferred_taxonomy():
+    message = "lighten my face and reduce pimble"
+    state, _ = handle_turn({}, IntentPlan.model_validate(plan("clarify", message, change("need", message, message))), message, Search().search)
+    message = "oily skin under $20 show options"
+    proposal = IntentPlan.model_validate(plan("refine", message,
+        change("need", "lighten my face", "lighten my face"),
+        change("domain", "beauty", "oily skin"), change("family", "skin_care", "oily skin")))
+    search = Search()
+    state, result = handle_turn(state.model_dump(), proposal, message, search.search)
+    assert result["action"] == "recommend" and search.calls[-1].filters.domain == "beauty"
+    assert search.calls[-1].filters.family == "skin_care" and search.calls[-1].filters.max_price == Decimal("19.99")
+    assert state.active().needs[0].value == "lighten my face and reduce pimble"
+    assert state.active().sources["domain"]["source"] == "concern_guided_discovery"
+
+
+def test_ambiguous_concern_removal_with_exception_keeps_all_until_clarified():
+    message = "dry skin and dark spots"
+    state, _ = handle_turn({}, IntentPlan.model_validate(plan("clarify", message, change("need", "dry skin", "dry skin"),
+        change("need", "dark spots", "dark spots"))), message, Search().search)
+    message = "remove all concerns except dry skin"
+    state, result = handle_turn(state.model_dump(), IntentPlan.model_validate(plan("refine", message, change("need", None, message))), message, Search().search)
+    assert result["action"] == "clarify" and {item.value for item in state.active().needs} == {"dry skin", "dark spots"}
+
+
+def test_legacy_generic_question_does_not_lose_a_new_issue_when_model_omits_changes():
+    state = ShoppingState(tasks=[ShoppingTask(id=1, need="lightens my face")], active_task_id=1,
+        pending_kind="product_type", pending_question="What type of product are you looking for?")
+    message = "that lighten my face, reduce pimble, and so on"
+    proposal = IntentPlan(intent="clarify", evidence=message, question_kind="multiple")
+    state, result = handle_turn(state.model_dump(), proposal, message, Search().search)
+    assert result["action"] == "clarify" and state.pending_kind == "skin_profile"
+    assert "lightens my face" in state.active().need and "reduce pimble" in state.active().need
+    assert state.active().needs[-1].value == message and state.active().needs[-1].evidence == message

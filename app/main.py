@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from decimal import InvalidOperation
 import json
+import logging
 import os
 from pathlib import Path
 import sqlite3
@@ -25,6 +26,7 @@ from app.commerce_models import IntentPlan, PLANNER_PROMPT, ShoppingState, plann
 from app.product_search import ProductSearch, ProductSearchRequest
 
 ROOT = Path(__file__).resolve().parent.parent
+logger = logging.getLogger(__name__)
 load_dotenv(ROOT / ".env")
 
 
@@ -287,12 +289,19 @@ def create_app(settings=None, transport=None):
             raise HTTPException(502, "Local model returned no completed answer; turn was not saved")
         return content, result
 
-    async def shopping_plan(state, user):
+    async def shopping_plan(state, user, repair_reason=""):
         deterministic = direct_plan(user)
         if deterministic:
             return deterministic, {}
         messages = [{"role": "system", "content": PLANNER_PROMPT}, *planner_examples(),
                     {"role": "user", "content": planner_context(state, user)}]
+        if repair_reason:
+            messages.insert(-1, {"role": "system", "content":
+                "Correct the previous invalid extraction. Validation feedback: " + repair_reason +
+                ". Keep the user's spelling. Use only literal quotes from this message. Several needs can coexist. "
+                "A facial concern is need, not a named product query. Generic 'product' is not a product type. "
+                "Omit inferred product types, unstated attributes, and unchanged preferences. "
+                "Remove saved constraints only when the latest message explicitly asks for it."})
         schema = IntentPlan.model_json_schema()
         schema["required"] = ["intent", "evidence", "changes"]
         if byte_size(messages) + byte_size(schema) > settings.prompt_budget:
@@ -402,24 +411,33 @@ def create_app(settings=None, transport=None):
             record = app.state.store.get(key)
             if record["mode"] == "commerce":
                 state = ShoppingState.model_validate(record["shopping_state"])
-                plan, result = await shopping_plan(state, body.message)
-                try:
-                    state, commerce = await asyncio.to_thread(
-                        handle_turn, state.model_dump(mode="json"), plan, body.message, app.state.product_search.search)
-                except (IntentError, ValidationError, InvalidOperation) as exc:
-                    raise HTTPException(502, "Local model proposed an unsupported preference change; turn was not saved") from exc
-                except CatalogError as exc:
-                    raise HTTPException(503, str(exc)) from exc
-                except (psycopg.Error, OSError) as exc:
-                    raise HTTPException(503, "Product search unavailable; shopping turn was not saved") from exc
+                repair_reason, inference = "", []
+                attempts = 1 if direct_plan(body.message) else 2
+                for attempt in range(attempts):
+                    plan, result = await shopping_plan(state, body.message, repair_reason)
+                    inference.append(result)
+                    try:
+                        next_state, commerce = await asyncio.to_thread(
+                            handle_turn, state.model_dump(mode="json"), plan, body.message, app.state.product_search.search)
+                    except (IntentError, ValidationError, InvalidOperation) as exc:
+                        repair_reason = str(exc) if isinstance(exc, IntentError) else "Preference schema or price validation failed"
+                        logger.warning("Shopping intent rejected (attempt %s): %s", attempt + 1, repair_reason)
+                        if attempt + 1 < attempts: continue
+                        raise HTTPException(502, "Local model proposed an unsupported preference change; turn was not saved") from exc
+                    except CatalogError as exc:
+                        raise HTTPException(503, str(exc)) from exc
+                    except (psycopg.Error, OSError) as exc:
+                        raise HTTPException(503, "Product search unavailable; shopping turn was not saved") from exc
+                    state = next_state
+                    break
                 commerce.update(intent=plan.model_dump(mode="json"), preferences=preference_view(state),
-                                state_version=record["state_version"] + 1)
+                                state_version=record["state_version"] + 1, intent_attempts=len(inference))
                 message_id = app.state.store.commit_commerce_turn(key, body.message, state, commerce, record["state_version"])
                 return {"conversation_id": key, "message_id": message_id, "reply": commerce["reply"],
                         "model": settings.model, "done_reason": result.get("done_reason", "deterministic"),
                         "commerce": commerce,
-                        "usage": {"prompt_tokens": result.get("prompt_eval_count"),
-                                  "completion_tokens": result.get("eval_count")}}
+                        "usage": {"prompt_tokens": sum(item["prompt_eval_count"] for item in inference) if all(isinstance(item.get("prompt_eval_count"), int) for item in inference) else None,
+                                  "completion_tokens": sum(item["eval_count"] for item in inference) if all(isinstance(item.get("eval_count"), int) for item in inference) else None}}
             history = app.state.store.messages(key, record["summarized_through"], limit=1000)
             messages, summary, boundary = await prepare_context(record, history, body.message)
             answer, result = await complete(messages)

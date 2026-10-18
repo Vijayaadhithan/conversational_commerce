@@ -14,7 +14,8 @@ chat model; this feature does not download or replace models.
 
 Try this sequence:
 
-1. `I have dry skin` — save the concern and ask which product type is wanted.
+1. `I have dry skin` — save the concern and ask about skin type/budget, with an
+   option to browse skin-care listings without choosing a specific product type.
 2. `Show me a moisturizer under $30` — retrieve products for that concern,
    applying a strict historical USD maximum of $29.99.
 3. `Under $20 instead` — change the maximum to $19.99 while keeping the goal,
@@ -56,6 +57,7 @@ The message response retains `reply`, `message_id`, model, and usage fields. Its
 | `action` | Clarification, recommendation, comparison, details, preferences, or small talk |
 | `preferences` | Active task, each task's goal/concern/recipient, filters, change sources, pending question, seen count |
 | `state_version` | Monotonic version committed with the completed turn |
+| `intent_attempts` | One extraction attempt, or two when a rejected proposal was corrected and revalidated |
 | `products` | Catalog records with original product IDs, listing provenance, display positions, and `why_recommended` |
 | `search` | Pinned catalog/build, actual applied filters, retrieval/reranker metadata, or null when no retrieval ran |
 
@@ -75,10 +77,27 @@ Code checks that proposed values and quotes come from the current message,
 requires explicit constraint removals, and validates price arithmetic and the
 filter schema. Omitted preferences remain unchanged. Conflicting price bounds
 produce clarification while preserving the previous valid range. Unsupported
-model output fails with 502 and saves no partial turn.
+model preference proposals receive one correction attempt with validation
+feedback. A second invalid proposal fails with 502 and saves no partial turn.
+Model connection, malformed JSON, catalog, and reranker failures are not retried
+by this correction path. Usage counts include both completed extraction calls.
 Unchanged restatements are discarded while retaining their original sources.
 A small product-name lexicon can recover an explicitly stated goal omitted by
 the model; it never infers a product type from a concern alone.
+
+Multiple `need` changes in a turn accumulate as separate `needs` entries with
+their original evidence. Additional concerns preserve earlier ones; exact
+repetitions are ignored. Older sessions with one `need` string are upgraded
+when continued. Scalar filters such as budget and brand still reject
+conflicting duplicate changes. Removing one named concern preserves the others;
+an ambiguous removal asks for clarification rather than clearing all concerns.
+
+Facial/skin concerns prompt for skin context and USD budget. A skin-profile
+answer or explicit request such as `show options` can start broad `skin_care`
+discovery. Its source is marked `concern_guided_discovery`, not a user-selected
+serum, cleanser, or moisturizer. Skin context is soft relevance text unless a
+listing attribute is explicitly required. Listing matches do not establish that
+a product will lighten skin, reduce pimples, or provide a medical outcome.
 
 Discovery uses the existing pipeline: mandatory PostgreSQL filters, keyword
 and vector retrieval, RRF, then the local reranker. The final text is assembled
@@ -110,7 +129,7 @@ failure should be checked in history before retrying.
   product families. This is a first implementation, not unrestricted intent
   understanding or a comprehensive relevance evaluation.
 - Each conversation supports five separate shopping tasks; each task remembers
-  up to 100 shown IDs and ten excluded brands. At a limit, the API asks for an
+  up to 20 concerns, 100 shown IDs and ten excluded brands. At a limit, the API asks for an
   explicit reset rather than silently dropping exclusions.
 - Text attributes match explicit metadata exactly, ignoring case. Missing size,
   recipient, ingredients, or other attributes remain unknown. Parent listings
@@ -129,6 +148,7 @@ failure should be checked in history before retrying.
 ```bash
 CATALOG_TEST_ADMIN_URL=postgresql:///postgres .venv/bin/python -m pytest -q
 .venv/bin/python scripts/check_commerce.py
+.venv/bin/python scripts/check_concern_flow.py
 ```
 
 The first command uses isolated PostgreSQL scratch databases. The second uses
@@ -137,3 +157,8 @@ scripted conversation plus restart, and writes an ignored local report to
 `data/search/commerce_report.json`. Its temporary SQLite database is removed
 automatically. This checks continuity, provenance, and constraints; it does
 not provide human-judged recommendation accuracy metrics.
+The concern-flow check replays typo-containing facial concerns, repeated
+follow-ups, a skin-profile answer, catalog retrieval, comparison, continuation
+from the older saved-session format, and restart
+using another temporary conversation database. Its report is
+`data/search/concern_flow_report.json`.

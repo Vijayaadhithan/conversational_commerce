@@ -46,7 +46,13 @@ class IntentPlan(BaseModel):
     changes: list[Change] = Field(default_factory=list, max_length=20)
     positions: list[int] = Field(default_factory=list, max_length=5)
     task_id: int | None = Field(default=None, ge=1, le=5)
-    question_kind: Literal["product_type", "recipient", "reference", "multiple", "general"] = "product_type"
+    question_kind: Literal["product_type", "skin_profile", "recipient", "reference", "multiple", "general"] = "product_type"
+
+
+class Concern(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    value: str = Field(min_length=1, max_length=1000)
+    evidence: str = Field(min_length=1, max_length=4000)
 
 
 class ShoppingTask(BaseModel):
@@ -54,6 +60,7 @@ class ShoppingTask(BaseModel):
     id: int
     query: str = ""
     need: str = ""
+    needs: list[Concern] = Field(default_factory=list, max_length=20)
     recipient: str = ""
     filters: ProductFilters = Field(default_factory=ProductFilters)
     unsupported: list[str] = Field(default_factory=list, max_length=10)
@@ -84,7 +91,12 @@ Use query for the product type/goal, need for an explicitly mentioned concern (e
 Text preference values must be literal short excerpts from the latest message, not rewritten or expanded descriptions.
 Do not invent a product type from a concern alone: 'I have dry skin' needs clarification. 'a moisturizer' supplies the type.
 Always save an explicitly stated concern as a need change, even when asking for the product type. A concern alone is
-question_kind=product_type, never multiple. Multiple means the user explicitly requested two different product types.
+question_kind=skin_profile for facial/skin concerns, otherwise product_type, never multiple. Multiple means the user explicitly
+requested two different product types, not several concerns. Several need changes are allowed in one turn and accumulate.
+Keep the user's spelling in need values and evidence, including typos; never silently rewrite 'pimble' to 'pimples'.
+For skin concerns, ask about skin type/budget rather than repeatedly demanding a named product type. The application can
+search broad skin-care listings after a skin-profile answer or an explicit request to show options. Never invent a serum/cream.
+Skin type supplied as personal context is a need; attribute.skin_type is a mandatory filter only when explicitly required.
 Use search for a first product request, refine for budget/color/brand/need changes. Keep the old goal for 'under $20 instead'.
 Use new_task when the user starts a different product/category; switch_task with a known task_id to return to a saved task.
 New tasks start fresh; switching tasks restores their exact saved constraints. A request for multiple product types at once
@@ -136,6 +148,10 @@ def planner_examples():
             "changes": [{"field": "max_price", "value": "20", "evidence": "Under $20"}]}),
         (state, "Now I also need a shirt", {"intent": "new_task", "evidence": "Now I also need a shirt",
             "changes": [{"field": "query", "value": "shirt", "evidence": "shirt"}]}),
+        (ShoppingState(), "Something to brighten my face and reduce pimples", {"intent": "clarify",
+            "evidence": "Something to brighten my face and reduce pimples", "question_kind": "skin_profile",
+            "changes": [{"field": "need", "value": "brighten my face", "evidence": "brighten my face"},
+                        {"field": "need", "value": "reduce pimples", "evidence": "reduce pimples"}]}),
     ]
     messages = []
     for saved, message, answer in examples:

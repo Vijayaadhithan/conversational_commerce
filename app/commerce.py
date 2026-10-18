@@ -5,7 +5,7 @@ from decimal import Decimal
 import re
 import unicodedata
 
-from app.commerce_models import Change, FAMILIES, IntentPlan, ShoppingState, ShoppingTask
+from app.commerce_models import Change, Concern, FAMILIES, IntentPlan, ShoppingState, ShoppingTask
 from app.product_search import ProductFilters, ProductSearchRequest
 
 
@@ -130,8 +130,20 @@ def apply_changes(task, plan, message):
     fields = task.filters.model_dump(mode="json")
     changed = set()
     effective = []
+    # Older sessions stored one concern string. Preserve it and its original evidence.
+    if task.need and not task.needs:
+        task.needs = [Concern(value=task.need, evidence=task.sources.get("need", {}).get("evidence", task.need))]
     for change in plan.changes:
         key, value = change.field, change.value
+        if key == "need" and not evidence_ok(change.evidence, message) and any(
+                evidence_ok(change.evidence, item.evidence) or evidence_ok(change.evidence, item.value) for item in task.needs):
+            # Old quoted concerns are already retained; they are not fresh changes.
+            continue
+        if (key in {"domain", "family"} and isinstance(value, str) and not task.query
+                and not matching_families(message) and re.search(SKIN_CONCERN, task.need + " " + message, re.I)
+                and normalized(value.replace("_", " ")) not in normalized(message)):
+            # Taxonomy inferred from a concern is owned by guided discovery below.
+            continue
         current = (getattr(task, key) if key in {"query", "need", "recipient"}
                    else fields["attributes"].get(key.split(".", 1)[1]) if key.startswith("attribute.")
                    else fields.get(key))
@@ -142,9 +154,10 @@ def apply_changes(task, plan, message):
             system = re.search(r"\b(US|UK|EU)\b", message)
             if system and system.group().casefold() not in normalized(value).split():
                 raise IntentError("Required sizing system was omitted")
-        if value is not None and current == value and not denied:
+        same_concern = key == "need" and isinstance(value, str) and any(normalized(value) == normalized(item.value) for item in task.needs)
+        if value is not None and (current == value or same_concern) and not denied:
             continue
-        if key in changed or not evidence_ok(change.evidence, message):
+        if (key in changed and key not in {"need", "unsupported"}) or not evidence_ok(change.evidence, message):
             raise IntentError("Preference change lacks unique current-message evidence")
         changed.add(key)
         if denied: raise IntentError("Negated preference cannot become a positive requirement")
@@ -157,6 +170,9 @@ def apply_changes(task, plan, message):
         elif isinstance(value, str) and len(value.encode()) > 1000:
             raise IntentError("Extracted preference exceeds supported size")
         quote = normalized(change.evidence)
+        if key == "query" and isinstance(value, str) and normalized(value) in {"product", "products", "item", "items", "something", "stuff", "thing", "things", "prduct", "prdct"}:
+            # These words do not select a product type. Keep the concern and clarify.
+            continue
         if key in {"query", "need", "recipient"}:
             if value is not None and not isinstance(value, str): raise IntentError("Text preference required")
             if value and not evidence_ok(value, change.evidence): raise IntentError("Text preference was not stated")
@@ -170,11 +186,27 @@ def apply_changes(task, plan, message):
                     fields.update(domain=FAMILIES[family][0], family=family)
                     for category, mapped in (("domain", FAMILIES[family][0]), ("family", family)):
                         task.sources[category] = {"value": mapped, "evidence": change.evidence, "source": "product_type_mapping"}
-            setattr(task, key, value or "")
+            if key == "need":
+                if value is None:
+                    if len(task.needs) > 1 and re.search(r"\b(?:except|keep|but)\b", quote):
+                        raise PreferenceConflict("Please name the exact concern to remove so I can keep the others unchanged.")
+                    all_concerns = re.search(r"\ball\b|forget everything|start over", quote)
+                    targets = [item for item in task.needs if normalized(item.value) in quote]
+                    if len(task.needs) > 1 and not all_concerns and not targets:
+                        raise PreferenceConflict("Which saved concern should I remove? Quote that concern, or explicitly say 'clear all concerns'.")
+                    task.needs = [item for item in task.needs if item not in targets] if targets and not all_concerns else []
+                else:
+                    if len(task.needs) >= 20: raise PreferenceConflict("There are 20 saved concerns. Which concerns should I remove before adding another?")
+                    task.needs.append(Concern(value=value, evidence=change.evidence))
+                task.need = "; ".join(item.value for item in task.needs)
+            else:
+                setattr(task, key, value or "")
         elif key == "unsupported":
             if value is None: task.unsupported = []
             elif isinstance(value, str) and evidence_ok(value, message):
-                if value not in task.unsupported: task.unsupported.append(value)
+                if value not in task.unsupported:
+                    if len(task.unsupported) >= 10: raise PreferenceConflict("There are ten unsupported requirements. Which should I remove before adding another?")
+                    task.unsupported.append(value)
             else: raise IntentError("Unsupported requirement lacks evidence")
         elif key in {"min_price", "max_price"}:
             if re.search(FOREIGN_CURRENCY, message, re.I): continue
@@ -213,7 +245,8 @@ def apply_changes(task, plan, message):
                 elif negated(value, message):
                     raise IntentError("Excluded attribute cannot become a positive requirement")
                 fields["attributes"][name] = value
-        task.sources[key] = {"value": value, "evidence": change.evidence, "source": "user"}
+        task.sources[key] = ({"value": task.need, "source": "combined_user_concerns", "items": [item.model_dump() for item in task.needs]}
+                             if key == "need" else {"value": value, "evidence": change.evidence, "source": "user"})
         effective.append(change)
     plan.changes = effective
     # Deterministic numeric bounds override any LLM interpretation of the comparator.
@@ -234,6 +267,42 @@ def apply_changes(task, plan, message):
 def question(state, text, kind="general"):
     state.pending_question, state.pending_kind = text, kind
     return {"action": "clarify", "reply": text, "products": [], "search": None}
+
+
+SKIN_CONCERN = r"\b(?:face|facial|skin|complexion|pim(?:ple|ble)s?|acne|blemish(?:es)?|dark spots?)\b"
+SKIN_PROFILE = r"\b(?:oily|dry|combination|sensitive|normal)\s+skin\b|\bskin\s+(?:is\s+)?(?:oily|dry|combination|sensitive|normal)\b"
+
+
+def skin_discovery(state, task, message, old_pending):
+    """A concern can guide broad discovery without inventing a specific product type."""
+    if task.query or not re.search(SKIN_CONCERN, task.need, re.I): return None
+    requested = bool(re.search(r"\b(?:show|suggest|recommend|find)\b|\b(?:not sure|don.t know|no idea)\b", message, re.I)) and not re.search(r"(?:don.t|do not|never)\s+(?:show|suggest|recommend|find)", message, re.I)
+    answered = bool(old_pending == "skin_profile" and (re.search(SKIN_PROFILE, task.need, re.I) or re.search(r"\b(?:oily|dry|combination|sensitive|normal)\b", message, re.I)))
+    if old_pending == "skin_profile" and (requested or answered):
+        task.query = "skin care"
+        task.filters.domain, task.filters.family = "beauty", "skin_care"
+        task.sources["query"] = {"value": task.query, "source": "concern_guided_discovery", "evidence": message,
+                                 "basis": task.need, "specific_product_type_selected": False}
+        for name, value in (("domain", "beauty"), ("family", "skin_care")):
+            task.sources[name] = {"value": value, "source": "concern_guided_discovery", "basis": task.need}
+        return None
+    missing = "What is your budget in USD?" if re.search(SKIN_PROFILE, task.need, re.I) else "What is your skin type (oily, dry, combination, sensitive, or unsure), and your budget in USD?"
+    return question(state, f"I've saved your concerns: {task.need}. {missing} You can also say 'show options' to browse skin-care listings for these concerns.", "skin_profile")
+
+
+def preserve_unextracted_concerns(state, plan, message):
+    """Retain a short literal concern statement when extraction omitted a new issue."""
+    if len(message) > 500 or len(message.encode("utf-8")) > 1000 or matching_families(message): return
+    if re.search(r"\b(?:not|no|without|remove|forget|ignore|drop|clear|reset|compare|details)\b|don.t|do not", message, re.I): return
+    if not re.search(r"\b(?:need|want|reduce|lighten\w*|brighten\w*|help|have|having|also)\b", message, re.I): return
+    active = state.active()
+    covered = active.need if active else ""
+    covered += " " + " ".join(change.value for change in plan.changes if change.field == "need"
+        and isinstance(change.value, str) and evidence_ok(change.evidence, message) and evidence_ok(change.value, change.evidence))
+    mentions = list(re.finditer(SKIN_CONCERN, message, re.I))
+    if mentions and any(normalized(match.group()) not in normalized(covered) for match in mentions):
+        plan.changes.append(Change(field="need", value=message, evidence=message))
+        plan.intent = "refine" if active else "clarify"
 
 
 def card_reply(products, compare=False):
@@ -275,6 +344,23 @@ def explain_products(rows, task):
 def handle_turn(saved, plan, message, search):
     state = ShoppingState.model_validate(saved or {}).model_copy(deep=True)
     if not evidence_ok(plan.evidence, message): raise IntentError("Intent lacks current-message evidence")
+    # A facial concern can be mislabelled as a product goal by the model.
+    # Keep that literal concern without pretending a concrete product type was chosen.
+    for change in plan.changes:
+        if (change.field == "query" and isinstance(change.value, str) and not matching_families(change.evidence)
+                and re.search(SKIN_CONCERN, change.evidence, re.I) and evidence_ok(change.evidence, message)):
+            literal = change.value if evidence_ok(change.value, change.evidence) and not matching_families(change.value) else change.evidence
+            change.field, change.value = "need", literal
+    preserve_unextracted_concerns(state, plan, message)
+    if plan.intent == "reset" and not re.search(r"start over|reset|forget|new search", normalized(message)):
+        existing = state.active()
+        repeated = existing and any(evidence_ok(item.value, message) for item in existing.needs)
+        if existing and not existing.needs and existing.need:
+            repeated = evidence_ok(existing.need, message)
+        current_concerns = any(change.field == "need" and isinstance(change.value, str)
+                               and evidence_ok(change.value, message) for change in plan.changes)
+        if repeated or current_concerns:
+            plan.intent = "refine" if existing else "clarify"
     fill_explicit_goal(plan, message)
     active = state.active()
     goals = [change for change in plan.changes if change.field == "query" and isinstance(change.value, str)]
@@ -317,7 +403,9 @@ def handle_turn(saved, plan, message, search):
         state.active_task_id = plan.task_id
     if plan.intent == "new_task" and state.active():
         goals = [change for change in plan.changes if change.field == "query" and isinstance(change.value, str)]
-        if goals and matching_families(goals[0].value) == matching_families(state.active().query) and not re.search(r"new|another|also|now|instead|different|switch", normalized(message)):
+        if not state.active().query and not goals:
+            plan.intent = "refine"
+        elif goals and matching_families(goals[0].value) == matching_families(state.active().query) and not re.search(r"new|another|also|now|instead|different|switch", normalized(message)):
             plan.intent = "refine"
     if not state.active() or plan.intent == "new_task":
         if len(state.tasks) >= 5:
@@ -328,6 +416,14 @@ def handle_turn(saved, plan, message, search):
         state.tasks.append(task)
         state.active_task_id = task.id
     task = state.active()
+    personal_skin_context = old_pending == "skin_profile" or bool(re.search(SKIN_PROFILE, message, re.I))
+    if personal_skin_context and not re.search(r"\b(?:only|must|require|required)\b", message, re.I):
+        for change in plan.changes:
+            if change.field == "attribute.skin_type" and isinstance(change.value, str) and evidence_ok(change.value, change.evidence):
+                change.field, change.value = "need", change.evidence
+        profile = re.search(r"\b(?:oily|dry|combination|sensitive|normal)(?:\s+skin)?\b", message, re.I) if old_pending == "skin_profile" else re.search(SKIN_PROFILE, message, re.I)
+        if profile and not negated(profile.group(), message) and not any(change.field == "need" and isinstance(change.value, str) and profile.group().casefold() in change.value.casefold() for change in plan.changes):
+            plan.changes.append(Change(field="need", value=profile.group(), evidence=profile.group()))
     proposed = task.model_copy(deep=True)
     try:
         apply_changes(proposed, plan, message)
@@ -348,6 +444,8 @@ def handle_turn(saved, plan, message, search):
     if task.unsupported:
         quoted = ", ".join(task.unsupported)
         return state, question(state, f"This catalog cannot verify the requirement(s): {quoted}. It contains historical USD listing claims. Would you like to continue without those unverified requirements?", "unsupported")
+    if plan.question_kind == "multiple" and not matching_families(message):
+        plan.question_kind = "skin_profile" if re.search(SKIN_CONCERN, task.need, re.I) else "product_type"
     if plan.intent == "clarify" and plan.question_kind == "multiple":
         return state, question(state, "Which product should we start with? We can keep separate shopping tasks for the others.", "multiple")
     if plan.intent == "preferences":
@@ -367,6 +465,10 @@ def handle_turn(saved, plan, message, search):
         if len(selected) != 1: return state, question(state, "Which single product should I use for similar options?", "reference")
         query = selected[0]["title"]
     else:
+        query = " ".join(part for part in (task.query, task.need) if part)
+    if not task.query:
+        guided = skin_discovery(state, task, message, old_pending)
+        if guided: return state, guided
         query = " ".join(part for part in (task.query, task.need) if part)
     if not task.query:
         return state, question(state, "What type of product are you looking for—for example a moisturizer, cleanser, shirt, or bag?", "product_type")
@@ -402,6 +504,8 @@ def handle_turn(saved, plan, message, search):
             return state, question(state, "You have seen 100 products in this task. Start a new task or explicitly reset it to allow a fresh result set.")
         filters.exclude_product_ids = list(dict.fromkeys([*filters.exclude_product_ids, *task.seen_ids]))
     if plan.intent == "similar": filters.exclude_product_ids = list(dict.fromkeys([*filters.exclude_product_ids, selected[0]["product_id"]]))
+    if len(query.encode("utf-8")) > 1000:
+        return state, question(state, "Your saved request is too long to search in one query. Which concerns should I remove or replace to focus this search?", "query_size")
     request = ProductSearchRequest(query=query, filters=ProductFilters.model_validate(filters.model_dump()), limit=min(5, 100 - len(task.seen_ids)) if plan.intent == "more" else 5)
     response = search(request)
     products = explain_products(response["results"], task)
