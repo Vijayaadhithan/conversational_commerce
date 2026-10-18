@@ -1,0 +1,41 @@
+# Local configuration and credentials
+.env
+.env.*
+!.env.example
+.aws/
+.codex/
+*.pem
+*.key
+
+# Python environments, bytecode, and tool output
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage*
+htmlcov/
+*.egg-info/
+build/
+dist/
+
+# Downloaded models, catalogs, conversations, and machine-specific notes
+data/
+models/
+local_notes/
+*.sqlite*
+*.db
+*.safetensors
+*.gguf
+*.onnx
+*.parquet
+*.jsonl
+*.jsonl.gz
+
+# Local editor and OS files
+.vscode/
+.idea/
+.DS_Store
+*.log

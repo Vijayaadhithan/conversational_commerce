@@ -1,0 +1,24 @@
+{
+  "selected_on": "2026-10-18",
+  "kind": "historical_product_metadata",
+  "sources": [
+    {
+      "name": "All_Beauty",
+      "filename": "meta_All_Beauty.jsonl.gz",
+      "url": "https://mcauleylab.ucsd.edu/public_datasets/data/amazon_2023/raw/meta_categories/meta_All_Beauty.jsonl.gz",
+      "compressed_bytes": 39871253
+    },
+    {
+      "name": "Amazon_Fashion",
+      "filename": "meta_Amazon_Fashion.jsonl.gz",
+      "url": "https://mcauleylab.ucsd.edu/public_datasets/data/amazon_2023/raw/meta_categories/meta_Amazon_Fashion.jsonl.gz",
+      "compressed_bytes": 224299124
+    },
+    {
+      "name": "Beauty_and_Personal_Care",
+      "filename": "meta_Beauty_and_Personal_Care.jsonl.gz",
+      "url": "https://mcauleylab.ucsd.edu/public_datasets/data/amazon_2023/raw/meta_categories/meta_Beauty_and_Personal_Care.jsonl.gz",
+      "compressed_bytes": 711243207
+    }
+  ]
+}
