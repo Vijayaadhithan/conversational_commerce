@@ -19,15 +19,64 @@ Use Python 3.12 or later. Apple Silicon is recommended for local GPU reranking.
 ```bash
 git clone https://github.com/Vijayaadhithan/conversational_commerce.git
 cd conversational_commerce
-python3 -m venv .venv
-source .venv/bin/activate
-python -m pip install -r requirements.txt
-cp .env.example .env
+bash scripts/setup.sh
 ```
 
-Edit `.env` for local settings. It is ignored by Git; `.env.example` contains
-only shareable defaults. No hosted API key is required. Keep an existing `.env`
-when updating the project rather than copying over it.
+The setup command creates or reuses `.venv`, installs backend dependencies,
+creates a private `.env` from `.env.example` if missing, and checks imports.
+It preserves an existing `.env`. Edit that file for local settings; it is ignored
+by Git, while `.env.example` contains only shareable defaults. No hosted API key
+is required.
+
+Optional setup components:
+
+```bash
+# Backend + PostgreSQL/pgvector/Redis + reranker libraries + testing libraries
+bash scripts/setup.sh --with-services --with-reranker --dev
+
+# Preview the same setup without installing, writing files, or starting services
+bash scripts/setup.sh --with-services --with-reranker --dev --dry-run
+```
+
+| Option | Effect |
+| --- | --- |
+| `--with-services` | Install/reuse PostgreSQL, pgvector, and Redis; start unavailable services and check local ports 5432/6379 |
+| `--with-reranker` | Install local reranker Python libraries |
+| `--dev` | Install test dependencies |
+| `--dry-run` | Print planned changes only |
+| `--help` | Show setup options |
+
+Core setup supports macOS/Linux. Automatic system installation uses Homebrew on
+macOS or APT on Debian/Ubuntu; Homebrew must already be installed. When Python
+3.12+ is missing, setup tries the platform package manager. Older Linux releases
+may need Python installed separately. Use `PYTHON_BIN=/path/to/python3.12` to
+select a Python executable. An unusable existing `.venv` produces an error rather
+than being overwritten.
+
+Service setup reuses the selected PostgreSQL installation and builds pinned
+pgvector v0.8.7 against its `pg_config`. This supports existing PostgreSQL 16
+installations as well as newer versions without requiring a major-version
+upgrade. Git and compiler/development tools are needed for that build; Linux
+packages are installed when missing. On macOS, install Xcode Command Line Tools
+if requested. System installation may invoke `sudo`; run the script as your
+normal user. See the [upstream installation notes](https://github.com/pgvector/pgvector#installation-notes---linux-and-mac).
+
+If multiple PostgreSQL installations are found, choose one explicitly:
+
+```bash
+PG_CONFIG=/opt/homebrew/opt/postgresql@16/bin/pg_config \
+  bash scripts/setup.sh --with-services
+```
+
+Existing ready services are reused. Custom PostgreSQL distributions need to be
+started using their own service manager. Setup checks default local ports;
+nondefault ports require manual configuration. It installs pgvector extension
+files, but creating a commerce database and enabling `vector` inside that
+database remain separate steps.
+
+The installer leaves **Ollama, model weights, and catalog downloads separate**.
+The model commands below are optional manual setup and are never invoked by
+`setup.sh`.
 
 Install and start [Ollama](https://ollama.com/), then download the chat model:
 

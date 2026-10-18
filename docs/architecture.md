@@ -51,9 +51,10 @@ complete coverage of product variants, ages, genders, ingredients, or sizes.
 ## Recommended retrieval storage
 
 Use a dedicated PostgreSQL database with pgvector for catalog records and
-vectors, and Redis for bounded caches. This remains a recommendation: pgvector
-installation, catalog ingestion, vector generation, and retrieval wiring are
-not implemented by this repository.
+vectors, and Redis for bounded caches. `scripts/setup.sh --with-services` can
+install PostgreSQL, matching pgvector extension files, and Redis. Creating a
+dedicated database, enabling its vector extension, catalog ingestion, vector
+generation, and retrieval wiring remain separate implementation work.
 
 PostgreSQL can keep authoritative product filters and vectors together, using
 SQL for category, brand, price, and variant constraints. It stores data on disk
