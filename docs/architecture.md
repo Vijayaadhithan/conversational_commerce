@@ -22,7 +22,7 @@ distributed admission control, or automatic retries of ambiguous chat requests.
 | Role | Model | Runtime |
 | --- | --- | --- |
 | Conversation | `ministral-3:8b` | Native Ollama |
-| Planned product embeddings | `embeddinggemma:latest`, 768 dimensions | Native Ollama; not yet integrated into retrieval |
+| Product embeddings | `embeddinggemma:latest`, 768 dimensions | Native Ollama; catalog and query retrieval prompts |
 | Reranking | `mixedbread-ai/mxbai-rerank-large-v2`, 1,543,714,304 parameters | PyTorch / Sentence Transformers, Apple MPS or CPU |
 
 The reranker is pinned to revision
@@ -35,8 +35,9 @@ the project has no comprehensive fashion/beauty relevance benchmark yet.
 Raw log-odds scores are retained instead of applying sigmoid, avoiding artificial
 ties when strong matches saturate to 1.0 in float16.
 
-The `/rerank` endpoint ranks caller-supplied documents. Conversation requests do
-not automatically invoke catalog search or reranking.
+The `/products/search` endpoint retrieves catalog products. `/rerank` ranks
+caller-supplied documents. Conversation requests do not automatically invoke
+catalog search or reranking yet.
 
 ## Catalog inputs
 
@@ -54,8 +55,10 @@ Use a dedicated PostgreSQL database with pgvector for catalog records and
 vectors, and Redis for bounded caches. `scripts/setup.sh --with-services` can
 install PostgreSQL, matching pgvector extension files, and Redis. Creating a
 dedicated database and importing the normalized subset are implemented through
-`scripts/init_catalog.py` and `scripts/import_catalog.py`. Enabling the vector
-extension, generating embeddings, and wiring retrieval remain subsequent work.
+`scripts/init_catalog.py` and `scripts/import_catalog.py`. Catalog migrations
+enable pgvector in the chosen database. `scripts/build_search_index.py` builds
+resumable model/digest/input-version-specific embeddings, then atomically
+publishes a complete search generation. Redis caching is not wired into search.
 
 The catalog uses the `commerce` schema in its own PostgreSQL database. Immutable
 import snapshots preserve each normalized JSONB product, source provenance,
@@ -79,3 +82,10 @@ appropriate filter indexes or partitions, and iterative scans where suitable.
 Mandatory constraints must be enforced in code and SQL; reranking cannot relax
 them. See [pgvector](https://github.com/pgvector/pgvector) and
 [Redis vector sets](https://redis.io/docs/latest/develop/data-types/vector-sets/).
+
+The implemented 20,000-product baseline uses exact pgvector cosine distance,
+PostgreSQL English full-text search with weighted title/body terms and a GIN
+index, and RRF (constant 60) over up to 50 candidates per path. It uses PostgreSQL
+text ranking, not BM25. Identical SQL constraints apply before both candidate
+limits. An active search build must match the active catalog, local input
+contract, model name, and Ollama digest. See [search.md](search.md).

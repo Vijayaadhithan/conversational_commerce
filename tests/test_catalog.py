@@ -220,6 +220,8 @@ def test_migration_checksum_and_import_lock(pg, scratch_database, tmp_path, monk
     migration = next(catalog.MIGRATIONS.glob("*.sql"))
     changed = tmp_path / "migrations"
     changed.mkdir()
+    for existing in catalog.MIGRATIONS.glob("*.sql"):
+        (changed / existing.name).write_bytes(existing.read_bytes())
     (changed / migration.name).write_bytes(migration.read_bytes() + b"\n-- changed\n")
     with monkeypatch.context() as scoped:
         scoped.setattr(catalog, "MIGRATIONS", changed)

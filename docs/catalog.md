@@ -56,7 +56,8 @@ subset-line SHA-256 is retained separately.
 columns, so they cannot disagree with their JSONB source. Historical prices use
 PostgreSQL `numeric`, without rounding into a binary float or a small fixed
 precision. Category/price and case-insensitive brand B-tree indexes are included.
-Embedding columns and vector indexes are not created in this phase.
+Embeddings are stored separately in `commerce.search_documents`, introduced by
+the following search migration. See [search.md](search.md).
 
 The importer owns writes to these tables. Ordinary PostgreSQL owner privileges
 can still modify them; independent verification detects drift. This local

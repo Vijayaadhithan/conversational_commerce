@@ -9,8 +9,9 @@ A local FastAPI backend for persistent conversations with Ollama, a local
   running through PyTorch on Apple MPS or CPU.
 - Catalog inputs: All Beauty, Amazon Fashion, and Beauty & Personal Care.
 
-Automatic catalog retrieval and vector indexing are not implemented yet.
-`POST /rerank` scores documents supplied by the caller.
+`POST /products/search` retrieves products using keyword and vector search with
+structured mandatory filters. Conversation turns do not invoke product search
+automatically yet. `POST /rerank` scores documents supplied by the caller.
 
 ## Setup
 
@@ -173,6 +174,9 @@ paths expect the ETL checkout beside this backend. Configure
 # Install the catalog driver and schema-validation dependencies
 .venv/bin/python -m pip install -r requirements.txt
 
+# If PostgreSQL/pgvector are missing, install matching service dependencies
+bash scripts/setup.sh --with-services
+
 # Create the dedicated database if missing, then apply versioned migrations
 .venv/bin/python scripts/init_catalog.py --create-database
 
@@ -204,8 +208,52 @@ its records; it does not append duplicates. Older snapshots remain available
 for deliberate rollback and are never pruned automatically.
 
 See [docs/catalog.md](docs/catalog.md) for the schema, sample queries, validation
-boundaries, and test commands. Product embeddings and automatic conversation
-retrieval are separate implementation steps.
+boundaries, and test commands. Build product embeddings as described below.
+
+## Product embeddings and search
+
+The existing local `embeddinggemma:latest` model produces 768-dimensional
+embeddings. This model must already be installed; setup and embedding scripts do
+not download weights. Adjust `EMBEDDING_MODEL`, `EMBEDDING_BATCH_SIZE`, and
+`EMBEDDING_TIMEOUT_SECONDS` in `.env` if needed. The text contract currently uses
+EmbeddingGemma retrieval prompts and 768 dimensions; another model may require
+a deliberate prompt/schema change, not just a tag replacement.
+
+```bash
+.venv/bin/python scripts/init_catalog.py
+.venv/bin/python scripts/build_search_index.py
+.venv/bin/python scripts/verify_search_index.py
+
+.venv/bin/python scripts/search_products.py 'moisturizer for dry skin' \
+  --filters '{"domain":"beauty","family":"skin_care","max_price":"30.00"}'
+```
+
+Embedding builds commit completed batches and resume on rerun. A complete,
+verified build is published atomically. Model digest, catalog snapshot, and input
+contract prevent mixed generations. At this 20,000-product scale, semantic search
+uses exact cosine distance; PostgreSQL full-text search provides keyword matches,
+and reciprocal rank fusion combines the two candidate rankings.
+
+With the backend running:
+
+```bash
+curl -sS http://127.0.0.1:8000/products/search \
+  -H 'Content-Type: application/json' \
+  -d '{"query":"moisturizer for dry skin","filters":{"domain":"beauty","family":"skin_care","max_price":"30.00"},"limit":5}'
+```
+
+Mandatory requirements belong in `filters`: relevance text alone does not parse
+budgets, exclusions, or suitability requirements. Supported filters include
+domain, family, brand, historical USD price bounds, explicit attributes, and
+excluded product IDs. Attribute text matching is exact and case-insensitive;
+`fragrance_free` requires a boolean. Unknown values never satisfy a required
+attribute. Empty matches stay empty; constraints are not relaxed.
+
+Results include ranking signals, historical price, explicit attribute claims,
+listing excerpts, and observation provenance. Similarity and excerpts do not
+establish medical suitability or live stock. Reranking and conversation-level
+preference handling remain subsequent integration steps. See
+[docs/search.md](docs/search.md) for build behavior and limitations.
 
 ## API
 
@@ -219,6 +267,7 @@ retrieval are separate implementation steps.
 | GET | `/conversations/{id}/messages?after=0&limit=100` | Read messages; paginate with `next_after` |
 | DELETE | `/conversations/{id}` | Delete a chat and its messages |
 | POST | `/rerank` | Rank up to 50 supplied documents |
+| POST | `/products/search` | Search the active catalog using relevance text and mandatory structured filters |
 
 Messages accept up to 4,000 UTF-8 bytes. Responses are returned after generation,
 without token streaming. If `done_reason` is `length`, the output limit was

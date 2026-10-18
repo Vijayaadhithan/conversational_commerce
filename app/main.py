@@ -13,9 +13,12 @@ from uuid import UUID, uuid4
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Query, Response
 import httpx
+import psycopg
 from pydantic import BaseModel, Field, field_validator
 
 from app.reranker import LocalReranker
+from app.catalog import CatalogError
+from app.product_search import ProductSearch, ProductSearchRequest
 
 ROOT = Path(__file__).resolve().parent.parent
 load_dotenv(ROOT / ".env")
@@ -196,6 +199,7 @@ def create_app(settings=None, transport=None):
         # One worker serializes GPU calls and prevents lost/overlapping turns.
         app.state.generation_lock = asyncio.Lock()
         app.state.reranker = LocalReranker()
+        app.state.product_search = ProductSearch()
         async with httpx.AsyncClient(
             base_url=settings.ollama_url, timeout=httpx.Timeout(settings.timeout, connect=5),
             transport=transport, trust_env=False,
@@ -276,6 +280,16 @@ def create_app(settings=None, transport=None):
         if not available:
             raise HTTPException(503, f"Model not installed: ollama pull {settings.model}")
         return {"status": "ok", "model": settings.model}
+
+    @app.post("/products/search")
+    async def products_search(body: ProductSearchRequest):
+        async with app.state.generation_lock:
+            try:
+                return await asyncio.to_thread(app.state.product_search.search, body)
+            except CatalogError as exc:
+                raise HTTPException(503, str(exc)) from exc
+            except (psycopg.Error, OSError) as exc:
+                raise HTTPException(503, "Product search unavailable. Check PostgreSQL and initialize/build the search catalog.") from exc
 
     @app.post("/rerank")
     async def rerank(body: RerankRequest):
