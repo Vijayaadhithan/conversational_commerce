@@ -168,8 +168,8 @@ def validated_source(output_dir, manifest_path=None):
     validator = jsonschema.Draft202012Validator(strict_json(schema_bytes))
     expected = manifest["outputs"]["subset.jsonl"]
     _digest(expected["sha256"], "subset checksum")
-    expected_bytes = _integer(expected["bytes"], "subset size")
-    expected_count = _integer(manifest["counts"]["subset_rows"], "subset count")
+    expected_bytes = _integer(expected["bytes"], "subset size", minimum=0)
+    expected_count = _integer(manifest["counts"]["subset_rows"], "subset count", minimum=0)
     if expected_count != _integer(manifest["subset_size"], "requested subset size"):
         # A documented ETL shortfall is valid; only counts above the request fail.
         if expected_count > manifest["subset_size"]:

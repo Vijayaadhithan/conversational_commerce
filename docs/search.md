@@ -31,13 +31,22 @@ is marked ready and published. Writer locks prevent simultaneous bulk builds.
 Publication checks that the active catalog has not changed. If a new catalog is
 imported, search returns 503 until a matching build is available; it never mixes
 old vectors with new product records. Old generations are retained for deliberate
-reuse; no retention cleanup is performed automatically.
+reuse. Explicit retention and deletion commands protect the active generation;
+unfinished builds are preserved for resume unless explicitly selected for cleanup.
+See [embedding_lifecycle.md](embedding_lifecycle.md).
 
 Tables: `commerce.search_builds`, `commerce.search_documents`, and
 `commerce.search_active`. Product/build foreign keys preserve generation
 identity. Embeddings are normalized and validated for count, finite values,
 nonzero norm, and dimension. Database vectors use float32 `vector(768)`; no
 half-precision reduction or approximate index is used in this baseline.
+
+Across catalog snapshots, selected-text hashes and matching model/input contracts
+allow reuse of vectors from retained ready generations. New or changed inputs
+are embedded; current metadata and keyword text are always regenerated. Deleted
+products are excluded by the new snapshot. A complete empty snapshot withdraws
+every product from active search. Full/selective refresh and protected physical
+cleanup are supported by the lifecycle commands linked above.
 
 ## Versioned text selection
 

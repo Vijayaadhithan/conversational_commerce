@@ -59,6 +59,10 @@ dedicated database and importing the normalized subset are implemented through
 enable pgvector in the chosen database. `scripts/build_search_index.py` builds
 resumable model/digest/input-version-specific embeddings, then atomically
 publishes a complete search generation. Redis caching is not wired into search.
+Incremental embedding reuses compatible selected-text hashes across retained
+ready generations. Forced full/selective refreshes build separate resumable
+generations. Removed products stay outside the next active snapshot; protected
+retention removes inactive vectors physically. See [embedding_lifecycle.md](embedding_lifecycle.md).
 
 The catalog uses the `commerce` schema in its own PostgreSQL database. Immutable
 import snapshots preserve each normalized JSONB product, source provenance,

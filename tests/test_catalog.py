@@ -39,7 +39,7 @@ def make_source(root, records=None):
     run = root / "runs" / run_id
     run.mkdir(parents=True, exist_ok=True)
     (run / "subset.jsonl").write_bytes(data)
-    manifest = {"schema_version": "1.0.0", "run_id": run_id, "subset_size": len(records),
+    manifest = {"schema_version": "1.0.0", "run_id": run_id, "subset_size": max(1, len(records)),
         "schema_sha256": hashlib.sha256(catalog.SCHEMA_PATH.read_bytes()).hexdigest(),
         "sources": [{"name": "Fixture", "expected_rows": 10}],
         "counts": {"subset_rows": len(records)},

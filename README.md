@@ -228,11 +228,38 @@ a deliberate prompt/schema change, not just a tag replacement.
   --filters '{"domain":"beauty","family":"skin_care","max_price":"30.00"}'
 ```
 
-Embedding builds commit completed batches and resume on rerun. A complete,
-verified build is published atomically. Model digest, catalog snapshot, and input
+Normal embedding builds commit completed batches and resume on rerun. Across
+catalog snapshots, compatible vectors are reused by selected-text hash; only
+new/changed embedding inputs need inference. Price-only changes reuse vectors
+and refresh catalog/keyword metadata. Removed products are absent from the next
+active generation, including support for an empty catalog.
+
+A complete, verified build is published atomically. Model digest, catalog snapshot, and input
 contract prevent mixed generations. At this 20,000-product scale, semantic search
 uses exact cosine distance; PostgreSQL full-text search provides keyword matches,
 and reciprocal rank fusion combines the two candidate rankings.
+
+```bash
+# Force selected products, or force an entirely new embedding generation
+.venv/bin/python scripts/build_search_index.py --reembed-product amazon:YOURASIN01
+.venv/bin/python scripts/build_search_index.py --reembed-all
+
+# A failed forced refresh prints its build ID; resume that exact generation
+.venv/bin/python scripts/build_search_index.py --resume-build BUILD_ID
+
+# Preview retention; active generation is always protected
+.venv/bin/python scripts/manage_search_index.py prune --keep-ready 1
+# Add --apply to execute; one inactive ready generation is retained for rollback
+.venv/bin/python scripts/manage_search_index.py prune --keep-ready 1 --apply
+
+# Rebuild the database indexes without re-embedding; reclaim deleted space for reuse
+.venv/bin/python scripts/manage_search_index.py reindex
+.venv/bin/python scripts/manage_search_index.py vacuum
+```
+
+Replace placeholder product/build IDs with real IDs. Repeating a force flag
+starts another generation; use `--resume-build` to resume one. Explicit build
+deletion and retention details are in [docs/embedding_lifecycle.md](docs/embedding_lifecycle.md).
 
 With the backend running:
 

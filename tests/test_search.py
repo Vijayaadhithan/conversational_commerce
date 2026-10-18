@@ -133,7 +133,9 @@ def test_catalog_switch_requires_a_matching_complete_search_build(pg, scratch_da
     pg.commit()
     with connect_database(scratch_database, autocommit=True) as db:
         old = build_index(db, FakeEmbedder(), lambda *args, **kwargs: None)
-    make_source(tmp_path, [product("B000000002")])
+    changed = product("B000000002")
+    changed["title"] = "A completely different listing"
+    make_source(tmp_path, [changed])
     with validated_source(tmp_path) as source: import_catalog(pg, source)
     pg.commit()
     with pytest.raises(CatalogError, match="No complete search"):
