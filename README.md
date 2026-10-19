@@ -10,6 +10,8 @@ A local FastAPI backend for persistent conversations with Ollama, a local
 - Reranker: [Mixedbread mxbai-rerank-large-v2](https://huggingface.co/mixedbread-ai/mxbai-rerank-large-v2),
   running through PyTorch on Apple MPS or CPU.
 - Catalog inputs: All Beauty, Amazon Fashion, and Beauty & Personal Care.
+- [Listing enrichment and concern explanations](docs/catalog_enrichment.md): versioned
+  metadata additions, individual concern evidence, and explicit unknown variant availability.
 
 `POST /products/search` retrieves products using keyword/vector search and the
 local reranker, with structured mandatory filters. Conversations created with

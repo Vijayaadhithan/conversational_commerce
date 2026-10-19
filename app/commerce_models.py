@@ -24,11 +24,12 @@ FAMILIES = {
     "accessories": ("fashion", ["scarf", "belt", "hat", "sunglasses", "accessor"]),
 }
 ATTRIBUTES = ["color", "size", "material", "department", "age_range", "skin_type", "hair_type",
-              "ingredients", "active_ingredients", "benefits", "material_type_free", "scent", "item_form", "unit_count", "fragrance_free"]
+              "ingredients", "active_ingredients", "benefits", "material_type_free", "scent", "item_form", "unit_count", "fragrance_free", "product_type", "volume", "style"]
 FieldName = Literal["query", "need", "recipient", "domain", "family", "brand", "min_price", "max_price",
     "unsupported", "attribute.color", "attribute.size", "attribute.material", "attribute.department", "attribute.age_range",
     "attribute.skin_type", "attribute.hair_type", "attribute.ingredients", "attribute.active_ingredients",
-    "attribute.benefits", "attribute.material_type_free", "attribute.scent", "attribute.item_form", "attribute.unit_count", "attribute.fragrance_free"]
+    "attribute.benefits", "attribute.material_type_free", "attribute.scent", "attribute.item_form", "attribute.unit_count", "attribute.fragrance_free",
+    "attribute.product_type", "attribute.volume", "attribute.style"]
 
 
 class Change(BaseModel):
@@ -139,6 +140,8 @@ min_price/max_price values are decimal strings; quote the amount. Currency is hi
 Attribute fields use attribute.NAME. Attribute text must be explicit in the quote; department may map men->mens, women->womens,
 boys->boys, girls->girls. Fragrance-free must be boolean true ONLY for an explicit fragrance-free requirement; unscented is different.
 For a required size with an explicit US/UK/EU sizing system, include the system in both the size value and its evidence.
+Volume is the explicitly requested amount of product (e.g. 100 ml); never turn bottle volume into clothing size.
+Product type, volume and style filters require explicit user requirements. Listed size/color options do not establish stock.
 Record unsupported requirements (current stock/delivery, verified allergy or medical safety, non-USD budgets) as field unsupported,
 value equal to the relevant user quote. Do not claim that listing metadata verifies those requirements.
 Every explicitly stated requirement must be saved in a supported field or marked unsupported; never quietly discard one.

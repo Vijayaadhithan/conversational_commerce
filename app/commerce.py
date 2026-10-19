@@ -8,6 +8,7 @@ import unicodedata
 
 from app.commerce_models import Change, Concern, FAMILIES, IntentPlan, ShoppingState, ShoppingTask, TaskRequest
 from app.product_search import ProductFilters, ProductSearchRequest
+from app.listing_explanations import concern_evidence, concern_reasons
 
 
 class IntentError(ValueError):
@@ -404,16 +405,25 @@ def explain_products(rows, task):
             claim = row["attributes"].get(name)
             if claim:
                 reasons.append(f"The listing explicitly states {name.replace('_', ' ')}: {claim['value']} ({claim['field']}).")
-        snippets = row.get("listing_evidence", [])
-        concern_snippet = next((item for item in snippets if task.need and normalized(task.need) in normalized(item["text"])), None)
-        snippet = concern_snippet or (snippets[0] if snippets else None)
-        if snippet:
-            reasons.append(f"Related listing text: “{snippet['text']}” ({snippet['field']}).")
-        else: reasons.append("Retrieved for similarity to your product request; the listing does not provide an exact matching excerpt.")
-        if task.need and not concern_snippet:
-            reasons.append(f"The returned excerpts do not explicitly confirm suitability for your stated concern: {task.need}.")
-        row.update(display_position=position, why_recommended=reasons)
+        concerns = task_concerns(task)
+        evidence = row.get("concern_evidence")
+        if evidence is None or [item["concern"] for item in evidence] != concerns:
+            evidence = concern_evidence(row, concerns)
+        reasons.extend(concern_reasons(evidence))
+        if not concerns:
+            snippets = row.get("listing_evidence", [])
+            if snippets:
+                snippet = snippets[0]
+                reasons.append(f"Related listing text: “{snippet['text']}” ({snippet['field']}).")
+            else:
+                reasons.append("Retrieved for similarity to your product request; the listing does not provide an exact matching excerpt.")
+        row.update(display_position=position, why_recommended=reasons, concern_evidence=evidence)
     return products
+
+
+def task_concerns(task):
+    return list(dict.fromkeys(item.value for item in task.needs)) if task.needs else list(dict.fromkeys(
+        part.strip() for part in task.need.split(";") if part.strip()))[:20]
 
 
 def split_product_requests(message):
@@ -736,7 +746,7 @@ def _handle_single_turn(saved, plan, message, search):
     if plan.intent == "similar": filters.exclude_product_ids = list(dict.fromkeys([*filters.exclude_product_ids, selected[0]["product_id"]]))
     if len(query.encode("utf-8")) > 1000:
         return state, question(state, "Your saved request is too long to search in one query. Which concerns should I remove or replace to focus this search?", "query_size")
-    request = ProductSearchRequest(query=query, filters=ProductFilters.model_validate(filters.model_dump()), limit=min(5, 100 - len(task.seen_ids)) if plan.intent == "more" else 5)
+    request = ProductSearchRequest(query=query, concerns=task_concerns(task), filters=ProductFilters.model_validate(filters.model_dump()), limit=min(5, 100 - len(task.seen_ids)) if plan.intent == "more" else 5)
     response = search(request)
     products = explain_products(response["results"], task)
     new_ids = [row["product_id"] for row in products if row["product_id"] not in task.seen_ids]

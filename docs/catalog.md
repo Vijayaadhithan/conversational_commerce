@@ -1,5 +1,8 @@
 # PostgreSQL catalog import
 
+For additional source-backed metadata and safe catalog/index publication, see
+[listing enrichment](catalog_enrichment.md).
+
 The recommendation catalog belongs to this backend. The separate
 [ETL repository](https://github.com/Vijayaadhithan/conversational_commerce_etl)
 owns raw-data normalization and reproducible sampling. This importer consumes

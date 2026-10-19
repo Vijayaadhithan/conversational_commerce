@@ -285,7 +285,7 @@ def verify_catalog(db, source, require_active=True):
     return count
 
 
-def import_catalog(db, source):
+def import_catalog(db, source, *, activate=True):
     """COPY into staging, publish an immutable snapshot and active pointer atomically."""
     with db.transaction():
         db.execute("SET LOCAL lock_timeout = '5s'")
@@ -314,7 +314,7 @@ def import_catalog(db, source):
                 SELECT import_id, ordinal, document, source_line_sha256 FROM catalog_stage""")
             verify_catalog(db, source, require_active=False)
         active = db.execute("SELECT import_id FROM commerce.catalog_active WHERE singleton").fetchone()
-        if active != (source.import_id,):
+        if activate and active != (source.import_id,):
             db.execute("""INSERT INTO commerce.catalog_active(singleton, import_id) VALUES (true, %s)
                 ON CONFLICT (singleton) DO UPDATE SET import_id = EXCLUDED.import_id,
                 activated_at = CURRENT_TIMESTAMP""", (source.import_id,))

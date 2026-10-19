@@ -16,6 +16,7 @@ from app.search_index import build_index
 def main():
     load_dotenv(ROOT / ".env")
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--catalog-import-id", help="Build a staged import, then atomically publish its catalog and search together")
     refresh = parser.add_mutually_exclusive_group()
     refresh.add_argument("--reembed-all", action="store_true", help="Generate every vector in a new generation")
     refresh.add_argument("--reembed-product", action="append", default=[], metavar="PRODUCT_ID", help="Force selected product embeddings; repeat for multiple IDs")
@@ -25,7 +26,7 @@ def main():
         with connect_database(os.getenv("CATALOG_DATABASE_URL", "postgresql:///conversational_commerce"), autocommit=True) as db:
             with OllamaEmbedder(EmbeddingSettings.from_env()) as embedder:
                 print(json.dumps(build_index(db, embedder, reembed_all=args.reembed_all,
-                    reembed_ids=args.reembed_product, resume_build=args.resume_build), indent=2))
+                    reembed_ids=args.reembed_product, resume_build=args.resume_build, catalog_import_id=args.catalog_import_id), indent=2))
         return 0
     except (CatalogError, psycopg.Error, OSError, ValueError) as exc:
         message = str(exc) if isinstance(exc, CatalogError) else "Check database/schema, Ollama, and embedding configuration"

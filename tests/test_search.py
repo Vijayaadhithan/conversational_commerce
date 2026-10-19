@@ -98,6 +98,37 @@ def test_rank_fusion_combines_independent_ranks_deterministically():
     assert fused[0][1]["keyword_rank"] == 2 and fused[0][1]["vector_rank"] == 1
 
 
+def test_staged_enrichment_keeps_serving_build_until_both_snapshots_are_ready(pg, scratch_database, tmp_path):
+    make_source(tmp_path, [product()])
+    with validated_source(tmp_path) as source:
+        original = import_catalog(pg, source)["import_id"]
+    pg.commit()
+    with connect_database(scratch_database, autocommit=True) as db:
+        old = build_index(db, FakeEmbedder(), lambda *a, **kw: None)
+    enriched = product()
+    enriched["attributes"]["volume"] = {"value": "50 ml", "field": "/details/Item Volume", "status": "listing_claim"}
+    enriched["content"]["features"] = ["Brightening lotion.", "For dry skin."]
+    enriched["content_source_fields"]["features"] = ["/features/0", "/features/1"]
+    make_source(tmp_path, [enriched])
+    with validated_source(tmp_path) as source:
+        staged = import_catalog(pg, source, activate=False)["import_id"]
+    pg.commit()
+    with connect_database(scratch_database, autocommit=True) as db:
+        with pytest.raises(CatalogError, match="Injected"):
+            build_index(db, FakeEmbedder(fail_after=0), lambda *a, **kw: None, catalog_import_id=staged)
+        assert pin_search_build(db)["import_id"] == original
+        assert pin_search_build(db)["build_id"] == old["build_id"]
+        build_index(db, FakeEmbedder(), lambda *a, **kw: None, catalog_import_id=staged)
+        assert pin_search_build(db)["import_id"] == staged
+        response = search_catalog(db, ProductSearchRequest(query="moisturizer", concerns=["dry skin", "brighten my face"],
+            filters={"attributes": {"volume": "50 ml"}}), FakeEmbedder())
+        row = response["results"][0]
+        assert len(row["concern_evidence"]) == 2
+        assert all(item["status"] == "listing_mention" for item in row["concern_evidence"])
+        assert row["variant_metadata"]["selected"]["volume"]["value"] == "50 ml"
+        assert row["variant_metadata"]["purchasable_variants"] is None
+
+
 def test_brand_exclusions_are_sql_constraints_and_unknown_brands_do_not_match(pg, scratch_database, tmp_path):
     rows = [product(), product("B000000002"), product("B000000003")]
     rows[1]["brand"] = {"value": "Acme", "field": "/details/Brand", "status": "listing_claim"}

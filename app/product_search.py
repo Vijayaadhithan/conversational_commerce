@@ -12,10 +12,11 @@ from app.embedding_text import QUERY_PREFIX, contract
 from app.embeddings import EmbeddingSettings, OllamaEmbedder, vector_literal
 from app.product_reranking import rerank_candidates as apply_reranking, rerank_document
 from app.reranker import LocalReranker
+from app.listing_explanations import concern_evidence
 
 AttributeName = Literal["color", "size", "material", "department", "age_range", "skin_type",
     "hair_type", "ingredients", "active_ingredients", "benefits", "material_type_free",
-    "scent", "item_form", "unit_count", "fragrance_free"]
+    "scent", "item_form", "unit_count", "fragrance_free", "product_type", "volume", "style"]
 AttributeValue = StrictBool | Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=120)]
 ProductID = Annotated[str, StringConstraints(pattern=r"^amazon:[A-Z0-9]{10}$")]
 
@@ -65,6 +66,8 @@ class ProductSearchRequest(BaseModel):
                                    description="Mandatory constraints applied to both retrieval paths; never relaxed.")
     limit: int = Field(default=5, ge=1, le=20)
     rerank: StrictBool = Field(default=True, description="Rerank eligible candidates with the installed local model. False explicitly returns the RRF baseline.")
+    concerns: list[Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=1000)]] = Field(
+        default_factory=list, max_length=20, description="Soft concerns for separate source-backed explanations; not mandatory filters.")
 
     @field_validator("query")
     @classmethod
@@ -197,7 +200,12 @@ def search_catalog(db, request, embedder, pinned=None, *, candidate_limit=None, 
             "category": record["category"], "brand": record["brand"], "price": record["price"],
             "attributes": record["attributes"], "availability": record["availability"],
             "image_urls": record["image_urls"][:3], "selected_observation": record["selected_observation"],
-            "ranking": ranking, "listing_evidence": listing_evidence(record, request.query)})
+            "ranking": ranking, "listing_evidence": listing_evidence(record, request.query),
+            "concern_evidence": concern_evidence(record, request.concerns),
+            "variant_metadata": {
+                "selected": {name: record["attributes"][name] for name in ("size", "color", "scent", "style", "volume") if record["attributes"].get(name)},
+                "listed_options": {name: record["attributes"][name] for name in ("size_options", "color_options") if record["attributes"].get(name)},
+                "purchasable_variants": None, "availability": None}})
     return base
 
 

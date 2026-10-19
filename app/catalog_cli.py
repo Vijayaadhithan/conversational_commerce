@@ -23,6 +23,7 @@ def main(command):
         parser.add_argument("--manifest", help="Import/verify a specific completed run manifest instead of current.json")
         if command == "import":
             parser.add_argument("--check-only", action="store_true", help="Validate the source without connecting to PostgreSQL")
+            parser.add_argument("--stage", action="store_true", help="Import without changing the serving catalog; publish with build_search_index.py --catalog-import-id")
     args = parser.parse_args()
     database_url = os.getenv("CATALOG_DATABASE_URL", "postgresql:///conversational_commerce")
     try:
@@ -44,7 +45,8 @@ def main(command):
                 else:
                     with connect_database(database_url) as db:
                         if command == "import":
-                            result = import_catalog(db, source)
+                            result = import_catalog(db, source, activate=not args.stage)
+                            if args.stage: result["activation"] = "staged"
                         else:
                             db.execute("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY")
                             count = verify_catalog(db, source)

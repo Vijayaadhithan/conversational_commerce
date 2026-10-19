@@ -77,7 +77,7 @@ def _cached_vectors(db, inputs, config):
         ([item["sha256"] for item in inputs], config["model_digest"], Jsonb(config["input_contract"]))).fetchall())
 
 
-def build_index(db, embedder, progress=print, *, reembed_all=False, reembed_ids=None, resume_build=None):
+def build_index(db, embedder, progress=print, *, reembed_all=False, reembed_ids=None, resume_build=None, catalog_import_id=None):
     """Use an autocommit connection: each batch commits, publication is atomic."""
     if not db.autocommit:
         raise CatalogError("Embedding builds require an autocommit connection")
@@ -86,10 +86,12 @@ def build_index(db, embedder, progress=print, *, reembed_all=False, reembed_ids=
     try:
         _check_schema(db)
         active = db.execute("SELECT import_id FROM commerce.catalog_active WHERE singleton").fetchone()
-        if not active:
+        if not active and not catalog_import_id:
             raise CatalogError("Import the catalog before building embeddings")
-        import_id = active[0]
-        expected = db.execute("SELECT product_count FROM commerce.catalog_imports WHERE import_id=%s", (import_id,)).fetchone()[0]
+        import_id = catalog_import_id or active[0]
+        imported = db.execute("SELECT product_count FROM commerce.catalog_imports WHERE import_id=%s", (import_id,)).fetchone()
+        if not imported: raise CatalogError("Requested catalog import does not exist")
+        expected = imported[0]
         embedder.verify_identity()
         config = build_config(import_id, embedder)
         reembed_ids = sorted(set(reembed_ids or []))
@@ -144,8 +146,12 @@ def build_index(db, embedder, progress=print, *, reembed_all=False, reembed_ids=
             db.execute("SET LOCAL lock_timeout='5s'")
             db.execute("SELECT pg_advisory_xact_lock(%s)", (LOCK_ID,))
             verified = verify_build(db, build_id)
-            if db.execute("SELECT import_id FROM commerce.catalog_active WHERE singleton").fetchone() != (import_id,):
+            if db.execute("SELECT import_id FROM commerce.catalog_active WHERE singleton").fetchone() != active:
                 raise CatalogError("Catalog changed during embedding; rerun for the active snapshot")
+            if catalog_import_id:
+                db.execute("""INSERT INTO commerce.catalog_active(singleton,import_id) VALUES (true,%s)
+                    ON CONFLICT (singleton) DO UPDATE SET import_id=EXCLUDED.import_id,activated_at=CURRENT_TIMESTAMP
+                    WHERE commerce.catalog_active.import_id<>EXCLUDED.import_id""", (import_id,))
             db.execute("UPDATE commerce.search_builds SET status='ready',completed_at=COALESCE(completed_at,CURRENT_TIMESTAMP) WHERE build_id=%s", (build_id,))
             db.execute("""INSERT INTO commerce.search_active(singleton,build_id) VALUES (true,%s)
                 ON CONFLICT (singleton) DO UPDATE SET build_id=EXCLUDED.build_id,activated_at=CURRENT_TIMESTAMP
