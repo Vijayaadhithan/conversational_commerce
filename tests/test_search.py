@@ -201,3 +201,55 @@ def test_catalog_switch_requires_a_matching_complete_search_build(pg, scratch_da
 def test_bad_filters_rejected(filters):
     from pydantic import ValidationError
     with pytest.raises(ValidationError): ProductFilters(**filters)
+
+
+def test_product_identity_gates_both_retrieval_paths_and_department_aliases(pg, scratch_database, tmp_path):
+    from app.product_search import filter_sql, product_goal_sql
+    titles = ["Face moisturizer for dry skin", "Body and hand lotion", "Curly shampoo", "Crochet braid",
+              "Women's running shoes", "Men's running shoes"]
+    rows = [product(f"B{i:09d}") for i in range(1, 7)]
+    for row, title in zip(rows, titles):
+        row["title"] = title
+    rows[4]["attributes"]["department"] = {"value": "Women's", "field": "/details/Department", "status": "listing_claim"}
+    rows[5]["attributes"]["department"] = {"value": "Mens", "field": "/details/Department", "status": "listing_claim"}
+    make_source(tmp_path, rows)
+    with validated_source(tmp_path) as source: import_catalog(pg, source)
+    pg.commit()
+    with connect_database(scratch_database, autocommit=True) as db:
+        build_index(db, FakeEmbedder(), lambda *a, **kw: None)
+        for goal, expected in [("face moisturizer", "amazon:B000000001"), ("shampoo", "amazon:B000000003")]:
+            result = search_catalog(db, ProductSearchRequest(query=goal, product_goal=goal), FakeEmbedder())
+            assert result["eligible_products"] == 1
+            assert [row["product_id"] for row in result["results"]] == [expected]
+        result = search_catalog(db, ProductSearchRequest(query="shoes", product_goal="shoes", filters={"attributes": {"department": "womens"}}), FakeEmbedder())
+        assert [row["product_id"] for row in result["results"]] == ["amazon:B000000005"]
+
+
+@pytest.mark.parametrize("goal,title,content,expected", [
+    ("red lipstick", "Empty Lipstick Tubes", "", False),
+    ("lipstick", "Lipstick Brooch Lapel Pin", "", False),
+    ("lipstick", "Red lipstick", "", True),
+    ("handbag", "Handbag Organizer Insert", "", False),
+    ("handbag", "Cosmetic Toiletry Handbag", "", False),
+    ("handbag", "Leather Shoulder Handbag", "", True),
+    ("razor blades", "Single Edge Razor Blades", "Fits scrapers for removing paint", False),
+    ("razor blades", "Double Edge Razor Blades", "For shaving", True),
+    ("razor blades", "Single Edge Razor Blades", "For scraping, trimming and cutting", False),
+    ("razor blades", "Single Edge Razor Blades", "", False),
+    ("razor blades", "40 Box Razor Blades Disposable Shavers", "", False),
+    ("razor blades", "Mens Shaver Replacement Blades", "", True),
+    ("running shoes", "Running Shoe Charm", "", False),
+    ("running shoes", "Winter Ankle Shoes Boots", "", False),
+    ("running shoes", "Women's Running Shoes", "", True),
+    ("moisturizer", "Moisturizing Clay Mask", "", False),
+    ("shirt with pockets", "Cotton shirt", "No pockets", False),
+    ("shirt with pockets", "Cotton shirt", "Two chest pockets", True),
+])
+def test_misleading_product_name_gate(pg, goal, title, content, expected):
+    from app.product_search import product_goal_sql
+    from psycopg.types.json import Jsonb
+    suffix, values = product_goal_sql(goal)
+    document = {"title": title, "content": {"features": [content], "description": []}}
+    result = pg.execute("SELECT count(*) FROM (SELECT %s::jsonb AS document, '{}'::jsonb AS attributes) p WHERE true" + suffix,
+                        [Jsonb(document), *values]).fetchone()[0]
+    assert bool(result) == expected

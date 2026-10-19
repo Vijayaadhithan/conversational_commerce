@@ -3,6 +3,7 @@ import argparse
 from collections import Counter
 from decimal import Decimal
 import json
+import re
 from pathlib import Path
 import sys
 
@@ -24,7 +25,7 @@ def summarize(capture, review):
         for observed in case["observations"]:
             http[observed["http_status"]] += 1
             commerce = observed["response"].get("commerce", {})
-            if commerce.get("action") == "recommend" and commerce.get("products"):
+            if commerce.get("action") in {"recommend", "multi"} and commerce.get("products"):
                 recommendations.append(commerce)
             for group in commerce.get("groups", []) or [commerce]:
                 filters = (group.get("search") or {}).get("filters_applied", {})
@@ -38,7 +39,12 @@ def summarize(capture, review):
                     if filters.get("min_price") is not None: checks.append(amount >= Decimal(filters["min_price"]))
                     for name, value in filters.get("attributes", {}).items():
                         claim = product["attributes"].get(name)
-                        checks.append(bool(claim) and str(claim["value"]).casefold() == str(value).casefold())
+                        actual = str(claim["value"]).casefold() if claim else ""
+                        wanted = str(value).casefold()
+                        if name == "department" and re.sub(r"[^a-z]", "", wanted) in {"men", "mens", "women", "womens", "boys", "girls"}:
+                            actual = re.sub(r"[^a-z]", "", actual).removesuffix("s")
+                            wanted = re.sub(r"[^a-z]", "", wanted).removesuffix("s")
+                        checks.append(bool(claim) and actual == wanted)
                     if filters.get("brand"):
                         checks.append(bool(product.get("brand")) and product["brand"]["value"].casefold() == filters["brand"].casefold())
                     checks.append(product["product_id"] not in filters.get("exclude_product_ids", []))

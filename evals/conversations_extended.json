@@ -1,0 +1,55 @@
+[
+  {
+    "id": "beauty_rephrase",
+    "goal": "Unseen phrasing, budget correction, and unseen options",
+    "turns": [
+      "Could you find me a red lipstick below 22 dollars please?",
+      "Make that under $18",
+      "Any more choices?"
+    ]
+  },
+  {
+    "id": "bag_typo",
+    "goal": "Typos around a clear handbag request and budget-only update",
+    "turns": [
+      "pls recomend a handbag under $35",
+      "under $20 instead"
+    ]
+  },
+  {
+    "id": "recipient_rephrase",
+    "goal": "Explicit adult recipient and preserved requirements",
+    "turns": [
+      "Can you find running shoes for adult women below $80?",
+      "Under $60 instead"
+    ]
+  },
+  {
+    "id": "multi_long",
+    "goal": "Two same-family products, task switching, separate budgets and resumption",
+    "turns": [
+      "Find cleanser below $18 plus moisturizer below $26",
+      "Back to cleanser",
+      "Under $12 instead",
+      "Back to moisturizer",
+      "What are my preferences?"
+    ]
+  },
+  {
+    "id": "vague_resolved",
+    "goal": "Vague preference clarification without inventing attributes, then an explicit filter",
+    "turns": [
+      "I want something to brighten my face",
+      "something less chemical please",
+      "I mean fragrance-free, show me products"
+    ]
+  },
+  {
+    "id": "empty_recovery",
+    "goal": "No-match explanation then explicit budget relaxation",
+    "turns": [
+      "Please find moisturizer below $0.01",
+      "Make the budget $20"
+    ]
+  }
+]

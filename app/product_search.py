@@ -68,6 +68,7 @@ class ProductSearchRequest(BaseModel):
                                    description="Mandatory constraints applied to both retrieval paths; never relaxed.")
     limit: int = Field(default=5, ge=1, le=20)
     rerank: StrictBool = Field(default=True, description="Rerank eligible candidates with the installed local model. False explicitly returns the RRF baseline.")
+    product_goal: str = Field(default="", max_length=1200, description="Explicit product type from the user; source wording gates retrieval before ranking.")
     concerns: list[Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=1000)]] = Field(
         default_factory=list, max_length=20, description="Soft concerns for separate source-backed explanations; not mandatory filters.")
 
@@ -99,6 +100,10 @@ def filter_sql(filters):
         if isinstance(value, bool):
             clauses.append("p.attributes #> ARRAY[%s,'value'] = %s::jsonb")
             values.extend((key, "true" if value else "false"))
+        elif key == "department" and re.sub(r"[^a-z]", "", str(value).lower()) in {"men", "mens", "women", "womens", "boys", "girls"}:
+            canonical = re.sub(r"[^a-z]", "", str(value).lower()).removesuffix("s")
+            clauses.append("regexp_replace(lower(p.attributes #>> ARRAY[%s,'value']), '[^a-z]', '', 'g') = ANY(%s)")
+            values.extend((key, [canonical, canonical + "s"]))
         else:
             clauses.append("lower(p.attributes #>> ARRAY[%s,'value'])=lower(%s)")
             values.extend((key, value))
@@ -108,6 +113,69 @@ def filter_sql(filters):
     if filters.exclude_brands:
         clauses.append("p.brand IS NOT NULL AND NOT (lower(p.brand)=ANY(%s))")
         values.append([brand.lower() for brand in filters.exclude_brands])
+    return (" AND " + " AND ".join(clauses)) if clauses else "", values
+
+
+def product_goal_sql(goal):
+    """Conservative literal product identity gates; unknown types retain normal retrieval.
+
+    Title/type wording is required, with description/features allowed for facial
+    moisturizer aliases. This is textual listing support, not suitability inference.
+    """
+    rules = [
+        (r"\brazor blades?\b", r"\m(blades?|cartridges?|refills?)\M"),
+        (r"\blipsticks?\b", r"\mlipsticks?\M"),
+        (r"\b(?:handbag|bag|crossbody|purse)s?\b", r"\m(handbags?|bags?|crossbody|purses?)\M"),
+        (r"\bshampoo\b", r"\mshampoos?\M"),
+        (r"\bconditioner\b", r"\mconditioners?\M"),
+        (r"\bmoisturi\w*|\bface cream\b", r"\m(moisturi[sz][a-z]*|emulsions?|creams?)\M"),
+        (r"\bcleanser\b", r"\mcleansers?\M"),
+        (r"\bshirts?\b", r"\mshirts?\M"),
+        (r"\b(?:shoes?|sneakers?)\b", r"\m(shoes?|sneakers?)\M"),
+    ]
+    identity = "concat_ws(' ', p.document->>'title', p.attributes #>> '{product_type,value}')"
+    clauses, values = [], []
+    for trigger, pattern in rules:
+        if re.search(trigger, goal, re.I):
+            clauses.append(identity + " ~* %s")
+            values.append(pattern)
+            break
+    full_text = "concat_ws(' ', p.document->>'title', p.document #>> '{content,features}', p.document #>> '{content,description}')"
+    # Product names can describe a container/accessory or a different use entirely.
+    if re.search(r"\blipsticks?\b", goal, re.I):
+        clauses.append("(p.document->>'title') !~* %s")
+        values.append(r"\m(empty|containers?|holders?|organizers?|brooch|lapel|keychain|keyring)\M")
+    if re.search(r"\brazor blades?\b", goal, re.I):
+        clauses.append(full_text + " !~* %s")
+        values.append(r"\m(scrapers?|scraping|paint|decals?|utility knife|box cutter)\M")
+        clauses.append(full_text + " ~* %s")
+        values.append(r"\m(shav[a-z]*|beards?|barbers?|safety razors?)\M")
+        clauses.append("((p.document->>'title') !~* %s OR (p.document->>'title') ~* %s)")
+        values.extend([r"\m(disposable|shavers?)\M", r"\m(refills?|replacement|cartridges?)\M"])
+    if re.search(r"\bmoisturi\w*|\bface cream\b", goal, re.I):
+        clauses.append("(p.document->>'title') !~* %s")
+        values.append(r"\m(masks?|peels?|cleansers?)\M")
+    if re.search(r"\b(?:shoes?|sneakers?)\b", goal, re.I):
+        clauses.append("(p.document->>'title') !~* %s")
+        values.append(r"\m(charms?|keychain|key chain|zipper pull|cleaning|cleaner|stain remover|insoles?|laces?)\M")
+        if re.search(r"\brunning\b", goal, re.I):
+            clauses.append("(p.document->>'title') ~* %s")
+            values.append(r"\mrunning\M")
+    if re.search(r"\b(?:handbag|purse|crossbody)s?\b", goal, re.I) and not re.search(r"\b(?:cosmetic|makeup|toiletry)\b", goal, re.I):
+        clauses.append("(p.document->>'title') !~* %s")
+        values.append(r"\m(organizers?|inserts?|liners?|cosmetic|makeup|toiletry|keychain|charms?)\M")
+    if re.search(r"\bcrossbody\b", goal, re.I):
+        clauses.append("(p.document->>'title') ~* %s")
+        values.append(r"\mcross[ -]?body\M")
+    if re.search(r"\bcotton\b", goal, re.I):
+        clauses.append(full_text + " ~* %s AND " + full_text + " !~* %s")
+        values.extend([r"\mcotton\M", r"\m(no|without|not) cotton\M"])
+    if re.search(r"\bpockets?\b", goal, re.I):
+        clauses.append(full_text + " ~* %s AND " + full_text + " !~* %s")
+        values.extend([r"\mpockets?\M", r"\m(no|without|fake|faux) (chest |side )?pockets?\M"])
+    if clauses and re.search(r"\bface|\bfacial", goal, re.I):
+        clauses.append("concat_ws(' ', p.document->>'title', p.document #>> '{content,features}', p.document #>> '{content,description}') ~* %s")
+        values.append(r"\m(face|facial)\M")
     return (" AND " + " AND ".join(clauses)) if clauses else "", values
 
 
@@ -163,13 +231,16 @@ def search_catalog(db, request, embedder, pinned=None, *, candidate_limit=None, 
     if embedder.settings.model != config["model"]:
         raise CatalogError("Configured embedding model differs from the search build; rebuild first")
     suffix, params = filter_sql(request.filters)
+    goal_sql, goal_params = product_goal_sql(request.product_goal)
+    suffix += goal_sql
+    params.extend(goal_params)
     eligible_sql = "SELECT p.product_id FROM commerce.catalog_products p WHERE p.import_id=%s" + suffix
     eligible_count = db.execute("SELECT count(*) FROM (" + eligible_sql + ") eligible", [pinned["import_id"], *params]).fetchone()[0]
     base = {"query": request.query, "run_id": pinned["run_id"], "build_id": pinned["build_id"],
         "model": config["model"], "model_digest": config["model_digest"],
         "filters_applied": request.filters.model_dump(mode="json", exclude_none=True),
         "eligible_products": eligible_count, "method": "postgres_fts+exact_cosine+rrf",
-        "constraints_source": "structured_filters",
+        "constraints_source": "structured_filters", "product_goal": request.product_goal,
         "price_context": "historical USD", "results": []}
     if not eligible_count:
         return base

@@ -138,3 +138,13 @@ def test_archive_tampering_never_publishes_pointer(tmp_path):
     with pytest.raises(CatalogError, match="checksum"):
         publish_enrichment(source_dir, raw_dir, output)
     assert not (output / "current.json").exists()
+
+
+@pytest.mark.parametrize("title,concern", [
+    ("Fanola Curly And Wavy Hair Shampoo", "curly hair"),
+    ("Moisturizer for Sensitive, Dry & Normal Skin", "dry skin"),
+])
+def test_coordinated_type_wording_keeps_literal_evidence(title, concern):
+    item = concern_evidence(listing(title), [concern])[0]
+    assert item["status"] == "listing_mention"
+    assert all(e["text"] in title for e in item["evidence"])

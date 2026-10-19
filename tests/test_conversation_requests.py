@@ -328,3 +328,147 @@ def test_extracted_amounts_do_not_leave_budget_words_as_concerns():
     state, result = handle_turn({}, proposal, message, Search().search)
     assert result["action"] == "multi" and all(not task.need for task in state.tasks)
     assert [task.filters.max_price for task in state.tasks] == [Decimal("14.99"), Decimal("24.99")]
+
+
+@pytest.mark.parametrize("product", ["lipstick", "razor blades", "handbag"])
+def test_single_request_wrapper_is_validated_as_one_task(product):
+    message = f"Recommend {product} under $25"
+    proposal = IntentPlan.model_validate(plan("search", message, recommendation_requested=True, requests=[
+        {"evidence": message, "changes": [change("query", product, product)]}]))
+    search = Search()
+    state, result = handle_turn({}, proposal, message, search.search)
+    assert len(state.tasks) == 1 and state.active().query == product
+    assert search.calls[-1].filters.max_price == Decimal("24.99")
+
+
+def test_multi_clauses_accept_omitted_request_verb_but_keep_complete_requirements():
+    message = "Recommend shampoo under $15 and moisturizer under $25"
+    proposal = IntentPlan.model_validate(plan("search", message, recommendation_requested=True, requests=[
+        {"evidence": "shampoo under $15", "changes": []},
+        {"evidence": "moisturizer under $25", "changes": []}]))
+    state, result = handle_turn({}, proposal, message, Search().search)
+    assert result["action"] == "multi" and not any(t.need for t in state.tasks)
+    assert [t.filters.max_price for t in state.tasks] == [Decimal("14.99"), Decimal("24.99")]
+    message = "Back to shampoo"
+    state, _ = handle_turn(state.model_dump(), IntentPlan(intent="switch_task", evidence=message, task_id=1), message, Search().search)
+    message = "Under $10 instead"
+    state, _ = handle_turn(state.model_dump(), IntentPlan(intent="refine", evidence=message), message, Search().search)
+    assert state.active_task_id == 1
+    assert [t.filters.max_price for t in state.tasks] == [Decimal("9.99"), Decimal("24.99")]
+
+
+@pytest.mark.parametrize("recipient,department", [("adult women", "womens"), ("adult men", "mens")])
+def test_explicit_recipient_omission_recovered_without_reasking(recipient, department):
+    message = f"Recommend shoes for {recipient} under $75"
+    proposal = IntentPlan(intent="search", evidence=message, recommendation_requested=True)
+    search = Search()
+    state, result = handle_turn({}, proposal, message, search.search)
+    assert result["action"] == "recommend"
+    assert state.active().recipient == recipient
+    assert search.calls[-1].filters.attributes["department"] == department
+
+
+def test_no_match_retains_impossible_budget_and_named_product():
+    message = "Recommend a moisturizer under $0.01"
+    state, result = handle_turn({}, IntentPlan(intent="clarify", evidence=message, recommendation_requested=True), message, Search().search)
+    assert result["action"] == "recommend" and not result["products"]
+    assert "no moisturizer listings" in result["reply"]
+    assert state.active().filters.max_price == Decimal("0.00")
+
+
+def test_allergy_question_explains_limits_without_changing_saved_constraints():
+    saved = ShoppingState(tasks=[ShoppingTask(id=1, query="moisturizer", filters=ProductFilters(max_price="20"))], active_task_id=1)
+    message = "Would these be guaranteed safe for my allergies?"
+    state, result = handle_turn(saved.model_dump(), IntentPlan(intent="clarify", evidence=message), message, Search().search)
+    assert "cannot guarantee allergy safety" in result["reply"]
+    assert state.tasks == saved.tasks and state.pending_kind == "evidence_limit"
+
+
+def test_facial_product_goal_is_kept_separately_from_soft_concerns():
+    message = "Recommend a face moisturizer for dry skin"
+    proposal = IntentPlan.model_validate(plan("search", message, change("query", "moisturizer", "moisturizer")))
+    search = Search()
+    state, _ = handle_turn({}, proposal, message, search.search)
+    assert search.calls[-1].product_goal == "face moisturizer"
+    assert "dry skin" in search.calls[-1].concerns
+
+
+@pytest.mark.parametrize("domain,family", [("beauty", "apparel"), ("apparel", "mens")])
+def test_product_mapping_repairs_model_taxonomy_codes(domain, family):
+    message = "Recommend a cotton shirt with pockets for adult men under $30"
+    proposal = IntentPlan.model_validate(plan("search", message,
+        change("query", "cotton shirt", "cotton shirt"), change("need", "with pockets", "with pockets"),
+        change("domain", domain, "shirt"), change("family", family, "men")))
+    search = Search()
+    state, _ = handle_turn({}, proposal, message, search.search)
+    assert state.active().filters.domain == "fashion" and state.active().filters.family == "apparel"
+    assert search.calls[-1].product_goal == "cotton shirt with pockets"
+
+
+
+def test_return_to_short_product_name_preserves_specific_goal_and_budget():
+    saved = ShoppingState(tasks=[ShoppingTask(id=1, query="red lipstick", filters=ProductFilters(max_price="18")),
+                                ShoppingTask(id=2, query="shampoo", filters=ProductFilters(max_price="10"))], active_task_id=2)
+    message = "Back to lipstick"
+    proposal = IntentPlan.model_validate(plan("switch_task", message, change("query", "lipstick", "lipstick"), task_id=1))
+    state, result = handle_turn(saved.model_dump(), proposal, message, Search().search)
+    assert state.active_task_id == 1 and len(state.tasks) == 2
+    assert state.active().query == "red lipstick" and state.active().filters.max_price == Decimal("18")
+
+
+def test_compound_bag_name_does_not_hide_a_second_product_clause():
+    message = "crossbody handbag under $30 and shampoo under $12"
+    state, result = handle_turn({}, IntentPlan(intent="search", evidence=message), message, Search().search)
+    assert len(state.tasks) == 2 and result["action"] == "multi"
+    assert [t.filters.max_price for t in state.tasks] == [Decimal("29.99"), Decimal("11.99")]
+
+
+def test_explicit_definition_resolves_vague_preference_with_audit_evidence():
+    from app.commerce_models import Concern
+    saved = ShoppingState(tasks=[ShoppingTask(id=1, query="skin care", need="brighten my face; less chemical",
+        needs=[Concern(value="brighten my face", evidence="brighten my face"), Concern(value="less chemical", evidence="less chemical")])],
+        active_task_id=1, pending_kind="preference_detail")
+    message = "I mean fragrance-free, show me products"
+    proposal = IntentPlan(intent="search", evidence=message, recommendation_requested=True)
+    state, _ = handle_turn(saved.model_dump(), proposal, message, Search().search)
+    assert state.active().need == "brighten my face"
+    assert state.active().filters.attributes["fragrance_free"] is True
+    assert state.active().sources["resolved_preference"]["evidence"] == message
+
+
+
+def test_model_comparator_arithmetic_is_accepted_only_when_code_reproduces_it():
+    message = "moisturizer under $10"
+    proposal = IntentPlan.model_validate(plan("search", message, change("max_price", "9.99", "under $10")))
+    state, _ = handle_turn({}, proposal, message, Search().search)
+    assert state.active().filters.max_price == Decimal("9.99")
+    proposal = IntentPlan.model_validate(plan("search", message, change("max_price", "8.99", "under $10")))
+    with pytest.raises(IntentError): handle_turn({}, proposal, message, Search().search)
+
+
+def test_empty_search_labels_previous_products_before_comparison():
+    message = "moisturizer under $20"
+    state, _ = handle_turn({}, IntentPlan(intent="search", evidence=message), message, Search().search)
+    assert state.active().shown
+    message = "Under $0.01 instead"
+    state, _ = handle_turn(state.model_dump(), IntentPlan(intent="refine", evidence=message), message, Search().search)
+    assert state.active().shown
+    message = "Compare the first two"
+    state, result = handle_turn(state.model_dump(), IntentPlan(intent="compare", evidence=message), message, Search().search)
+    assert result["action"] == "compare" and "not confirmed to match your current requirements" in result["reply"]
+
+
+@pytest.mark.parametrize("message", ["Make the budget $20", "Set it to twenty dollars", "Please change my budget to 20 USD"])
+def test_explicit_budget_commands_refresh_results_after_no_match(message):
+    from app.commerce import direct_plan
+    state = ShoppingState(tasks=[ShoppingTask(id=1, query="moisturizer", filters=ProductFilters(max_price="0"))], active_task_id=1)
+    proposal = direct_plan(message)
+    assert proposal and proposal.recommendation_requested
+    state, result = handle_turn(state.model_dump(), proposal, message, Search().search)
+    assert result["products"] and state.active().filters.max_price == Decimal("20")
+
+
+@pytest.mark.parametrize("message", ["What does set my budget to $20 mean?", "Set my budget to $20 but don't show products yet"])
+def test_budget_discussion_or_deferral_still_goes_through_semantic_planner(message):
+    from app.commerce import direct_plan
+    assert direct_plan(message) is None

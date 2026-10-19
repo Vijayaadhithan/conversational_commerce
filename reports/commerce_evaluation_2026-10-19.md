@@ -2,6 +2,10 @@
 
 Date: 19 October 2026. Review: **AI only; no human judgments**.
 
+Follow-up: the [conversation repair report](commerce_fixes_2026-10-19.md) records the
+subsequent fixes and reevaluation (original cases: 10 successful, 2 partial, 0 failed).
+The measurements below are the preserved pre-repair baseline.
+
 The 50,000-product catalog and matching embedding generation are active. Sampling,
 enrichment and import validation now use disk-backed working storage. Redis caching
 and model warm-up are implemented. The larger catalog improved the reviewed product

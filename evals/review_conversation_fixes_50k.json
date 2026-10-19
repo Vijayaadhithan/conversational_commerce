@@ -1,0 +1,276 @@
+{
+  "reviewer": "Codex AI review of complete captures and listing evidence",
+  "human_reviewed": false,
+  "scope": "Conversation outcome covers all turns; product grades cover the last nonempty recommendation list, including grouped lists.",
+  "rubric": {
+    "0": "Poor product fit or failed conversation",
+    "1": "Partial fit or unmet/unresolved requirement",
+    "2": "Relevant listing-supported fit or successful conversation goal"
+  },
+  "cases": [
+    {
+      "id": "dry_skin_budget",
+      "outcome": 2,
+      "note": "Facial use and dry-skin evidence retained through the budget change; coordinated dry/normal wording now matches.",
+      "product_grades": {
+        "amazon:B089643NG7": 2,
+        "amazon:B000052YN6": 2,
+        "amazon:B085N7T7MY": 2,
+        "amazon:B08YK8B89C": 2,
+        "amazon:B07DSQ224G": 2
+      }
+    },
+    {
+      "id": "typos_vague",
+      "outcome": 1,
+      "note": "Clarifies less-chemical and allows explicitly requested related browsing, but the user never defines the property. A chemical peel remains a poor conversational fit; no less-chemical or safety claim is verified.",
+      "product_grades": {
+        "amazon:B001DNHWCM": 1,
+        "amazon:B000K19TH4": 1,
+        "amazon:B0CGBT7DXR": 0,
+        "amazon:B01MECULV1": 1,
+        "amazon:B0CGVPLYTW": 1
+      }
+    },
+    {
+      "id": "hair",
+      "outcome": 2,
+      "note": "Shampoo identity and curly-hair evidence retained through the budget change, including curly-and-wavy wording.",
+      "product_grades": {
+        "amazon:B082ZPSCC2": 2,
+        "amazon:B0029GQYAI": 2,
+        "amazon:B07GFRYCQ2": 2,
+        "amazon:B09BGJP77P": 2,
+        "amazon:B09HN7W85H": 2
+      }
+    },
+    {
+      "id": "fragrance_free",
+      "outcome": 2,
+      "note": "Fragrance-free and sensitive-skin listing support returned; allergy follow-up explains evidence limits and leaves requirements unchanged.",
+      "product_grades": {
+        "amazon:B005IHVOVO": 2,
+        "amazon:B000052YN6": 2,
+        "amazon:B017JA4M3E": 2,
+        "amazon:B01M68AVUB": 2,
+        "amazon:B0C8QJR7VM": 2
+      }
+    },
+    {
+      "id": "lipstick",
+      "outcome": 2,
+      "note": "Red lipsticks returned and more options exclude previously seen IDs. One gift set with a ring is a partial fit; containers and brooches are excluded.",
+      "product_grades": {
+        "amazon:B099MDZCJF": 2,
+        "amazon:B09MCTYB4X": 1,
+        "amazon:B09C26W6MB": 2,
+        "amazon:B07NJ829RL": 2,
+        "amazon:B07NQQKXM9": 2
+      }
+    },
+    {
+      "id": "razors",
+      "outcome": 2,
+      "note": "Replacement/refill and double-edge shaving blades under budget; scraping blades and whole disposable shavers excluded. Compatibility varies and was not specified.",
+      "product_grades": {
+        "amazon:B0BVZ54DC1": 2,
+        "amazon:B0BNLFRZBN": 2,
+        "amazon:B0BSGNDL9R": 2,
+        "amazon:B06XXKCRZ8": 2,
+        "amazon:B001DYQELG": 2
+      }
+    },
+    {
+      "id": "crossbody",
+      "outcome": 2,
+      "note": "Crossbody handbag options remain within each budget; task goal and context retained.",
+      "product_grades": {
+        "amazon:B086X3PF2H": 2,
+        "amazon:B092J63RBK": 2,
+        "amazon:B082VLW41X": 2,
+        "amazon:B08DKQ8CN5": 2,
+        "amazon:B07J6T6J17": 2
+      }
+    },
+    {
+      "id": "shoes",
+      "outcome": 1,
+      "note": "Recipient is correctly retained and no irrelevant products are substituted, but the sample has no qualifying women's running-shoe matches. Shopping goal remains unfulfilled because of catalog coverage.",
+      "product_grades": {}
+    },
+    {
+      "id": "shirt",
+      "outcome": 2,
+      "note": "Cotton/pocket/men context supports retrieval and first-two comparison. One listing has conflicting cotton composition wording; another supports pockets only in keyword-heavy marketing text.",
+      "product_grades": {
+        "amazon:B09CPLNXK5": 2,
+        "amazon:B00O972MCO": 2,
+        "amazon:B07RBWNCR1": 2,
+        "amazon:B0876FSZFV": 1,
+        "amazon:B0771MKJCM": 1
+      }
+    },
+    {
+      "id": "necklace",
+      "outcome": 2,
+      "note": "Relevant silver necklaces under budget; bundled sets and personalized item are partial individual fits.",
+      "product_grades": {
+        "amazon:B008OYIPAQ": 2,
+        "amazon:B00LP3UHN6": 2,
+        "amazon:B01AMFGHM2": 1,
+        "amazon:B00H7L7EWW": 1,
+        "amazon:B07BW9FS1Y": 1
+      }
+    },
+    {
+      "id": "multiple",
+      "outcome": 2,
+      "note": "Two tasks created with separate budgets; returning to shampoo restores its results and changing to under $10 leaves the moisturizer budget intact.",
+      "product_grades": {
+        "amazon:B003UBDOIG": 2,
+        "amazon:B000RK9XLA": 2,
+        "amazon:B0BZB9ZK19": 2,
+        "amazon:B09KT1DXWS": 2,
+        "amazon:B07XF8XXVW": 2
+      }
+    },
+    {
+      "id": "empty",
+      "outcome": 2,
+      "note": "Explicit moisturizer request is retained and the impossible price produces an honest no-match response.",
+      "product_grades": {}
+    },
+    {
+      "id": "beauty_rephrase__run1",
+      "outcome": 2,
+      "note": "Unfamiliar request wording, budget update and more-options request work; returned sets have extra shades/accessories not requested.",
+      "product_grades": {
+        "amazon:B099MDZCJF": 2,
+        "amazon:B09MH986YJ": 1,
+        "amazon:B09MCTYB4X": 1,
+        "amazon:B09C26W6MB": 2,
+        "amazon:B07NJ829RL": 2
+      }
+    },
+    {
+      "id": "bag_typo__run1",
+      "outcome": 2,
+      "note": "Typo-bearing handbag request and budget-only change work. Organizers/cosmetic bags are excluded; child-sized mini handbag is a partial fit without recipient or size context.",
+      "product_grades": {
+        "amazon:B018VVMRXC": 2,
+        "amazon:B07L5DG7S2": 2,
+        "amazon:B014IRN1Y2": 2,
+        "amazon:B01D75488Y": 2,
+        "amazon:B0053H9AV0": 1
+      }
+    },
+    {
+      "id": "recipient_rephrase__run1",
+      "outcome": 1,
+      "note": "Recipient and both budgets remain correct; no qualifying running-shoe listing is available in this sample.",
+      "product_grades": {}
+    },
+    {
+      "id": "multi_long__run1",
+      "outcome": 2,
+      "note": "Five-turn same-family workflow creates cleanser/moisturizer tasks, switches twice and preserves independent budgets and preferences.",
+      "product_grades": {
+        "amazon:B00CCYT62K": 2,
+        "amazon:B00VJ3APM0": 2,
+        "amazon:B07NQH5T76": 2,
+        "amazon:B082LXPYZX": 2,
+        "amazon:B01N5SHGS0": 2
+      }
+    },
+    {
+      "id": "vague_resolved__run1",
+      "outcome": 1,
+      "note": "Explicit fragrance-free definition replaces the vague preference with provenance and filters correctly. Three listings mention brightening; two lack that concern evidence, so relevance is still partial.",
+      "product_grades": {
+        "amazon:B09DHZ86T3": 2,
+        "amazon:B093H5LW2C": 2,
+        "amazon:B0BNK4RVL5": 2,
+        "amazon:B09JL9RHCT": 1,
+        "amazon:B01GJOPTZ6": 1
+      }
+    },
+    {
+      "id": "empty_recovery__run1",
+      "outcome": 2,
+      "note": "No-match at the impossible price followed by an explicit $20 budget refreshes products without requiring show options.",
+      "product_grades": {
+        "amazon:B00CCYT62K": 2,
+        "amazon:B00JMOCFUI": 2,
+        "amazon:B00VJ3APM0": 2,
+        "amazon:B07NQH5T76": 2,
+        "amazon:B000052YN6": 2
+      }
+    },
+    {
+      "id": "beauty_rephrase__run2",
+      "outcome": 2,
+      "note": "Unfamiliar request wording, budget update and more-options request work; returned sets have extra shades/accessories not requested.",
+      "product_grades": {
+        "amazon:B099MDZCJF": 2,
+        "amazon:B09MH986YJ": 1,
+        "amazon:B09MCTYB4X": 1,
+        "amazon:B09C26W6MB": 2,
+        "amazon:B07NJ829RL": 2
+      }
+    },
+    {
+      "id": "bag_typo__run2",
+      "outcome": 2,
+      "note": "Typo-bearing handbag request and budget-only change work. Organizers/cosmetic bags are excluded; child-sized mini handbag is a partial fit without recipient or size context.",
+      "product_grades": {
+        "amazon:B018VVMRXC": 2,
+        "amazon:B07L5DG7S2": 2,
+        "amazon:B014IRN1Y2": 2,
+        "amazon:B01D75488Y": 2,
+        "amazon:B0053H9AV0": 1
+      }
+    },
+    {
+      "id": "recipient_rephrase__run2",
+      "outcome": 1,
+      "note": "Recipient and both budgets remain correct; no qualifying running-shoe listing is available in this sample.",
+      "product_grades": {}
+    },
+    {
+      "id": "multi_long__run2",
+      "outcome": 2,
+      "note": "Five-turn same-family workflow creates cleanser/moisturizer tasks, switches twice and preserves independent budgets and preferences.",
+      "product_grades": {
+        "amazon:B00CCYT62K": 2,
+        "amazon:B00VJ3APM0": 2,
+        "amazon:B07NQH5T76": 2,
+        "amazon:B082LXPYZX": 2,
+        "amazon:B01N5SHGS0": 2
+      }
+    },
+    {
+      "id": "vague_resolved__run2",
+      "outcome": 1,
+      "note": "Explicit fragrance-free definition replaces the vague preference with provenance and filters correctly. Three listings mention brightening; two lack that concern evidence, so relevance is still partial.",
+      "product_grades": {
+        "amazon:B09DHZ86T3": 2,
+        "amazon:B093H5LW2C": 2,
+        "amazon:B0BNK4RVL5": 2,
+        "amazon:B09JL9RHCT": 1,
+        "amazon:B01GJOPTZ6": 1
+      }
+    },
+    {
+      "id": "empty_recovery__run2",
+      "outcome": 2,
+      "note": "No-match at the impossible price followed by an explicit $20 budget refreshes products without requiring show options.",
+      "product_grades": {
+        "amazon:B00CCYT62K": 2,
+        "amazon:B00JMOCFUI": 2,
+        "amazon:B00VJ3APM0": 2,
+        "amazon:B07NQH5T76": 2,
+        "amazon:B000052YN6": 2
+      }
+    }
+  ]
+}

@@ -7,10 +7,12 @@ import re
 TOPICS = (
     (r"\b(?:lighten\w*|brighten\w*)\b", r"\b(?:lighten\w*|brighten\w*)\b", "brightening / lightening wording"),
     (r"\b(?:pimples?|pimble|acne|blemishes?|breakouts?)\b", r"\b(?:pimples?|acne|blemishes?|breakouts?)\b", "acne / blemish wording"),
-    (r"\bdry skin\b", r"\bdry skin\b|\bskin dryness\b", "dry skin"),
+    (r"\bdry skin\b", r"\bdry(?:\s*(?:,|&|and|or)\s*(?:sensitive|normal|combination|oily))*\s+skin\b|\bskin dryness\b", "dry skin"),
+    (r"\bcurly hair\b", r"\bcurly(?:\s*(?:,|&|and|or)\s*(?:wavy|coily|kinky))*\s+hair\b", "curly hair"),
     (r"\bsensitive skin\b", r"\bsensitive skin\b", "sensitive skin"),
     (r"\boily skin\b", r"\boily skin\b", "oily skin"),
     (r"\b(?:frizz|frizzy)\b", r"\b(?:frizz|frizzy)\b", "frizz wording"),
+    (r"\bfragrance[ -]free\b", r"\bfragrance[ -]free\b|\bfree (?:of|from) (?:added )?fragrance\b", "fragrance-free wording"),
     (r"\bpockets?\b", r"\b(?:pockets?|pocketed)\b", "pocket wording"),
 )
 VAGUE = re.compile(r"\b(?:(?:less|kess|fewer|low|no)\s+chemi\w*|gentler|not too strong)\b", re.I)

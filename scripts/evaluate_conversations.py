@@ -18,14 +18,20 @@ from app.commerce_models import PLANNER_PROMPT
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output", required=True)
+    parser.add_argument("--cases", type=Path, default=ROOT / "evals/conversations.json")
+    parser.add_argument("--repetitions", type=int, default=1, choices=range(1, 6))
     args = parser.parse_args()
     output = Path(args.output)
     output.parent.mkdir(parents=True, exist_ok=True)
-    cases = json.loads((ROOT / "evals/conversations.json").read_text())
+    cases = json.loads(args.cases.read_text())
+    if args.repetitions > 1:
+        cases = [{**case, "id": f"{case['id']}__run{run}"} for run in range(1, args.repetitions + 1) for case in cases]
     report = {"created_at": datetime.now(timezone.utc).isoformat(), "review_type": "unreviewed synthetic conversations",
-              "human_reviewed": False, "chat_model": Settings().model,
+              "human_reviewed": False, "repetitions": args.repetitions, "chat_model": Settings().model,
               "planner_prompt_sha256": hashlib.sha256(PLANNER_PROMPT.encode()).hexdigest(),
-              "case_set_sha256": hashlib.sha256((ROOT / "evals/conversations.json").read_bytes()).hexdigest(), "cases": []}
+              "code_sha256": {name: hashlib.sha256((ROOT / "app" / name).read_bytes()).hexdigest()
+                  for name in ("commerce.py", "commerce_models.py", "product_search.py", "listing_explanations.py")},
+              "case_set_sha256": hashlib.sha256(args.cases.read_bytes()).hexdigest(), "cases": []}
     with TemporaryDirectory(prefix="commerce-evaluation-") as tmp:
         with TestClient(create_app(replace(Settings(), database=str(Path(tmp) / "conversations.sqlite3")))) as client:
             for case in cases:

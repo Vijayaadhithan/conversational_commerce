@@ -13,12 +13,12 @@ FAMILIES = {
     "makeup": ("beauty", ["lipstick", "makeup", "mascara", "foundation", "eyeliner", "lip gloss"]),
     "fragrance": ("beauty", ["perfume", "fragrance spray", "cologne"]),
     "oral_care": ("beauty", ["toothpaste", "toothbrush", "mouthwash", "floss"]),
-    "shaving": ("beauty", ["razor", "shaving", "shaver"]),
+    "shaving": ("beauty", ["razor blade", "razor", "shaving", "shaver"]),
     "beauty_tools": ("beauty", ["makeup brush", "beauty tool", "nail clipper"]),
     "personal_care": ("beauty", ["deodorant", "body wash", "soap", "personal care"]),
     "footwear": ("fashion", ["shoe", "sneaker", "boot", "sandal", "slipper", "footwear"]),
     "apparel": ("fashion", ["shirt", "dress", "jeans", "trouser", "jacket", "blouse", "clothing", "apparel", "pants"]),
-    "bags": ("fashion", ["bag", "purse", "backpack", "wallet"]),
+    "bags": ("fashion", ["handbag", "crossbody", "bag", "purse", "backpack", "wallet"]),
     "jewelry": ("fashion", ["necklace", "earring", "bracelet", "jewelry", "jewellery", "ring"]),
     "watches": ("fashion", ["watch"]),
     "accessories": ("fashion", ["scarf", "belt", "hat", "sunglasses", "accessor"]),
@@ -129,10 +129,12 @@ Use search for a first product request, refine for budget/color/brand/need chang
 Use new_task when the user starts a different product/category; switch_task with a known task_id to return to a saved task.
 New tasks start fresh; switching tasks restores their exact saved constraints. For multiple product types, use requests:
 each entry has evidence (the complete verbatim clause for ONE product, including its requirements) and changes for that clause.
+For a single product use top-level changes and requests=[]. Never wrap a single product in requests.
 Leave top-level changes empty when using requests. Include every clause, in order, without overlapping evidence.
 For example 'shampoo under $15 and moisturizer under $25' has two requests with separate queries and budgets.
 Two products in the same family (cleanser and moisturizer) also need separate requests. Never transfer a requirement
 between products. If a shared budget/recipient/attribute has ambiguous scope, use clarify/question_kind=multiple.
+Domain and family are application-owned mappings: omit these changes when a named product supplies the category.
 Known families are supplied in the context. On follow-ups, name the saved product in query only when actually stated.
 Vague preferences such as 'less chemical', 'gentler', or 'not too strong' are literal need text, never inferred
 fragrance_free, organic, ingredient exclusions, or safety claims. Keep spelling errors in the evidence and value.

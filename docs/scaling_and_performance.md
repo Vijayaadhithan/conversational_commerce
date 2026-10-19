@@ -2,6 +2,14 @@
 
 See the [19 October evaluation report](../reports/commerce_evaluation_2026-10-19.md)
 for measured results, AI review labels, remaining intent failures and limitations.
+The subsequent [conversation repair report](../reports/commerce_fixes_2026-10-19.md)
+documents the repaired failures and expanded evaluation.
+
+Conversation searches now pass an explicit `product_goal` to product search. Its
+listing-identity checks apply before both retrieval paths and form part of the cache
+key. Direct `/products/search` clients may also supply this optional field; omitting
+it retains their existing behavior. These checks cover named product types, not
+unverified benefit or safety claims.
 
 The first measured expansion targets 50,000 products. It retains the original
 20,000 and selects additional products deterministically from eligible normalized

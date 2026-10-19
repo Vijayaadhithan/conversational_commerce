@@ -72,10 +72,19 @@ def matching_families(text):
     return list(dict.fromkeys(item[2] for item in product_mentions(text)))
 
 
+def product_keys(text):
+    return {normalized(item[3]).rstrip("s") for item in product_mentions(text)}
+
+
+def task_matches(task, message):
+    return bool(task.query and (normalized(task.query) in normalized(message)
+                               or product_keys(task.query) & product_keys(message)))
+
+
 def fill_explicit_goal(plan, message):
     """Recover a literal product type if the model omitted its query change."""
     if plan.recommendation_requested is False: return
-    if plan.intent not in {"search", "new_task", "switch_task"} or any(change.field == "query" and change.value for change in plan.changes):
+    if plan.intent not in {"search", "refine", "clarify", "new_task", "switch_task"} or any(change.field == "query" and change.value for change in plan.changes):
         return
     if re.search(r"\bback\b|\breturn\b", normalized(message)): return
     families = matching_families(message)
@@ -121,16 +130,21 @@ def direct_plan(message):
     text = normalized(message).rstrip(".!?")
     action = None
     if re.fullmatch(r"(?:please )?(?:start over|reset|forget my preferences|new search)", text): action = "reset"
+    elif re.fullmatch(r"(?:please )?(?:back|return) to (?:the )?[\w -]+", text) and product_mentions(text): action = "switch_task"
     elif text in {"show options", "show me options"}: action = "search"
     elif re.fullmatch(r"(?:please )?(?:show (?:me )?)?(?:more|more options|other options|show alternatives)", text): action = "more"
     elif re.fullmatch(r"(?:please )?(?:show (?:me )?)?(?:cheaper|cheaper options|less expensive options)", text): action = "cheaper"
     elif re.fullmatch(r"(?:please )?(?:show (?:me )?)?(?:another brand|a different brand|different brands)", text): action = "different_brand"
+    elif re.fullmatch(r"(?:please )?(?:make|set|change|raise|lower) (?:it|that|(?:the |my )?budget)(?: to)? \$?\d+(?:\.\d{1,2})?(?: (?:usd|dollars))?(?: please)?", number_text(text)):
+        amount = re.search(r"\d+(?:\.\d{1,2})?", number_text(text)).group()
+        return IntentPlan(intent="refine", evidence=message, recommendation_requested=True,
+            changes=[Change(field="max_price", value=amount, evidence=message)])
     elif text in {"hi", "hello", "hey", "thanks", "thank you"}: action = "smalltalk"
     elif text in {"what are my preferences", "what are my requirements", "show my preferences"}: action = "preferences"
     elif re.fullmatch(r"compare (?:the )?(?:first two|first and second|1 and 2)(?: products| options| ones)?", text): action = "compare"
     elif re.fullmatch(r"(?:show |tell me |give me )?(?:more )?(?:details|information)(?: about| on| for)? (?:the )?(?:first|second|third|fourth|fifth|[1-5])(?: one| product| option)?", text): action = "details"
     return IntentPlan(intent=action, evidence=message,
-        recommendation_requested=True if action in {"search", "more", "cheaper", "different_brand"} else None) if action else None
+        recommendation_requested=True if action in {"search", "more", "cheaper", "different_brand", "switch_task"} else None) if action else None
 
 
 def reference_positions(message, count):
@@ -188,6 +202,16 @@ def apply_changes(task, plan, message):
             if not can_clear(key, change.evidence): raise IntentError("Constraint removal was not explicit")
         elif isinstance(value, str) and len(value.encode()) > 1000:
             raise IntentError("Extracted preference exceeds supported size")
+        if key in {"domain", "family"} and isinstance(value, str):
+            mentions = product_mentions(message)
+            families = list(dict.fromkeys(m[2] for m in mentions))
+            if len(families) == 1:
+                mapped = families[0] if key == "family" else FAMILIES[families[0]][0]
+                # Taxonomy codes are application-owned mappings. Repair an invented
+                # code, but do not erase a conflicting category the user stated.
+                if value == mapped or normalized(value.replace("_", " ")) not in normalized(message):
+                    value = change.value = mapped
+                    change.evidence = mentions[0][3]
         quote = normalized(change.evidence)
         if key == "query" and isinstance(value, str) and normalized(value) in {"product", "products", "item", "items", "something", "stuff", "thing", "things", "prduct", "prdct"}:
             # These words do not select a product type. Keep the concern and clarify.
@@ -231,7 +255,9 @@ def apply_changes(task, plan, message):
             if re.search(FOREIGN_CURRENCY, message, re.I): continue
             if value is not None:
                 amount = re.fullmatch(r"(?:USD\s*|\$\s*)?([+-]?\d+(?:\.\d{1,2})?)\s*(?:USD|dollars?)?", value.strip(), re.I) if isinstance(value, str) else None
-                if not amount or Decimal(amount.group(1)) not in amounts(change.evidence):
+                computed = budget_overrides(change.evidence).get(key)
+                if not amount or (Decimal(amount.group(1)) not in amounts(change.evidence)
+                                  and (computed is None or Decimal(amount.group(1)) != Decimal(computed))):
                     raise IntentError("Budget must contain one explicitly stated USD amount")
                 value = change.value = amount.group(1)
             fields[key] = value
@@ -280,6 +306,16 @@ def apply_changes(task, plan, message):
     if plan.recommendation_requested is not False and re.search(r"fragrance[ -]free", normalized(message)) and not any(change.field == "attribute.fragrance_free" and change.value is None for change in plan.changes) and not re.search(r"not fragrance[ -]free|don.t (?:need|require|want)|not required|remove|without (?:that|the) (?:requirement|filter)", normalized(message)):
         fields["attributes"]["fragrance_free"] = True
         task.sources["attribute.fragrance_free"] = {"value": True, "evidence": message, "source": "user_explicit_claim"}
+    if fields.get("family") in {"footwear", "apparel"} and plan.recommendation_requested is not False:
+        recipient = re.search(r"\b(?:adult\s+)?(?:women|men|boys|girls|children)\b", message, re.I)
+        if recipient and not negated(recipient.group(), message):
+            literal = recipient.group()
+            task.recipient = literal
+            task.sources["recipient"] = {"value": literal, "evidence": literal, "source": "user"}
+            department = {"women": "womens", "men": "mens", "boys": "boys", "girls": "girls"}.get(literal.lower().split()[-1])
+            if department and not any(c.field == "attribute.department" and c.value is None for c in plan.changes):
+                fields["attributes"]["department"] = department
+                task.sources["attribute.department"] = {"value": department, "evidence": literal, "source": "explicit_recipient_mapping"}
     if fields.get("min_price") is not None and fields.get("max_price") is not None:
         low, high = Decimal(fields["min_price"]), Decimal(fields["max_price"])
         if low.is_finite() and high.is_finite() and low >= 0 and high >= 0 and low > high:
@@ -433,7 +469,7 @@ def split_product_requests(message):
     for previous, current in zip(mentions, mentions[1:]):
         between = message[previous[1]:current[0]]
         separators = list(re.finditer(r"\s+(?:and|plus|as well as|also)\s+|\s*&\s*|[;,]\s*|[.!?]\s+", between, re.I))
-        if not separators: return []
+        if not separators: continue
         separator = separators[-1]
         boundaries.append((previous[1] + separator.start(), previous[1] + separator.end()))
     starts = [0] + [end for _, end in boundaries]
@@ -452,7 +488,16 @@ def multi_requests(plan, message):
             if len(changes) > 20: raise IntentError("Too many preference changes for one task")
             plan.changes, plan.requests = changes, []
             return []
-        if plan.requests: raise IntentError("Multiple requests need separate explicit product clauses")
+        if plan.requests:
+            if len(plan.requests) != 1 or not evidence_ok(plan.requests[0].evidence, message):
+                raise IntentError("Multiple requests need separate explicit product clauses")
+            request = plan.requests[0]
+            if any(not evidence_ok(change.evidence, request.evidence) for change in request.changes):
+                raise IntentError("Preference evidence belongs to a different product")
+            combined = [*plan.changes, *request.changes]
+            plan.changes = list({(c.field, c.value, c.evidence): c for c in combined}.values())
+            if len(plan.changes) > 20: raise IntentError("Too many preference changes for one task")
+            plan.requests = []
         return []
     if plan.intent in {"details", "compare", "similar", "reset", "preferences", "smalltalk"}: return []
     if any(len(clause) > 500 for clause in clauses):
@@ -465,9 +510,9 @@ def multi_requests(plan, message):
         if len(plan.requests) != len(clauses) or plan.changes:
             raise IntentError("Every product clause must have one request, without unscoped changes")
         for request, clause in zip(plan.requests, clauses):
-            if normalized(request.evidence) != normalized(clause):
+            if not evidence_ok(request.evidence, clause):
                 raise IntentError("Product request omitted or overlapped part of a clause")
-            requests.append(request.model_copy(deep=True))
+            requests.append(request.model_copy(deep=True, update={"evidence": clause}))
     else:
         requests = [TaskRequest(evidence=clause) for clause in clauses]
         for change in plan.changes:
@@ -489,7 +534,7 @@ def multi_requests(plan, message):
                 remainder = re.sub(re.escape(change.evidence), " ", remainder, flags=re.I)
             for _, _, _, term in product_mentions(request.evidence):
                 remainder = re.sub(re.escape(term), " ", remainder, flags=re.I)
-            remainder = re.sub(r"\b(?:i|a|an|the|need|want|please|show|me|also|for|and|now|instead)\b", " ", remainder, flags=re.I).strip(" ,.;")
+            remainder = re.sub(r"\b(?:i|a|an|the|need|want|please|show|recommend|suggest|find|get|me|also|for|and|now|instead)\b", " ", remainder, flags=re.I).strip(" ,.;")
             if remainder.strip():
                 # A residual phrase is only used if it remains an actual quote.
                 if not evidence_ok(remainder, request.evidence):
@@ -501,6 +546,11 @@ def multi_requests(plan, message):
 def handle_turn(saved, plan, message, search):
     state = ShoppingState.model_validate(saved or {}).model_copy(deep=True)
     if not evidence_ok(plan.evidence, message): raise IntentError("Intent lacks current-message evidence")
+    if (state.active() and re.search(r"\ballerg(?:y|ies|ic)\b", message, re.I)
+            and re.search(r"\b(?:would|are|is|can|guarantee|guaranteed)\b", message, re.I)
+            and not re.search(r"\b(?:only|must|require|need|want)\b", message, re.I)):
+        state.turns += 1
+        return state, question(state, "These listings cannot guarantee allergy safety. Fragrance-free or sensitive-skin wording does not establish that a product is safe for your allergies. Ingredient lists may be incomplete or outdated. Which ingredient are you concerned about? I can show what the listings explicitly state and flag missing information; your saved requirements are unchanged.", "evidence_limit")
     try:
         requests = multi_requests(plan, message)
     except PreferenceConflict as exc:
@@ -510,7 +560,7 @@ def handle_turn(saved, plan, message, search):
         targets = []
         for request in requests:
             names = [normalized(item[3]) for item in product_mentions(request.evidence)]
-            matches = [task for task in state.tasks if normalized(task.query) in names]
+            matches = [task for task in state.tasks if task_matches(task, request.evidence)]
             fresh = re.search(r"\b(?:new|another|also|separate)\b", request.evidence, re.I)
             if len(matches) > 1 and not fresh:
                 state.turns += 1
@@ -544,7 +594,7 @@ def handle_turn(saved, plan, message, search):
         return state, {"action": "multi", "reply": reply, "products": [row for group in groups for row in group["products"]],
                        "groups": groups, "search": None}
     mentions = product_mentions(message)
-    targets = [task for task in state.tasks if task.query and any(normalized(mention[3]) == normalized(task.query) for mention in mentions)]
+    targets = [task for task in state.tasks if task_matches(task, message)]
     explicit_task = re.search(r"\btask\s+([1-5])\b", message, re.I)
     if explicit_task:
         targets = [task for task in state.tasks if task.id == int(explicit_task.group(1))]
@@ -553,6 +603,8 @@ def handle_turn(saved, plan, message, search):
         state.turns += 1
         return state, question(state, "Several saved tasks have that product type. Which task number do you mean?", "task_selection")
     if len(targets) == 1 and not fresh and plan.intent not in {"reset", "smalltalk", "preferences"}:
+        if re.search(r"\b(?:back|return)\b", message, re.I):
+            plan.changes = [c for c in plan.changes if c.field != "query"]
         state.active_task_id = targets[0].id
         state.pending_kind, state.pending_question = targets[0].pending_kind, targets[0].pending_question
         if plan.intent in {"new_task", "switch_task", "search"}:
@@ -592,11 +644,15 @@ def _handle_single_turn(saved, plan, message, search):
         if repeated or current_concerns:
             plan.intent = "refine" if existing else "clarify"
     fill_explicit_goal(plan, message)
+    for change in plan.changes:
+        if change.field == "query" and isinstance(change.value, str) and re.fullmatch(r"moisturi\w*", change.value, re.I):
+            face = re.search(r"\b(?:face|facial)\s+" + re.escape(change.value) + r"\b", message, re.I)
+            if face: change.value = change.evidence = face.group()
     active = state.active()
     goals = [change for change in plan.changes if change.field == "query" and isinstance(change.value, str)]
     returning = bool(re.search(r"\bback\b|\breturn\b", normalized(message)))
     if returning:
-        targets = [task for task in state.tasks if task.query and normalized(task.query) in normalized(message)]
+        targets = [task for task in state.tasks if task_matches(task, message)]
         if len(targets) == 1:
             plan.intent, plan.task_id = "switch_task", targets[0].id
     if goals and not returning and plan.intent not in {"reset", "smalltalk", "preferences", "details", "compare", "similar"}:
@@ -663,6 +719,18 @@ def _handle_single_turn(saved, plan, message, search):
         apply_changes(proposed, plan, message)
     except PreferenceConflict as exc:
         return state, question(state, str(exc), "budget_conflict")
+    if (old_pending == "preference_detail" and re.search(r"\b(?:i mean|by that i mean)\b", message, re.I)
+            and proposed.filters.attributes.get("fragrance_free") is True
+            and re.search(r"\bfragrance[ -]free\b", message, re.I) and not negated("fragrance free", message)):
+        resolved = [item for item in proposed.needs if vague_preference(item.value)]
+        proposed.needs = [item for item in proposed.needs if item not in resolved
+                          and normalized(item.value).replace("-", " ") != "fragrance free"]
+        proposed.need = "; ".join(item.value for item in proposed.needs)
+        if resolved:
+            proposed.sources["need"] = {"value": proposed.need, "items": [item.model_dump() for item in proposed.needs],
+                "evidence": message, "source": "explicit_user_definition"}
+            proposed.sources["resolved_preference"] = {"previous": [item.model_dump() for item in resolved],
+                "value": "fragrance_free", "evidence": message, "source": "explicit_user_definition"}
     state.tasks[state.tasks.index(task)] = proposed
     task = proposed
     if vague_preference(message) and not wants_recommendations(plan) and not any(change.field == "need" and change.value is None for change in plan.changes) and plan.intent not in {"details", "compare", "preferences", "smalltalk"}:
@@ -672,7 +740,7 @@ def _handle_single_turn(saved, plan, message, search):
     # Requirements not represented by this historical catalog never become implicit matches.
     unsupported_patterns = [FOREIGN_CURRENCY,
         r"\bin stock\b|deliver(?:ed|y)? by|arrive by|current price|live price",
-        r"\ballerg(?:y|ic)|pregnancy.safe|safe during pregnancy|treat (?:eczema|psoriasis)"]
+        r"\ballerg(?:y|ies|ic)|pregnancy.safe|safe during pregnancy|treat (?:eczema|psoriasis)"]
     for pattern in unsupported_patterns:
         match = re.search(pattern, message, re.I)
         if match and match.group() not in task.unsupported: task.unsupported.append(match.group())
@@ -698,7 +766,10 @@ def _handle_single_turn(saved, plan, message, search):
             return state, question(state, "Which product number(s) from the latest displayed list do you mean?", "reference")
         selected = [task.shown[position - 1] for position in positions]
         if plan.intent != "similar":
-            return state, {"action": plan.intent, "reply": card_reply(selected, compare=plan.intent == "compare"),
+            previous = ProductFilters.model_validate(task.last_search.get("filters_applied", {}))
+            changed = previous.model_dump(exclude={"exclude_product_ids"}) != task.filters.model_dump(exclude={"exclude_product_ids"})
+            note = "These are earlier displayed options, not confirmed to match your current requirements.\n" if changed else ""
+            return state, {"action": plan.intent, "reply": note + card_reply(selected, compare=plan.intent == "compare"),
                            "products": selected, "search": task.last_search}
         if len(selected) != 1: return state, question(state, "Which single product should I use for similar options?", "reference")
         query = selected[0]["title"]
@@ -746,7 +817,10 @@ def _handle_single_turn(saved, plan, message, search):
     if plan.intent == "similar": filters.exclude_product_ids = list(dict.fromkeys([*filters.exclude_product_ids, selected[0]["product_id"]]))
     if len(query.encode("utf-8")) > 1000:
         return state, question(state, "Your saved request is too long to search in one query. Which concerns should I remove or replace to focus this search?", "query_size")
-    request = ProductSearchRequest(query=query, concerns=task_concerns(task), filters=ProductFilters.model_validate(filters.model_dump()), limit=min(5, 100 - len(task.seen_ids)) if plan.intent == "more" else 5)
+    product_goal = task.query
+    if re.search(r"\bpockets?\b", task.need, re.I) and not negated("pockets", task.need):
+        product_goal += " with pockets"
+    request = ProductSearchRequest(query=query, product_goal=product_goal, concerns=task_concerns(task), filters=ProductFilters.model_validate(filters.model_dump()), limit=min(5, 100 - len(task.seen_ids)) if plan.intent == "more" else 5)
     response = search(request)
     products = explain_products(response["results"], task)
     new_ids = [row["product_id"] for row in products if row["product_id"] not in task.seen_ids]
@@ -758,7 +832,7 @@ def _handle_single_turn(saved, plan, message, search):
         task.shown = products
         task.last_search = search_metadata
     if not products:
-        reply = "I found no products matching all your saved requirements. I kept those requirements unchanged. You can explicitly change a budget, brand, or attribute to try again."
+        reply = f"I found no {task.query} listings matching all your saved requirements (budget maximum: {'$' + str(task.filters.max_price) + ' USD' if task.filters.max_price is not None else 'not set'}). I kept those requirements unchanged. You can explicitly change a budget, brand, or attribute to try again."
     else:
         reply = f"For your request: {task.query}" + (f"; concern: {task.need}" if task.need else "") + ".\n" + card_reply(products)
         reply += "\nThese are historical listing claims, not verified outcomes or current stock. Tell me what to change, ask for more options, or refer to a product number."
