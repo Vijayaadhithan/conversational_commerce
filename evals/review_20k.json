@@ -1,0 +1,20 @@
+{
+  "reviewer": "Codex AI review of captured synthetic conversations and listing excerpts",
+  "human_reviewed": false,
+  "scope": "Last nonempty recommendation list per conversation; conversation outcome considers every turn",
+  "rubric": {"0": "Wrong product type, poor fit to stated preference, or failed conversation", "1": "Partially relevant or unresolved requirement", "2": "Relevant product with listing support; successful conversation goal"},
+  "cases": [
+    {"id":"dry_skin_budget","outcome":1,"note":"Budget refinement and concern retention work, but a body/hand lotion is returned for a facial moisturizer request.","product_grades":{"amazon:B08YK8B89C":2,"amazon:B0C8WGJ5DR":2,"amazon:B07DSQ224G":2,"amazon:B07Q8BD495":0,"amazon:B07K6VJFQH":1}},
+    {"id":"typos_vague","outcome":1,"note":"Browsing works and vague wording is explicitly unverified, but a chemical peel is a poor conversational fit for the unresolved less-chemical preference. These grades do not assess safety or efficacy.","product_grades":{"amazon:B001R7BWJI":1,"amazon:B07SJTBLKR":1,"amazon:B0CGBT7DXR":0,"amazon:B0CBLH2MVS":1,"amazon:B0BF8TG94X":1}},
+    {"id":"hair","outcome":1,"note":"Budget and curly-hair concern persist. A crochet braid is returned among shampoos; exact-phrase evidence also misses some curly/wavy wording.","product_grades":{"amazon:B082ZPSCC2":2,"amazon:B07FGV8DZD":2,"amazon:B01BO8H7JS":1,"amazon:B000H6F52U":2,"amazon:B08HSQ17DM":0}},
+    {"id":"fragrance_free","outcome":1,"note":"Explicit fragrance-free filter is applied, but a clay mask is included among moisturizers. The allergy follow-up receives an unhelpful generic clarification rather than explaining the evidence limit.","product_grades":{"amazon:B0C8QJR7VM":2,"amazon:B09F46QTM9":2,"amazon:B0C8WGJ5DR":1,"amazon:B07SDQDMZ4":0,"amazon:B006WZQK60":1}},
+    {"id":"lipstick","outcome":0,"note":"Clear single-product request rejected by intent validation; no products.","product_grades":{}},
+    {"id":"razors","outcome":0,"note":"Clear single-product request rejected by intent validation; no products.","product_grades":{}},
+    {"id":"crossbody","outcome":0,"note":"Clear product request rejected; budget follow-up cannot recover product context.","product_grades":{}},
+    {"id":"shoes","outcome":0,"note":"Asks for recipient despite adult women already being stated; show options remains blocked.","product_grades":{}},
+    {"id":"shirt","outcome":0,"note":"Explicit shirt/recipient request rejected; comparison has no products to reference.","product_grades":{}},
+    {"id":"necklace","outcome":2,"note":"Relevant necklace options under budget. Some are sets or silver-tone rather than confirmed sterling silver; the original request did not specify sterling silver.","product_grades":{"amazon:B008OYIPAQ":2,"amazon:B00LIJI2RU":1,"amazon:B09YCTHZMX":2,"amazon:B01B0UE1TO":1,"amazon:B00RPPM00Q":2}},
+    {"id":"multiple","outcome":0,"note":"Two-product intent rejected for clause coverage; neither shopping task becomes usable.","product_grades":{}},
+    {"id":"empty","outcome":0,"note":"Asks for product type instead of explaining no matches for the explicit moisturizer request.","product_grades":{}}
+  ]
+}

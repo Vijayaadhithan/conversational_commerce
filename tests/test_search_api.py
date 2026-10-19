@@ -4,6 +4,22 @@ from fastapi.testclient import TestClient
 
 from app.catalog import CatalogError
 from app.main import Settings, create_app
+import pytest
+import httpx
+from app.product_search import ProductSearch
+
+
+@pytest.mark.parametrize("enabled", [False, True])
+def test_explicit_startup_warmup_is_reported_before_serving(tmp_path, monkeypatch, enabled):
+    calls = []
+    monkeypatch.setenv("SEARCH_WARMUP", "1" if enabled else "0")
+    monkeypatch.setattr(ProductSearch, "warmup", lambda self: calls.append(True) or {"status": "ready", "seconds": .1})
+    settings = replace(Settings(), database=str(tmp_path / "warm.sqlite3"))
+    transport = httpx.MockTransport(lambda request: httpx.Response(200, json={"models": [{"name": settings.model}]}))
+    with TestClient(create_app(settings, transport)) as client:
+        result = client.get("/health").json()
+        assert result["search_warmup"]["status"] == ("ready" if enabled else "disabled")
+        assert len(calls) == int(enabled)
 
 
 def test_search_passes_validated_filters_and_returns_service_results(tmp_path):

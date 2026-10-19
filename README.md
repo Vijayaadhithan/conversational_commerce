@@ -12,6 +12,9 @@ A local FastAPI backend for persistent conversations with Ollama, a local
 - Catalog inputs: All Beauty, Amazon Fashion, and Beauty & Personal Care.
 - [Listing enrichment and concern explanations](docs/catalog_enrichment.md): versioned
   metadata additions, individual concern evidence, and explicit unknown variant availability.
+- [Scaling, evaluation and performance](docs/scaling_and_performance.md): disk-backed
+  50,000-product sampling/enrichment, conversation evaluation, index benchmarks,
+  bounded Redis caching and optional model warm-up.
 
 `POST /products/search` retrieves products using keyword/vector search and the
 local reranker, with structured mandatory filters. Conversations created with

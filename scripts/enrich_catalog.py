@@ -4,6 +4,8 @@ import json
 import os
 from pathlib import Path
 import sys
+import resource
+import time
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from dotenv import load_dotenv
@@ -19,7 +21,12 @@ def main():
     parser.add_argument("--output-dir", default="data/enriched")
     args = parser.parse_args()
     try:
-        print(json.dumps(publish_enrichment(args.etl_output_dir, args.raw_dir, args.output_dir), indent=2))
+        started = time.perf_counter()
+        result = publish_enrichment(args.etl_output_dir, args.raw_dir, args.output_dir)
+        result.update(seconds=time.perf_counter() - started,
+            peak_rss_bytes=resource.getrusage(resource.RUSAGE_SELF).ru_maxrss * (1 if sys.platform == "darwin" else 1024))
+        Path(args.output_dir, "execution_report.json").write_text(json.dumps(result, indent=2))
+        print(json.dumps(result, indent=2))
         return 0
     except (CatalogError, OSError, ValueError, KeyError, TypeError) as exc:
         message = str(exc) if isinstance(exc, CatalogError) else "Invalid or unreadable enrichment input"

@@ -13,6 +13,8 @@ from app.reranker import LocalReranker
 from app.search_index import build_index
 from test_catalog import make_source, pg, product, scratch_database
 from test_search import FakeEmbedder
+from app.search_cache import SearchCache
+from test_search_cache import MemoryClient
 
 
 def response():
@@ -111,3 +113,34 @@ def test_real_sql_filters_still_bound_reranker_and_disabled_mode_skips_model(pg,
     assert service.search(request.model_copy(update={"rerank": False}))["reranking"]["reason"] == "disabled"
     empty = ProductSearchRequest(query="moisturizer", filters={"max_price": "0.00"})
     assert service.search(empty)["reranking"]["reason"] == "no_candidates"
+
+
+def test_cache_hits_do_not_retrieve_and_new_generation_or_filter_cannot_reuse_old_results(pg, scratch_database, tmp_path, monkeypatch):
+    rows = [product(), product("B000000002", "25.00")]
+    make_source(tmp_path, rows)
+    with validated_source(tmp_path) as source: import_catalog(pg, source)
+    pg.commit()
+    with connect_database(scratch_database, autocommit=True) as db:
+        build_index(db, FakeEmbedder(), lambda *a, **kw: None)
+    class ContextEmbedder(FakeEmbedder):
+        queries = 0
+        def __enter__(self): return self
+        def __exit__(self, *args): pass
+        def embed(self, texts):
+            type(self).queries += 1
+            return super().embed(texts)
+    monkeypatch.setattr(product_search, "OllamaEmbedder", lambda settings: ContextEmbedder())
+    service = ProductSearch(scratch_database, reranker=Ranker(), cache=SearchCache(client=MemoryClient()))
+    request = ProductSearchRequest(query="moisturizer", rerank=False)
+    first = service.search(request)
+    assert service.search(request)["cache"]["status"] == "hit" and ContextEmbedder.queries == 1
+    constrained = service.search(ProductSearchRequest(query="moisturizer", rerank=False, filters={"max_price": "20.00"}))
+    assert len(constrained["results"]) == 1 and ContextEmbedder.queries == 2
+    make_source(tmp_path, [rows[1]])
+    with validated_source(tmp_path) as source: import_catalog(pg, source)
+    pg.commit()
+    with connect_database(scratch_database, autocommit=True) as db:
+        build_index(db, FakeEmbedder(), lambda *a, **kw: None)
+    updated = service.search(request)
+    assert updated["build_id"] != first["build_id"] and updated["cache"]["status"] == "miss"
+    assert [row["product_id"] for row in updated["results"]] == [rows[1]["product_id"]]

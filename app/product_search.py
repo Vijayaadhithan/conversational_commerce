@@ -3,6 +3,7 @@
 from decimal import Decimal
 import os
 import re
+import time
 from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, StrictBool, StringConstraints, field_validator, model_validator
@@ -13,6 +14,7 @@ from app.embeddings import EmbeddingSettings, OllamaEmbedder, vector_literal
 from app.product_reranking import rerank_candidates as apply_reranking, rerank_document
 from app.reranker import LocalReranker
 from app.listing_explanations import concern_evidence
+from app.search_cache import SearchCache
 
 AttributeName = Literal["color", "size", "material", "department", "age_range", "skin_type",
     "hair_type", "ingredients", "active_ingredients", "benefits", "material_type_free",
@@ -210,26 +212,63 @@ def search_catalog(db, request, embedder, pinned=None, *, candidate_limit=None, 
 
 
 class ProductSearch:
-    def __init__(self, database_url=None, settings=None, reranker=None, rerank_candidates=None):
+    def __init__(self, database_url=None, settings=None, reranker=None, rerank_candidates=None, cache=None):
         self.database_url = database_url or os.getenv("CATALOG_DATABASE_URL", "postgresql:///conversational_commerce")
         self.settings = settings or EmbeddingSettings.from_env()
         self.reranker = reranker if reranker is not None else LocalReranker()
+        self.cache = cache if cache is not None else SearchCache.from_env()
         self.rerank_candidates = rerank_candidates if rerank_candidates is not None else int(os.getenv("PRODUCT_RERANK_CANDIDATES", "20"))
         if not 20 <= self.rerank_candidates <= 50:
             raise CatalogError("PRODUCT_RERANK_CANDIDATES must be between 20 and 50")
 
     def search(self, request):
+        started = time.perf_counter()
         texts = {} if request.rerank else None
         with connect_database(self.database_url) as db:
             db.execute("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY")
             pinned = pin_search_build(db)
             with OllamaEmbedder(self.settings) as embedder:
+                if self.settings.model != pinned["config"]["model"]:
+                    raise CatalogError("Configured embedding model differs from the search build; rebuild first")
+                embedder.verify_identity(pinned["config"]["model_digest"])
+                runtime = {"candidates": self.rerank_candidates,
+                    "rerank_batch": getattr(self.reranker, "batch_size", None),
+                    "rerank_length": getattr(self.reranker, "max_length", None),
+                    "rerank_device": os.getenv("RERANK_DEVICE", "auto"),
+                    "rerank_path": os.getenv("RERANK_MODEL_PATH", "default")}
+                key = self.cache.key(request, pinned, runtime)
+                cached, cache_status = self.cache.get(key)
+                if (cached is not None and cached.get("build_id") == pinned["build_id"] and cached.get("query") == request.query
+                        and cached.get("filters_applied") == request.filters.model_dump(mode="json", exclude_none=True)
+                        and len(cached["results"]) <= request.limit
+                        and all(all(name in row for name in ("product_id", "title", "price", "attributes", "category")) for row in cached["results"])):
+                    cached["cache"] = {"status": "hit"}
+                    cached["timings"] = {"total_seconds": time.perf_counter() - started}
+                    return cached
+                if cached is not None: cache_status = "invalid"
+                retrieved = time.perf_counter()
                 result = search_catalog(db, request, embedder, pinned,
                     candidate_limit=self.rerank_candidates if request.rerank else request.limit,
                     candidate_texts=texts)
         # All product data was hydrated from one pinned snapshot; release PostgreSQL
         # before potentially slow cold model loading/scoring.
+        retrieval_seconds = time.perf_counter() - retrieved
         if request.rerank:
-            return apply_reranking(result, texts, request, self.reranker)
-        result["reranking"] = {"requested": False, "applied": False, "reason": "disabled", "candidate_count": 0}
+            result = apply_reranking(result, texts, request, self.reranker)
+        else:
+            result["reranking"] = {"requested": False, "applied": False, "reason": "disabled", "candidate_count": 0}
+        self.cache.put(key, result)
+        result["cache"] = {"status": cache_status}
+        result["timings"] = {"retrieval_seconds": retrieval_seconds, "total_seconds": time.perf_counter() - started}
         return result
+
+    def warmup(self):
+        started = time.perf_counter()
+        with connect_database(self.database_url) as db, OllamaEmbedder(self.settings) as embedder:
+            pinned = pin_search_build(db)
+            if self.settings.model != pinned["config"]["model"]:
+                raise CatalogError("Configured embedding model differs from the search build; rebuild first")
+            embedder.verify_identity(pinned["config"]["model_digest"])
+            embedder.embed([QUERY_PREFIX + "moisturizer"])
+        self.reranker.rank("moisturizer", ["A moisturizer listing."], 1, preserve_query=True)
+        return {"status": "ready", "seconds": time.perf_counter() - started, "build_id": pinned["build_id"]}

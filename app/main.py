@@ -252,7 +252,14 @@ def create_app(settings=None, transport=None):
             transport=transport, trust_env=False,
         ) as client:
             app.state.ollama = client
-            yield
+            app.state.search_warmup = {"status": "disabled"}
+            if os.getenv("SEARCH_WARMUP", "0") == "1":
+                app.state.search_warmup = await asyncio.to_thread(app.state.product_search.warmup)
+            try:
+                yield
+            finally:
+                cache = getattr(app.state.product_search, "cache", None)
+                if cache is not None: cache.close()
 
     app = FastAPI(title="Local Conversational AI", version="1.0.0", lifespan=lifespan)
 
@@ -366,7 +373,7 @@ def create_app(settings=None, transport=None):
         available = any(m.get("name") == settings.model for m in result.get("models", []))
         if not available:
             raise HTTPException(503, f"Model not installed: ollama pull {settings.model}")
-        return {"status": "ok", "model": settings.model}
+        return {"status": "ok", "model": settings.model, "search_warmup": app.state.search_warmup}
 
     @app.post("/products/search")
     async def products_search(body: ProductSearchRequest):

@@ -1,0 +1,114 @@
+{
+  "reviewer": "Codex AI review of captured synthetic conversations and listing excerpts",
+  "human_reviewed": false,
+  "scope": "Last nonempty recommendation list per conversation; conversation outcome considers every turn",
+  "rubric": {
+    "0": "Wrong product type, poor fit to stated preference, or failed conversation",
+    "1": "Partially relevant or unresolved requirement",
+    "2": "Relevant product with listing support; successful conversation goal"
+  },
+  "cases": [
+    {
+      "id": "dry_skin_budget",
+      "outcome": 2,
+      "note": "Facial moisturizer options and the budget refinement match the request. One initial explanation misses dry-skin wording in a comma-separated title; the final list has supporting evidence.",
+      "product_grades": {
+        "amazon:B089643NG7": 2,
+        "amazon:B000052YN6": 2,
+        "amazon:B085N7T7MY": 2,
+        "amazon:B08YK8B89C": 2,
+        "amazon:B07DSQ224G": 2
+      }
+    },
+    {
+      "id": "typos_vague",
+      "outcome": 1,
+      "note": "Natural recommendation wording produces products and preserves both concerns. Less-chemical remains undefined for every product, so the full request is unresolved. Grades assess listing fit, not efficacy or safety.",
+      "product_grades": {
+        "amazon:B001DNHWCM": 1,
+        "amazon:B000K19TH4": 1,
+        "amazon:B0CBLH2MVS": 1,
+        "amazon:B01MECULV1": 1,
+        "amazon:B085HGV5KX": 1
+      }
+    },
+    {
+      "id": "hair",
+      "outcome": 2,
+      "note": "Both turns return curly-hair shampoos within budget. The explanation misses Curly And Wavy wording for Fanola despite the title supporting the requirement.",
+      "product_grades": {
+        "amazon:B082ZPSCC2": 2,
+        "amazon:B0029GQYAI": 2,
+        "amazon:B07GFRYCQ2": 2,
+        "amazon:B09BGJP77P": 2,
+        "amazon:B09HN7W85H": 2
+      }
+    },
+    {
+      "id": "fragrance_free",
+      "outcome": 1,
+      "note": "All five moisturizers have fragrance-free and sensitive-skin listing support. The allergy question still receives generic clarification rather than an explanation of evidence limits.",
+      "product_grades": {
+        "amazon:B005IHVOVO": 2,
+        "amazon:B017JA4M3E": 2,
+        "amazon:B000052YN6": 2,
+        "amazon:B0C8QJR7VM": 2,
+        "amazon:B01M68AVUB": 2
+      }
+    },
+    {
+      "id": "lipstick",
+      "outcome": 0,
+      "note": "Clear single-product request rejected by intent validation; no products.",
+      "product_grades": {}
+    },
+    {
+      "id": "razors",
+      "outcome": 0,
+      "note": "Clear single-product request rejected by intent validation; no products.",
+      "product_grades": {}
+    },
+    {
+      "id": "crossbody",
+      "outcome": 0,
+      "note": "Clear product request rejected; budget follow-up cannot recover product context.",
+      "product_grades": {}
+    },
+    {
+      "id": "shoes",
+      "outcome": 0,
+      "note": "Asks for recipient despite adult women already being stated; show options remains blocked.",
+      "product_grades": {}
+    },
+    {
+      "id": "shirt",
+      "outcome": 0,
+      "note": "Explicit shirt/recipient request rejected; comparison has no products to reference.",
+      "product_grades": {}
+    },
+    {
+      "id": "necklace",
+      "outcome": 2,
+      "note": "Relevant silver necklace choices under budget. Two bundled sets and one personalized item are partial fits because they add purchase requirements not requested.",
+      "product_grades": {
+        "amazon:B008OYIPAQ": 2,
+        "amazon:B00LP3UHN6": 2,
+        "amazon:B01AMFGHM2": 1,
+        "amazon:B00H7L7EWW": 1,
+        "amazon:B07BW9FS1Y": 1
+      }
+    },
+    {
+      "id": "multiple",
+      "outcome": 0,
+      "note": "Two-product intent rejected for clause coverage; neither shopping task becomes usable.",
+      "product_grades": {}
+    },
+    {
+      "id": "empty",
+      "outcome": 0,
+      "note": "Asks for product type instead of explaining no matches for the explicit moisturizer request.",
+      "product_grades": {}
+    }
+  ]
+}

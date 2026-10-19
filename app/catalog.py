@@ -10,6 +10,8 @@ import hashlib
 import json
 from pathlib import Path
 import re
+import sqlite3
+from tempfile import TemporaryDirectory
 
 import jsonschema
 import psycopg
@@ -182,18 +184,28 @@ def validated_source(output_dir, manifest_path=None):
     subset_path = (path.parent / "subset.jsonl").resolve()
     if not subset_path.is_relative_to(path.parent):
         raise CatalogError("Subset path escapes the run directory")
-    with subset_path.open("rb") as stream:
-        digest, size, ids = hashlib.sha256(), 0, set()
-        for ordinal, line, record in _read_rows(stream):
-            _validate_record(record, validator, sources)
-            if record["product_id"] in ids:
-                raise CatalogError("Duplicate subset product ID")
-            ids.add(record["product_id"])
-            digest.update(line)
-            size += len(line)
-        if (len(ids), size, digest.hexdigest()) != (expected_count, expected_bytes, expected["sha256"]):
+    with subset_path.open("rb") as stream, TemporaryDirectory(prefix="catalog-preflight-") as tmp:
+        digest, size, count = hashlib.sha256(), 0, 0
+        # Exact uniqueness checking without an O(catalog size) Python ID set.
+        ids = sqlite3.connect(Path(tmp) / "ids.sqlite3")
+        try:
+            ids.execute("PRAGMA cache_size=-2048")
+            ids.execute("CREATE TABLE ids (id TEXT PRIMARY KEY) WITHOUT ROWID")
+            for ordinal, line, record in _read_rows(stream):
+                _validate_record(record, validator, sources)
+                try:
+                    ids.execute("INSERT INTO ids VALUES (?)", (record["product_id"],))
+                except sqlite3.IntegrityError as exc:
+                    raise CatalogError("Duplicate subset product ID") from exc
+                digest.update(line)
+                size += len(line)
+                count += 1
+                if count % 1000 == 0: ids.commit()
+        finally:
+            ids.close()
+        if (count, size, digest.hexdigest()) != (expected_count, expected_bytes, expected["sha256"]):
             raise CatalogError("Subset count, byte size, or SHA-256 differs from manifest")
-        yield CatalogSource(manifest, hashlib.sha256(manifest_bytes).hexdigest(), stream, len(ids))
+        yield CatalogSource(manifest, hashlib.sha256(manifest_bytes).hexdigest(), stream, count)
 
 
 def connect_database(database_url, **kwargs):
