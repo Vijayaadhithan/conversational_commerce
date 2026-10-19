@@ -158,10 +158,12 @@ def test_untrusted_extraction_cannot_invent_or_remove_preferences(tmp_path, bad_
     with TestClient(app) as client:
         search = app.state.product_search = Search()
         session = new(client)
-        assert send(client, session, message).status_code == 502
+        result = commerce(client, session, message)
+        assert result["action"] == "clarify" and result["validation_recovered"]
         assert not search.calls
-        assert client.get(f"/conversations/{session}/messages").json()["messages"] == []
-        assert client.get(f"/conversations/{session}/preferences").json()["state_version"] == 0
+        assert len(client.get(f"/conversations/{session}/messages").json()["messages"]) == 2
+        saved = client.get(f"/conversations/{session}/preferences").json()
+        assert saved["state_version"] == 1 and saved["preferences"]["tasks"] == []
 
 
 @pytest.mark.parametrize("output", ['not json', '{"intent":"search","intent":"reset","evidence":"moisturizer"}', '{"intent":"search","evidence":"moisturizer","unknown":true}'])
@@ -333,8 +335,11 @@ def test_negation_and_sizing_system_cannot_be_lost(tmp_path, message, field, val
         state = ShoppingState(tasks=[ShoppingTask(id=1, query="moisturizer", filters=ProductFilters(max_price="20", brand="Acme",
             attributes={"fragrance_free": True, "color": "red", "size": "8"}))], active_task_id=1)
         app.state.store.commit_commerce_turn(session, "initial", state, {"reply": "saved"}, 0)
-        assert send(client, session, message).status_code == 502
-        assert client.get(f"/conversations/{session}/preferences").json()["state_version"] == 1
+        result = commerce(client, session, message)
+        assert result["action"] == "clarify" and result["validation_recovered"]
+        saved = client.get(f"/conversations/{session}/preferences").json()
+        assert saved["state_version"] == 2
+        assert saved["preferences"]["tasks"][0]["filters"] == state.active().filters.model_dump(mode="json")
 
 
 def test_partial_reset_instruction_cannot_erase_all_requirements(tmp_path):
@@ -342,7 +347,7 @@ def test_partial_reset_instruction_cannot_erase_all_requirements(tmp_path):
     _, app, _ = harness(tmp_path, {message: plan("reset", message)})
     with TestClient(app) as client:
         session = new(client)
-        assert send(client, session, message).status_code == 502
+        assert commerce(client, session, message)["validation_recovered"]
 
 
 def test_inherited_restatement_keeps_original_source_and_is_not_a_new_change():
@@ -413,7 +418,7 @@ def test_reported_multi_concern_followup_accumulates_and_replays(tmp_path):
 def test_skin_concern_discovery_does_not_require_named_product_type(tmp_path, answer):
     first = "lighten my face and reduce pimble"
     plans = {first: plan("clarify", first, change("need", "lighten my face", "lighten my face"),
-                         change("need", "reduce pimble", "reduce pimble")), answer: plan("refine", answer)}
+                         change("need", "reduce pimble", "reduce pimble")), answer: plan("refine", answer, recommendation_requested=True)}
     _, app, _ = harness(tmp_path, plans)
     with TestClient(app) as client:
         search = app.state.product_search = Search()
@@ -455,16 +460,18 @@ def test_multi_need_validation_still_rejects_invented_evidence_atomically(tmp_pa
         change("need", "cure eczema", "cure eczema"))})
     with TestClient(app) as client:
         session = new(client)
-        assert send(client, session, message).status_code == 502
+        assert commerce(client, session, message)["validation_recovered"]
         assert client.get(f"/conversations/{session}/preferences").json()["preferences"]["tasks"] == []
-        assert client.get(f"/conversations/{session}/messages").json()["messages"] == []
+        assert len(client.get(f"/conversations/{session}/messages").json()["messages"]) == 2
 
 
-def test_multiple_different_products_still_require_selection():
+def test_multiple_different_products_create_separate_groups():
     message = "I need shampoo and a moisturizer"
     proposal = IntentPlan.model_validate(plan("clarify", message, question_kind="multiple"))
     state, result = handle_turn({}, proposal, message, Search().search)
-    assert result["action"] == "clarify" and state.pending_kind == "multiple"
+    assert result["action"] == "multi" and state.pending_kind == "task_selection"
+    assert [task.query for task in state.tasks] == ["shampoo", "moisturizer"]
+    assert [group["task_id"] for group in result["groups"]] == [1, 2]
 
 
 def test_removing_one_concern_does_not_clear_the_others():
@@ -482,7 +489,8 @@ def test_conflicting_scalar_filters_are_still_rejected(tmp_path):
     _, app, _ = harness(tmp_path, {message: plan("refine", message, change("max_price", "20", "under $20"), change("max_price", "30", "under $30"))})
     with TestClient(app) as client:
         session = new(client)
-        assert send(client, session, message).status_code == 502
+        assert commerce(client, session, message)["validation_recovered"]
+        assert client.get(f"/conversations/{session}/preferences").json()["preferences"]["tasks"] == []
 
 
 def test_generic_corrected_product_word_does_not_become_a_concrete_goal():

@@ -21,7 +21,7 @@ from pydantic import BaseModel, Field, ValidationError, field_validator
 
 from app.reranker import LocalReranker
 from app.catalog import CatalogError, strict_json
-from app.commerce import IntentError, direct_plan, handle_turn
+from app.commerce import IntentError, direct_plan, handle_turn, intent_clarification
 from app.commerce_models import IntentPlan, PLANNER_PROMPT, ShoppingState, planner_context, planner_examples, preference_view
 from app.product_search import ProductSearch, ProductSearchRequest
 
@@ -293,7 +293,7 @@ def create_app(settings=None, transport=None):
         deterministic = direct_plan(user)
         if deterministic:
             return deterministic, {}
-        messages = [{"role": "system", "content": PLANNER_PROMPT}, *planner_examples(),
+        messages = [{"role": "system", "content": PLANNER_PROMPT},
                     {"role": "user", "content": planner_context(state, user)}]
         if repair_reason:
             messages.insert(-1, {"role": "system", "content":
@@ -301,11 +301,21 @@ def create_app(settings=None, transport=None):
                 ". Keep the user's spelling. Use only literal quotes from this message. Several needs can coexist. "
                 "A facial concern is need, not a named product query. Generic 'product' is not a product type. "
                 "Omit inferred product types, unstated attributes, and unchanged preferences. "
+                "A request for suggestions from saved conditions has requests=[]; never put your own product suggestions in requests. "
                 "Remove saved constraints only when the latest message explicitly asks for it."})
         schema = IntentPlan.model_json_schema()
-        schema["required"] = ["intent", "evidence", "changes"]
+        schema["required"] = ["intent", "evidence", "changes", "recommendation_requested"]
+        schema["properties"]["recommendation_requested"] = {"type": "boolean",
+            "description": "Does the user want product recommendations now, in this conversation context?"}
         if byte_size(messages) + byte_size(schema) > settings.prompt_budget:
             raise HTTPException(413, "Shopping state and message exceed the model context; use a new conversation or increase OLLAMA_CONTEXT_SIZE")
+        # Examples are optional guidance. Reserve the full authoritative state,
+        # user message, schema and repair feedback before adding any examples.
+        examples = planner_examples()
+        for index in range(len(examples) - 2, -1, -2):
+            proposed = messages[:-1] + examples[index:index + 2] + messages[-1:]
+            if byte_size(proposed) + byte_size(schema) <= settings.prompt_budget:
+                messages = proposed
         result = await ollama_request("POST", "/api/chat", json={
             "model": settings.model, "messages": messages, "format": schema, "stream": False,
             "keep_alive": settings.keep_alive,
@@ -423,7 +433,11 @@ def create_app(settings=None, transport=None):
                         repair_reason = str(exc) if isinstance(exc, IntentError) else "Preference schema or price validation failed"
                         logger.warning("Shopping intent rejected (attempt %s): %s", attempt + 1, repair_reason)
                         if attempt + 1 < attempts: continue
-                        raise HTTPException(502, "Local model proposed an unsupported preference change; turn was not saved") from exc
+                        next_state, commerce = intent_clarification(state.model_dump(mode="json"), body.message)
+                        state = next_state
+                        # The rejected proposal is not a validated intent or a state patch.
+                        plan = IntentPlan(intent="clarify", evidence=body.message[:500], question_kind="general")
+                        break
                     except CatalogError as exc:
                         raise HTTPException(503, str(exc)) from exc
                     except (psycopg.Error, OSError) as exc:
