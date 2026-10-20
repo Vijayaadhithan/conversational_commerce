@@ -28,7 +28,7 @@ return 1
 def code_signature():
     digest = hashlib.sha256()
     root = Path(__file__).parent
-    for name in ("product_search.py", "product_reranking.py", "listing_explanations.py", "search_cache.py", "reranker.py"):
+    for name in ("product_search.py", "product_reranking.py", "listing_explanations.py", "listing_quality.py", "search_cache.py", "reranker.py"):
         digest.update((root / name).read_bytes())
     return digest.hexdigest()
 

@@ -1,0 +1,61 @@
+[
+  {
+    "id": "typos_vague",
+    "goal": "Browse skin care despite typos; do not invent less-chemical attributes",
+    "turns": [
+      "i need a prduct that lightens my face",
+      "something that is kess chemincal",
+      "give me soem products with the above conditions"
+    ]
+  },
+  {
+    "id": "shirt",
+    "goal": "Adult men's cotton shirts with pockets",
+    "turns": [
+      "Recommend a cotton shirt with pockets for adult men under $30",
+      "Compare the first two"
+    ]
+  },
+  {
+    "id": "necklace",
+    "goal": "Silver necklace rather than unrelated jewelry",
+    "turns": [
+      "Suggest a silver necklace under $50"
+    ]
+  },
+  {
+    "id": "multiple",
+    "goal": "Two product tasks with separate budgets and no lost requirements",
+    "turns": [
+      "Recommend shampoo under $15 and moisturizer under $25",
+      "Back to the shampoo",
+      "Under $10 instead"
+    ]
+  },
+  {
+    "id": "beauty_rephrase",
+    "goal": "Unseen phrasing, budget correction, and unseen options",
+    "turns": [
+      "Could you find me a red lipstick below 22 dollars please?",
+      "Make that under $18",
+      "Any more choices?"
+    ]
+  },
+  {
+    "id": "bag_typo",
+    "goal": "Typos around a clear handbag request and budget-only update",
+    "turns": [
+      "pls recomend a handbag under $35",
+      "under $20 instead"
+    ]
+  },
+  {
+    "id": "vague_resolved",
+    "goal": "Vague preference clarification without inventing attributes, then an explicit filter",
+    "turns": [
+      "I want something to brighten my face",
+      "something less chemical please",
+      "I mean fragrance-free, show me products"
+    ]
+  }
+]

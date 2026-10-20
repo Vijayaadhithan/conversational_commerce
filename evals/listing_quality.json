@@ -1,0 +1,192 @@
+[
+  {
+    "id": "typos_vague",
+    "request": {
+      "query": "skin care lightens my face; kess chemincal",
+      "product_goal": "skin care",
+      "concerns": [
+        "lightens my face",
+        "kess chemincal"
+      ],
+      "filters": {
+        "domain": "beauty",
+        "family": "skin_care",
+        "attributes": {},
+        "exclude_product_ids": [],
+        "exclude_brands": []
+      }
+    },
+    "previous_product_ids": [
+      "amazon:B001DNHWCM",
+      "amazon:B000K19TH4",
+      "amazon:B0CGBT7DXR",
+      "amazon:B01MECULV1",
+      "amazon:B0CGVPLYTW"
+    ]
+  },
+  {
+    "id": "shoes",
+    "request": {
+      "query": "running shoes adult women",
+      "product_goal": "running shoes",
+      "concerns": [
+        "adult women"
+      ],
+      "filters": {
+        "domain": "fashion",
+        "family": "footwear",
+        "max_price": "74.99",
+        "attributes": {
+          "department": "womens"
+        },
+        "exclude_product_ids": [],
+        "exclude_brands": []
+      }
+    },
+    "previous_product_ids": []
+  },
+  {
+    "id": "shirt",
+    "request": {
+      "query": "cotton shirt with pockets",
+      "product_goal": "cotton shirt with pockets",
+      "concerns": [
+        "with pockets"
+      ],
+      "filters": {
+        "domain": "fashion",
+        "family": "apparel",
+        "max_price": "29.99",
+        "attributes": {
+          "department": "mens"
+        },
+        "exclude_product_ids": [],
+        "exclude_brands": []
+      }
+    },
+    "previous_product_ids": [
+      "amazon:B09CPLNXK5",
+      "amazon:B00O972MCO",
+      "amazon:B07RBWNCR1",
+      "amazon:B0876FSZFV",
+      "amazon:B0771MKJCM"
+    ]
+  },
+  {
+    "id": "necklace",
+    "request": {
+      "query": "silver necklace",
+      "product_goal": "silver necklace",
+      "concerns": [],
+      "filters": {
+        "domain": "fashion",
+        "family": "jewelry",
+        "max_price": "49.99",
+        "attributes": {},
+        "exclude_product_ids": [],
+        "exclude_brands": []
+      }
+    },
+    "previous_product_ids": [
+      "amazon:B008OYIPAQ",
+      "amazon:B00LP3UHN6",
+      "amazon:B01AMFGHM2",
+      "amazon:B00H7L7EWW",
+      "amazon:B07BW9FS1Y"
+    ]
+  },
+  {
+    "id": "beauty_rephrase__run1",
+    "request": {
+      "query": "red lipstick",
+      "product_goal": "red lipstick",
+      "concerns": [],
+      "filters": {
+        "domain": "beauty",
+        "family": "makeup",
+        "max_price": "17.99",
+        "attributes": {},
+        "exclude_product_ids": [
+          "amazon:B08V7C8NLM",
+          "amazon:B007MJKAUC",
+          "amazon:B072JG9WW8",
+          "amazon:B09C2HSD6L",
+          "amazon:B0BNM1B63J"
+        ],
+        "exclude_brands": []
+      }
+    },
+    "previous_product_ids": [
+      "amazon:B099MDZCJF",
+      "amazon:B09MH986YJ",
+      "amazon:B09MCTYB4X",
+      "amazon:B09C26W6MB",
+      "amazon:B07NJ829RL"
+    ]
+  },
+  {
+    "id": "bag_typo__run1",
+    "request": {
+      "query": "handbag",
+      "product_goal": "handbag",
+      "concerns": [],
+      "filters": {
+        "domain": "fashion",
+        "family": "bags",
+        "max_price": "19.99",
+        "attributes": {},
+        "exclude_product_ids": [],
+        "exclude_brands": []
+      }
+    },
+    "previous_product_ids": [
+      "amazon:B018VVMRXC",
+      "amazon:B07L5DG7S2",
+      "amazon:B014IRN1Y2",
+      "amazon:B01D75488Y",
+      "amazon:B0053H9AV0"
+    ]
+  },
+  {
+    "id": "vague_resolved__run1",
+    "request": {
+      "query": "skin care something to brighten my face",
+      "product_goal": "skin care",
+      "concerns": [
+        "something to brighten my face"
+      ],
+      "filters": {
+        "domain": "beauty",
+        "family": "skin_care",
+        "attributes": {
+          "fragrance_free": true
+        },
+        "exclude_product_ids": [],
+        "exclude_brands": []
+      }
+    },
+    "previous_product_ids": [
+      "amazon:B09DHZ86T3",
+      "amazon:B093H5LW2C",
+      "amazon:B0BNK4RVL5",
+      "amazon:B09JL9RHCT",
+      "amazon:B01GJOPTZ6"
+    ]
+  },
+  {
+    "id": "women_running_shoes_recovered_metadata",
+    "request": {
+      "query": "running shoes for women",
+      "product_goal": "running shoes",
+      "filters": {
+        "domain": "fashion",
+        "family": "footwear",
+        "max_price": "149.99",
+        "attributes": {
+          "department": "womens"
+        }
+      }
+    },
+    "note": "Additional catalog-coverage check at a higher budget; not a historical comparison."
+  }
+]

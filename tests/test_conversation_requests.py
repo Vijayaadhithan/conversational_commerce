@@ -472,3 +472,9 @@ def test_explicit_budget_commands_refresh_results_after_no_match(message):
 def test_budget_discussion_or_deferral_still_goes_through_semantic_planner(message):
     from app.commerce import direct_plan
     assert direct_plan(message) is None
+
+
+@pytest.mark.parametrize("message", ["More expensive products", "No more choices", "Show me more details", "More options but don't show products yet"])
+def test_more_options_router_does_not_capture_other_requests(message):
+    from app.commerce import direct_plan
+    assert direct_plan(message) is None

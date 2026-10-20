@@ -132,7 +132,7 @@ def direct_plan(message):
     if re.fullmatch(r"(?:please )?(?:start over|reset|forget my preferences|new search)", text): action = "reset"
     elif re.fullmatch(r"(?:please )?(?:back|return) to (?:the )?[\w -]+", text) and product_mentions(text): action = "switch_task"
     elif text in {"show options", "show me options"}: action = "search"
-    elif re.fullmatch(r"(?:please )?(?:show (?:me )?)?(?:more|more options|other options|show alternatives)", text): action = "more"
+    elif re.fullmatch(r"(?:please )?(?:(?:show|give)(?: me)? |any )?(?:more(?: (?:options|choices|products))?|other (?:options|choices)|(?:show )?alternatives)(?: please)?", text): action = "more"
     elif re.fullmatch(r"(?:please )?(?:show (?:me )?)?(?:cheaper|cheaper options|less expensive options)", text): action = "cheaper"
     elif re.fullmatch(r"(?:please )?(?:show (?:me )?)?(?:another brand|a different brand|different brands)", text): action = "different_brand"
     elif re.fullmatch(r"(?:please )?(?:make|set|change|raise|lower) (?:it|that|(?:the |my )?budget)(?: to)? \$?\d+(?:\.\d{1,2})?(?: (?:usd|dollars))?(?: please)?", number_text(text)):
@@ -446,11 +446,15 @@ def explain_products(rows, task):
         if evidence is None or [item["concern"] for item in evidence] != concerns:
             evidence = concern_evidence(row, concerns)
         reasons.extend(concern_reasons(evidence))
+        for caution in row.get("listing_quality", {}).get("cautions", []):
+            sources = [caution["evidence"], *caution.get("other_evidence", [])]
+            quotes = " ".join(f"“{source['text']}” ({source['field']})." for source in sources)
+            reasons.append(caution["text"] + " Listing: " + quotes)
         if not concerns:
             snippets = row.get("listing_evidence", [])
             if snippets:
-                snippet = snippets[0]
-                reasons.append(f"Related listing text: “{snippet['text']}” ({snippet['field']}).")
+                for snippet in snippets[:2]:
+                    reasons.append(f"Related listing text: “{snippet['text']}” ({snippet['field']}).")
             else:
                 reasons.append("Retrieved for similarity to your product request; the listing does not provide an exact matching excerpt.")
         row.update(display_position=position, why_recommended=reasons, concern_evidence=evidence)

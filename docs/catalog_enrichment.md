@@ -70,3 +70,55 @@ word overlap as proof of suitability. `why_recommended` presents separate concer
 with quotes and source paths, alongside budget and mandatory-attribute explanations.
 The matching is conservative and can miss paraphrases; human-reviewed recommendation
 quality evaluation is still a separate next step.
+
+## Recommendation-quality revision
+
+The second enrichment version groups title aliases for the same product (for
+example, face cream/moisturizer), recognizes jewelry and running-shoe titles, and
+keeps named accessories distinct. It recovers missing title recipient claims,
+coordinated skin/hair types, concise fabric compositions, and labeled ingredient
+lists, including headings separated from their contents. Marketing headings and
+unlabeled ingredient mentions do not become ingredient lists. Multiple distinct
+product types remain unknown rather than being reduced to a single product.
+
+Disagreeing fabric percentages produce the derived warning
+`conflicting_material_composition`. They do not choose an inferred composition. Explicit
+upstream claims remain preserved, but a material filter excludes listings with this
+warning. The original ETL `conflicting_fields` import gate remains unchanged.
+
+Concern evidence now also has `support`: `positive`, `negated`, `mixed`, `weak`, or
+`unknown`. This describes the wording, not clinical effectiveness or verified
+product suitability. Contradictory excerpts and keyword-heavy text are explained
+explicitly. Brightening matching includes brightness, radiance and even-tone wording;
+there is still no inference from ingredients to outcomes.
+
+After candidate retrieval and optional model reranking, stable evidence ordering
+prefers positive concern evidence and fewer unrequested bundle, personalization,
+child-sizing or peel-format cautions. Partial matches are retained with visible
+cautions, rather than silently turning soft concerns into filters. Ordering happens
+before the requested result limit. The model's original rank and score remain in
+`ranking`; `evidence_rank` records the final order. This works with `rerank=false`
+as well. Requests with neither `product_goal` nor `concerns` retain their previous
+ranking behavior.
+
+For an explicit single color in a recognized product goal, identity checks require
+that color in the title or selected color/material metadata. A different selected
+color cannot satisfy it. Generic prose advertising other shades is insufficient;
+opaque shade names without supporting color wording may therefore lose recall.
+No available-size or color-option list is treated as a selected variant.
+
+Rebuild and publish the existing 50,000 products using the staged workflow:
+
+```sh
+.venv/bin/python scripts/enrich_catalog.py --etl-output-dir data/scaled --output-dir data/enriched_quality
+.venv/bin/python scripts/import_catalog.py --etl-output-dir data/enriched_quality --stage
+.venv/bin/python scripts/build_search_index.py --catalog-import-id IMPORT_ID
+.venv/bin/python scripts/verify_catalog.py --etl-output-dir data/enriched_quality
+.venv/bin/python scripts/verify_search_index.py
+.venv/bin/python scripts/evaluate_listing_quality.py
+```
+
+The replay cases in `evals/listing_quality.json` preserve the requests and prior IDs
+from the conversation repair report, including more-options exclusions. The script
+verifies returned IDs against SQL constraints and quotes against source fields.
+This is regression evidence, not an independent human relevance evaluation.

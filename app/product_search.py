@@ -14,6 +14,7 @@ from app.embeddings import EmbeddingSettings, OllamaEmbedder, vector_literal
 from app.product_reranking import rerank_candidates as apply_reranking, rerank_document
 from app.reranker import LocalReranker
 from app.listing_explanations import concern_evidence
+from app.listing_quality import listing_quality, prioritize_listing_evidence
 from app.search_cache import SearchCache
 
 AttributeName = Literal["color", "size", "material", "department", "age_range", "skin_type",
@@ -97,6 +98,9 @@ def filter_sql(filters):
             clauses.append(f"p.historical_price {op} %s")
             values.append(value)
     for key, value in sorted(filters.attributes.items()):
+        if key == "material":
+            clauses.append("NOT coalesce((p.document #> '{quality,warnings}') ? %s, false)")
+            values.append("conflicting_material_composition")
         if isinstance(value, bool):
             clauses.append("p.attributes #> ARRAY[%s,'value'] = %s::jsonb")
             values.extend((key, "true" if value else "false"))
@@ -132,6 +136,9 @@ def product_goal_sql(goal):
         (r"\bcleanser\b", r"\mcleansers?\M"),
         (r"\bshirts?\b", r"\mshirts?\M"),
         (r"\b(?:shoes?|sneakers?)\b", r"\m(shoes?|sneakers?)\M"),
+        (r"\bnecklaces?\b", r"\mnecklaces?\M"),
+        (r"\bserum\b", r"\mserums?\M"),
+        (r"\bsunscreen\b", r"\msunscreens?\M"),
     ]
     identity = "concat_ws(' ', p.document->>'title', p.attributes #>> '{product_type,value}')"
     clauses, values = [], []
@@ -157,7 +164,7 @@ def product_goal_sql(goal):
         values.append(r"\m(masks?|peels?|cleansers?)\M")
     if re.search(r"\b(?:shoes?|sneakers?)\b", goal, re.I):
         clauses.append("(p.document->>'title') !~* %s")
-        values.append(r"\m(charms?|keychain|key chain|zipper pull|cleaning|cleaner|stain remover|insoles?|laces?)\M")
+        values.append(r"\m(charms?|keychain|key chain|zipper pull|cleaning|cleaner|stain remover|insoles?|laces?|socks?|shorts?|pants?|leggings?)\M")
         if re.search(r"\brunning\b", goal, re.I):
             clauses.append("(p.document->>'title') ~* %s")
             values.append(r"\mrunning\M")
@@ -167,6 +174,19 @@ def product_goal_sql(goal):
     if re.search(r"\bcrossbody\b", goal, re.I):
         clauses.append("(p.document->>'title') ~* %s")
         values.append(r"\mcross[ -]?body\M")
+    if re.search(r"\bnecklaces?\b", goal, re.I) and not re.search(r"\b(?:holder|organizer|display|extender|clasp)\b", goal, re.I):
+        clauses.append("(p.document->>'title') !~* %s")
+        values.append(r"\m(holders?|organizers?|display|extenders?|clasps?|jewelry box)\M")
+    # A selected shade or title must support an explicitly named color. Generic
+    # marketing about other shades elsewhere in a listing is not selected-variant evidence.
+    colors = r"red|pink|blue|black|white|green|purple|orange|yellow|brown|silver|gold"
+    requested_colors = set(re.findall(r"\b(?:" + colors + r")\b", goal.lower()))
+    if clauses and len(requested_colors) == 1:
+        color = requested_colors.pop()
+        clauses.append("concat_ws(' ', p.document->>'title', p.attributes #>> '{color,value}', p.attributes #>> '{material,value}') ~* %s")
+        values.append(r"\m" + color + r"\M")
+        clauses.append("(coalesce(p.attributes #>> '{color,value}', '') !~* %s OR (p.attributes #>> '{color,value}') ~* %s)")
+        values.extend([r"\m(" + colors + r")\M", r"\m" + color + r"\M"])
     if re.search(r"\bcotton\b", goal, re.I):
         clauses.append(full_text + " ~* %s AND " + full_text + " !~* %s")
         values.extend([r"\mcotton\M", r"\m(no|without|not) cotton\M"])
@@ -208,6 +228,10 @@ def listing_evidence(record, query):
     terms = set(re.findall(r"[^\W_]{3,}", query.lower())) - {"the", "for", "with", "and", "that", "under", "want"}
     evidence = []
     fields = [("/title", record["title"])]
+    for name in ("color", "material", "product_type", "department"):
+        claim = record.get("attributes", {}).get(name)
+        if claim and isinstance(claim["value"], str):
+            fields.append((claim["field"], claim["value"]))
     for name in ("features", "description"):
         fields.extend(zip(record["content_source_fields"][name], record["content"][name], strict=True))
     for field, text in fields:
@@ -267,6 +291,7 @@ def search_catalog(db, request, embedder, pinned=None, *, candidate_limit=None, 
                               (pinned["import_id"], [item[0] for item in fused])).fetchall())
     for product_id, ranking in fused:
         record = records[product_id]
+        evidence = concern_evidence(record, request.concerns)
         if candidate_texts is not None:
             candidate_texts[product_id] = rerank_document(record)
         base["results"].append({"product_id": product_id, "title": record["title"],
@@ -274,7 +299,7 @@ def search_catalog(db, request, embedder, pinned=None, *, candidate_limit=None, 
             "attributes": record["attributes"], "availability": record["availability"],
             "image_urls": record["image_urls"][:3], "selected_observation": record["selected_observation"],
             "ranking": ranking, "listing_evidence": listing_evidence(record, request.query),
-            "concern_evidence": concern_evidence(record, request.concerns),
+            "concern_evidence": evidence, "listing_quality": listing_quality(record, request, evidence),
             "variant_metadata": {
                 "selected": {name: record["attributes"][name] for name in ("size", "color", "scent", "style", "volume") if record["attributes"].get(name)},
                 "listed_options": {name: record["attributes"][name] for name in ("size_options", "color_options") if record["attributes"].get(name)},
@@ -319,15 +344,16 @@ class ProductSearch:
                 if cached is not None: cache_status = "invalid"
                 retrieved = time.perf_counter()
                 result = search_catalog(db, request, embedder, pinned,
-                    candidate_limit=self.rerank_candidates if request.rerank else request.limit,
+                    candidate_limit=max(self.rerank_candidates, request.limit) if request.rerank or request.product_goal or request.concerns else request.limit,
                     candidate_texts=texts)
         # All product data was hydrated from one pinned snapshot; release PostgreSQL
         # before potentially slow cold model loading/scoring.
         retrieval_seconds = time.perf_counter() - retrieved
         if request.rerank:
-            result = apply_reranking(result, texts, request, self.reranker)
+            result = apply_reranking(result, texts, request, self.reranker, defer_limit=True)
         else:
             result["reranking"] = {"requested": False, "applied": False, "reason": "disabled", "candidate_count": 0}
+        result = prioritize_listing_evidence(result, request)
         self.cache.put(key, result)
         result["cache"] = {"status": cache_status}
         result["timings"] = {"retrieval_seconds": retrieval_seconds, "total_seconds": time.perf_counter() - started}

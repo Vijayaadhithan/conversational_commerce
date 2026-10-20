@@ -2,6 +2,8 @@
 
 19 October 2026. AI-reviewed synthetic conversations; no human review.
 
+Follow-up: [20 October recommendation quality and metadata improvements](recommendation_quality_2026-10-20.md). The measurements below describe the earlier catalog and code.
+
 This follows the [50,000-product evaluation](commerce_evaluation_2026-10-19.md).
 The catalog and embedding generation are unchanged. This change repairs conversation
 interpretation, task continuity, listing precision and explanations.

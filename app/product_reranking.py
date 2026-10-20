@@ -6,7 +6,7 @@ import time
 from app.catalog import CatalogError
 from app.embedding_text import clip_utf8
 
-DOCUMENT_VERSION = "commerce-rerank-v1"
+DOCUMENT_VERSION = "commerce-rerank-v2"
 
 
 def rerank_document(record):
@@ -14,15 +14,16 @@ def rerank_document(record):
     parts = ["Title: " + clip_utf8(record["title"], 768),
              "Category: " + record["category"]["domain"] + "/" + record["category"]["family"]]
     if record["brand"]: parts.append("Brand: " + clip_utf8(record["brand"]["value"], 192))
-    parts.extend(record["content"]["features"])
-    parts.extend(record["content"]["description"])
+    # Keep concise attributes ahead of long marketing descriptions.
     for name, claim in sorted(record["attributes"].items()):
         if claim is not None:
-            parts.append(name.replace("_", " ") + ": " + str(claim["value"]))
+            parts.append(name.replace("_", " ") + ": " + clip_utf8(str(claim["value"]), 192))
+    parts.extend(record["content"]["features"])
+    parts.extend(record["content"]["description"])
     return clip_utf8("\n".join(parts), 4000)
 
 
-def rerank_candidates(response, documents, request, engine):
+def rerank_candidates(response, documents, request, engine, *, defer_limit=False):
     candidates = response["results"]
     if not candidates:
         response["reranking"] = {"requested": True, "applied": False, "reason": "no_candidates", "candidate_count": 0}
@@ -46,7 +47,7 @@ def rerank_candidates(response, documents, request, engine):
         raise CatalogError("Local product reranking unavailable or invalid. Check the installed reranker and libraries, or explicitly set rerank=false.") from exc
     for rank, index in enumerate(order, 1):
         candidates[index]["ranking"].update(rrf_rank=index + 1, rerank_rank=rank, rerank_score=scores[index])
-    response["results"] = [candidates[index] for index in order[:request.limit]]
+    response["results"] = [candidates[index] for index in (order if defer_limit else order[:request.limit])]
     response["method"] += "+cross_encoder"
     response["reranking"] = {"requested": True, "applied": True, "candidate_count": len(candidates),
         "model": ranked.get("model"), "revision": ranked.get("revision"), "device": ranked.get("device"),

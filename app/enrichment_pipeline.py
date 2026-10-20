@@ -11,7 +11,7 @@ from tempfile import TemporaryDirectory
 from pathlib import Path
 from uuid import uuid4
 
-from app import catalog_enrichment
+from app import catalog_enrichment, listing_quality
 from app.catalog import CatalogError, strict_json, validated_source
 
 
@@ -36,6 +36,7 @@ def publish_enrichment(source_dir, raw_dir, output_dir, progress=print):
         raise CatalogError("Use the original ETL source, not an already enriched snapshot")
     signature = {"version": catalog_enrichment.VERSION, "source_import_id": source_id,
                  "code_sha256": fingerprint(Path(catalog_enrichment.__file__))["sha256"],
+                 "identity_sha256": fingerprint(Path(listing_quality.__file__))["sha256"],
                  "pipeline_sha256": fingerprint(Path(__file__))["sha256"]}
     run_id = hashlib.sha256(json.dumps(signature, sort_keys=True).encode()).hexdigest()[:20]
     run = output_dir / "runs" / run_id

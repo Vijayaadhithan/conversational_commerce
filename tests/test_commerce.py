@@ -88,7 +88,8 @@ def commerce(client, session, message):
     return result.json()["commerce"]
 
 
-def test_clarify_then_recommend_refine_compare_more_and_restart(tmp_path):
+@pytest.mark.parametrize("more_message", ["More options", "Any more choices?"])
+def test_clarify_then_recommend_refine_compare_more_and_restart(tmp_path, more_message):
     plans = {
         "I have dry skin": plan("clarify", "I have dry skin", change("need", "dry skin", "dry skin")),
         "A moisturizer under $30": plan("search", "A moisturizer under $30", change("query", "moisturizer", "moisturizer"), change("max_price", "30", "under $30")),
@@ -119,7 +120,7 @@ def test_clarify_then_recommend_refine_compare_more_and_restart(tmp_path):
         assert details["reply"].startswith("2.")
         assert before == (len(calls), len(search.calls))
         seen = {row["product_id"] for row in result["products"]}
-        more = commerce(client, session, "More options")
+        more = commerce(client, session, more_message)
         assert seen.isdisjoint(row["product_id"] for row in more["products"])
         assert set(search.calls[-1].filters.exclude_product_ids) == seen
         assert search.calls[-1].filters.max_price == Decimal("19.99")

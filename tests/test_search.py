@@ -229,6 +229,8 @@ def test_product_identity_gates_both_retrieval_paths_and_department_aliases(pg, 
     ("red lipstick", "Empty Lipstick Tubes", "", False),
     ("lipstick", "Lipstick Brooch Lapel Pin", "", False),
     ("lipstick", "Red lipstick", "", True),
+    ("red lipstick", "Pink lipstick", "Find your perfect red lipstick among our other shades", False),
+    ("silver necklace", "Alloy Necklace", "silver necklace gold necklace cheap necklace", False),
     ("handbag", "Handbag Organizer Insert", "", False),
     ("handbag", "Cosmetic Toiletry Handbag", "", False),
     ("handbag", "Leather Shoulder Handbag", "", True),
@@ -241,6 +243,10 @@ def test_product_identity_gates_both_retrieval_paths_and_department_aliases(pg, 
     ("running shoes", "Running Shoe Charm", "", False),
     ("running shoes", "Winter Ankle Shoes Boots", "", False),
     ("running shoes", "Women's Running Shoes", "", True),
+    ("running shoes", "Women's Running Shorts Black Tap Shoe", "", False),
+    ("running shoes", "Running Shoe Socks", "", False),
+    ("necklace", "Silver Necklace", "", True),
+    ("necklace", "Necklace Display Holder", "", False),
     ("moisturizer", "Moisturizing Clay Mask", "", False),
     ("shirt with pockets", "Cotton shirt", "No pockets", False),
     ("shirt with pockets", "Cotton shirt", "Two chest pockets", True),
@@ -253,3 +259,18 @@ def test_misleading_product_name_gate(pg, goal, title, content, expected):
     result = pg.execute("SELECT count(*) FROM (SELECT %s::jsonb AS document, '{}'::jsonb AS attributes) p WHERE true" + suffix,
                         [Jsonb(document), *values]).fetchone()[0]
     assert bool(result) == expected
+
+
+def test_material_conflicts_and_wrong_selected_color_cannot_satisfy_filters(pg):
+    from app.product_search import filter_sql, product_goal_sql
+    from psycopg.types.json import Jsonb
+    suffix, params = filter_sql(ProductFilters(attributes={"material": "Cotton"}))
+    document = {"quality": {"warnings": ["conflicting_material_composition"]}}
+    attributes = {"material": {"value": "Cotton"}}
+    assert pg.execute("SELECT count(*) FROM (SELECT %s::jsonb AS document, %s::jsonb AS attributes) p WHERE true" + suffix,
+                      [Jsonb(document), Jsonb(attributes), *params]).fetchone()[0] == 0
+    suffix, params = product_goal_sql("red lipstick")
+    document = {"title": "Red and pink lipstick", "content": {"features": [], "description": []}}
+    attributes = {"color": {"value": "Pink"}}
+    assert pg.execute("SELECT count(*) FROM (SELECT %s::jsonb AS document, %s::jsonb AS attributes) p WHERE true" + suffix,
+                      [Jsonb(document), Jsonb(attributes), *params]).fetchone()[0] == 0

@@ -144,3 +144,26 @@ def test_cache_hits_do_not_retrieve_and_new_generation_or_filter_cannot_reuse_ol
     updated = service.search(request)
     assert updated["build_id"] != first["build_id"] and updated["cache"]["status"] == "miss"
     assert [row["product_id"] for row in updated["results"]] == [rows[1]["product_id"]]
+
+
+def test_evidence_ranking_runs_before_limit_and_cannot_admit_ineligible_products(pg, scratch_database, tmp_path, monkeypatch):
+    rows = [product(), product("B000000002"), product("B000000003", "100.00")]
+    rows[0]["title"] = "Brightening face moisturizer"
+    rows[2]["title"] = "Brightening face moisturizer"
+    make_source(tmp_path, rows)
+    with validated_source(tmp_path) as source: import_catalog(pg, source)
+    pg.commit()
+    with connect_database(scratch_database, autocommit=True) as db:
+        build_index(db, FakeEmbedder(), lambda *a, **kw: None)
+    class ContextEmbedder(FakeEmbedder):
+        def __enter__(self): return self
+        def __exit__(self, *args): pass
+    monkeypatch.setattr(product_search, "OllamaEmbedder", lambda settings: ContextEmbedder())
+    service = ProductSearch(scratch_database, reranker=Ranker(), cache=SearchCache())
+    # Ranker favors index 1, but index 0 has the concern evidence. Limit is only 1.
+    request = ProductSearchRequest(query="moisturizer", product_goal="moisturizer", concerns=["brighten my face"],
+                                   limit=1, filters={"max_price": "30.00"})
+    result = service.search(request)
+    assert [r["product_id"] for r in result["results"]] == [rows[0]["product_id"]]
+    assert result["results"][0]["ranking"]["rerank_rank"] == 2
+    assert result["results"][0]["ranking"]["evidence_rank"] == 1
