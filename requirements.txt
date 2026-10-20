@@ -5,3 +5,5 @@ python-dotenv>=1,<2
 psycopg[binary]>=3.2,<4
 jsonschema>=4,<5
 redis>=5,<8
+
+psutil>=5.9,<8

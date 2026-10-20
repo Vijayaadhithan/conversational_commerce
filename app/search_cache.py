@@ -2,6 +2,7 @@
 import hashlib
 import json
 import os
+import re
 from pathlib import Path
 import time
 
@@ -41,7 +42,9 @@ class SearchCache:
             socket_connect_timeout=.2, decode_responses=True, retry=Retry(NoBackoff(), 0)) if url else None)
         self.ttl, self.max_entries, self.max_bytes = ttl, max_entries, max_bytes
         self.signature = code_signature()
-        self.prefix = "commerce:search:v1:"
+        namespace = os.getenv('SEARCH_CACHE_NAMESPACE', 'v1')
+        if not re.fullmatch(r'[A-Za-z0-9_-]{1,64}', namespace): raise ValueError('Invalid search cache namespace')
+        self.prefix = 'commerce:search:' + namespace + ':'
 
     @classmethod
     def from_env(cls):
@@ -55,6 +58,12 @@ class SearchCache:
         return self.prefix + hashlib.sha256(json.dumps(body, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
 
     def get(self, key):
+        value, status = self._get(key)
+        metrics = getattr(self, 'metrics', None)
+        if metrics is not None: metrics.increment('cache_' + status + '_total')
+        return value, status
+
+    def _get(self, key):
         if self.client is None: return None, "disabled"
         try:
             payload = self.client.get(key)
@@ -75,7 +84,8 @@ class SearchCache:
         try:
             self.client.eval(STORE, 2, self.prefix + "entries", key, time.time(), payload, self.ttl, self.max_entries)
         except (redis.RedisError, OSError):
-            pass
+            metrics = getattr(self, "metrics", None)
+            if metrics is not None: metrics.increment("cache_write_failures_total")
 
     def close(self):
         if self.client is not None: self.client.close()

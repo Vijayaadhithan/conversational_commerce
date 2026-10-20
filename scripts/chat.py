@@ -2,6 +2,9 @@
 
 import argparse
 import json
+import time
+from uuid import uuid4
+from api_credentials import authorization_headers
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
@@ -13,17 +16,27 @@ def main():
     parser.add_argument("--commerce", action="store_true", help="Create a product recommendation conversation")
     args = parser.parse_args()
 
-    def request(method, path, body=None):
+    def request(method, path, body=None, request_key=None):
         data = json.dumps(body).encode() if body is not None else None
+        headers = {"Content-Type": "application/json", **authorization_headers()}
+        if method == "POST": headers["Idempotency-Key"] = request_key or str(uuid4())
         req = Request(args.url.rstrip("/") + path, data=data, method=method,
-                      headers={"Content-Type": "application/json"})
-        with urlopen(req, timeout=900) as response:
-            return json.load(response)
+                      headers=headers)
+        for attempt in range(3):
+            try:
+                with urlopen(req, timeout=900) as response: return json.load(response)
+            except HTTPError as exc:
+                if attempt == 2 or exc.code not in {429, 503, 504} and not (exc.code == 409 and exc.headers.get('Retry-After')): raise
+                time.sleep(min(10, max(1, int(exc.headers.get('Retry-After', '2')))))
+            except (URLError, TimeoutError):
+                if attempt == 2: raise
+                time.sleep(2)
 
     try:
         session = args.session or request("POST", "/conversations", {"mode": "commerce" if args.commerce else "chat"})["id"]
         mode = request("GET", f"/conversations/{session}")["mode"]
-        print(f"Conversation: {session} ({mode})\nCommands: /exit, /new, /history, /preferences")
+        print(f"Conversation: {session} ({mode})\nCommands: /exit, /new, /history, /preferences, /retry")
+        pending = None
         while True:
             text = input("\nYou: ").strip()
             if text == "/exit":
@@ -46,12 +59,19 @@ def main():
                             break
                         after = page["next_after"]
                 else:
-                    result = request("POST", f"/conversations/{session}/messages", {"message": text})
+                    if text == '/retry':
+                        if pending is None:
+                            print('No pending message to retry.')
+                            continue
+                    else:
+                        pending = (session, {"message": text}, str(uuid4()))
+                    result = request("POST", f"/conversations/{pending[0]}/messages", pending[1], pending[2])
+                    pending = None
                     print(f'\nAI: {result["reply"]}')
             except HTTPError as exc:
                 print(f"API error {exc.code}: {exc.read().decode()}")
-            except URLError as exc:
-                print(f"Connection error: {exc.reason}")
+            except (URLError, TimeoutError) as exc:
+                print("Connection failed. Use /retry to reuse the same request key.")
         print(f"Resume: python scripts/chat.py --session {session}")
     except (KeyboardInterrupt, EOFError):
         print("\nStopped. Your completed turns remain saved.")

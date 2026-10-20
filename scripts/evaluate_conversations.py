@@ -10,7 +10,7 @@ from tempfile import TemporaryDirectory
 import time
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-from fastapi.testclient import TestClient
+from evaluation_client import evaluation_client
 from app.main import ROOT, Settings, create_app
 from app.commerce_models import PLANNER_PROMPT
 
@@ -33,7 +33,7 @@ def main():
                   for name in ("commerce.py", "commerce_models.py", "product_search.py", "listing_explanations.py")},
               "case_set_sha256": hashlib.sha256(args.cases.read_bytes()).hexdigest(), "cases": []}
     with TemporaryDirectory(prefix="commerce-evaluation-") as tmp:
-        with TestClient(create_app(replace(Settings(), database=str(Path(tmp) / "conversations.sqlite3")))) as client:
+        with evaluation_client(replace(Settings(), database=str(Path(tmp) / "conversations.sqlite3"))) as client:
             for case in cases:
                 session = client.post("/conversations", json={"mode": "commerce"}).json()["id"]
                 observed = {**case, "observations": []}

@@ -1,13 +1,15 @@
 """Check real model recall, including the summary boundary. Backend must be running."""
 
 import json
+from uuid import uuid4
+from api_credentials import authorization_headers
 from urllib.request import Request, urlopen
 
 
 def request(method, path, body=None):
     req = Request("http://127.0.0.1:8000" + path,
                   data=json.dumps(body).encode() if body is not None else None,
-                  headers={"Content-Type": "application/json"}, method=method)
+                  headers={"Content-Type": "application/json", "Idempotency-Key": str(uuid4()), **authorization_headers()}, method=method)
     with urlopen(req, timeout=600) as response:
         return json.load(response) if response.status != 204 else None
 

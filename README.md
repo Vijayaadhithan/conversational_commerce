@@ -101,12 +101,17 @@ ollama serve
 
 ## Run the backend
 
+First provision a user token and set `COMMERCE_API_TOKEN_FILE` in `.env`; see
+[API operations](docs/operations.md) for the commands, legacy conversation
+ownership, retry keys, limits, monitoring and real load testing. Authentication
+and request keys are enabled by default. The terminal client handles both.
+
 ```bash
 .venv/bin/python -m uvicorn app.main:app --host 127.0.0.1 --port 8000
 ```
 
 Use one Uvicorn worker. Interactive API docs: http://127.0.0.1:8000/docs.
-Health check: http://127.0.0.1:8000/health.
+Public liveness: http://127.0.0.1:8000/livez. Health/readiness require a bearer token.
 
 In another terminal, start a continuous conversation:
 
@@ -335,7 +340,8 @@ Full conversation transcripts persist across restarts. Older turns are
 summarized to keep model input bounded; summaries are lossy. Failed inference
 does not save a partial turn or partial memory update.
 
-This backend binds to localhost and has no authentication. Model weights,
+This backend binds to localhost and uses per-user bearer authentication with
+conversation ownership, durable request keys and bounded model admission. Model weights,
 catalogs, conversations, `.env`, runtime caches, and local audit notes are
 excluded from Git. See [docs/architecture.md](docs/architecture.md) for storage
 choices and current implementation boundaries.

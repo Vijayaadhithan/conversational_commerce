@@ -15,7 +15,7 @@ import time
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from fastapi.testclient import TestClient
+from evaluation_client import evaluation_client
 from app.main import ROOT, Settings, create_app
 
 
@@ -23,7 +23,7 @@ def main():
     observations = []
     with TemporaryDirectory(prefix="commerce-check-") as temporary:
         settings = replace(Settings(), database=str(Path(temporary) / "conversations.sqlite3"))
-        with TestClient(create_app(settings)) as client:
+        with evaluation_client(settings) as client:
             session = client.post("/conversations", json={"mode": "commerce"}).json()["id"]
 
             def send(message):
@@ -72,7 +72,7 @@ def main():
             assert task["filters"]["attributes"]["fragrance_free"] is True
             expected = client.get(f"/conversations/{session}/preferences").json()
         # A new application instance must read the same structured state and evidence.
-        with TestClient(create_app(settings)) as restarted:
+        with evaluation_client(settings) as restarted:
             assert restarted.get(f"/conversations/{session}/preferences").json() == expected
             transcript = restarted.get(f"/conversations/{session}/messages").json()["messages"]
             assert len(transcript) == 2 * len(observations)

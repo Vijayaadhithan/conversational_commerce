@@ -11,7 +11,7 @@ from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from fastapi.testclient import TestClient
+from evaluation_client import evaluation_client
 from app.commerce_models import ShoppingState, ShoppingTask
 from app.commerce import handle_turn, IntentError
 from app.main import ROOT, Settings, create_app
@@ -28,7 +28,7 @@ def main():
 
     with TemporaryDirectory(prefix="commerce-browse-intent-") as temporary, patch("app.main.handle_turn", observed_turn):
         settings = replace(Settings(), database=str(Path(temporary) / "conversations.sqlite3"))
-        with TestClient(create_app(settings)) as client:
+        with evaluation_client(settings) as client:
             session = client.post("/conversations", json={"mode": "commerce"}).json()["id"]
 
             def send(message):
@@ -74,7 +74,7 @@ def main():
                 assert result["intent"]["recommendation_requested"] is False
                 assert result["products"] == [] and result["search"] is None
             expected = client.get(f"/conversations/{session}/preferences").json()
-        with TestClient(create_app(settings)) as restarted:
+        with evaluation_client(settings) as restarted:
             assert restarted.get(f"/conversations/{session}/preferences").json() == expected
     output = ROOT / "data/search/recommendation_intent_report.json"
     output.parent.mkdir(parents=True, exist_ok=True)

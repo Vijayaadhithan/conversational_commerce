@@ -1,6 +1,8 @@
 """Local, persistent multi-turn chat backed by Ollama."""
 
 import asyncio
+import fcntl
+import time
 from contextlib import asynccontextmanager, contextmanager
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -14,11 +16,16 @@ from typing import Literal
 from uuid import UUID, uuid4
 
 from dotenv import load_dotenv
-from fastapi import FastAPI, HTTPException, Query, Response
+from fastapi import FastAPI, HTTPException, Query, Response, Request
 import httpx
 import psycopg
 from pydantic import BaseModel, Field, ValidationError, field_validator
 
+from fastapi.responses import JSONResponse
+from fastapi.openapi.utils import get_openapi
+from app.dependencies import probe_dependencies
+from app.api_security import SecurityStore
+from app.operations import OperationsSettings, Metrics, Admission, TokenBuckets, OperationalMiddleware, finish_on_disconnect
 from app.reranker import LocalReranker
 from app.catalog import CatalogError, strict_json
 from app.commerce import IntentError, direct_plan, handle_turn, intent_clarification
@@ -71,7 +78,7 @@ def chunks(text, limit):
         text = text[len(part):]
 
 
-class Store:
+class Store(SecurityStore):
     def __init__(self, path):
         self.path = Path(path)
         self.path.parent.mkdir(parents=True, exist_ok=True)
@@ -100,12 +107,15 @@ class Store:
             # Additive migration also supports conversations created by earlier versions.
             columns = {row[1] for row in db.execute("PRAGMA table_info(conversations)")}
             for name, declaration in {
+                "owner_id": "TEXT",
                 "mode": "TEXT NOT NULL DEFAULT 'chat'",
                 "shopping_state": "TEXT NOT NULL DEFAULT '{}'",
                 "state_version": "INTEGER NOT NULL DEFAULT 0",
             }.items():
                 if name not in columns:
                     db.execute(f"ALTER TABLE conversations ADD COLUMN {name} {declaration}")
+
+        self.initialize_security()
 
     @contextmanager
     def connect(self):
@@ -118,13 +128,14 @@ class Store:
         finally:
             db.close()
 
-    def create(self, title, mode="chat"):
+    def create(self, title, mode="chat", owner="local-development", identity=None):
         record = dict(id=str(uuid4()), title=title, mode=mode, created_at=now(), updated_at=now())
         with self.connect() as db:
             db.execute(
-                "INSERT INTO conversations(id,title,mode,created_at,updated_at) VALUES (:id,:title,:mode,:created_at,:updated_at)",
-                record,
+                "INSERT INTO conversations(id,title,mode,created_at,updated_at,owner_id) VALUES (:id,:title,:mode,:created_at,:updated_at,:owner)",
+                dict(record, owner=owner),
             )
+            self.complete_request(db, identity, record, 201)
         return record
 
     def get(self, conversation_id):
@@ -136,11 +147,11 @@ class Store:
         record["shopping_state"] = json.loads(record["shopping_state"])
         return record
 
-    def list(self, limit, offset):
+    def list(self, limit, offset, owner="local-development"):
         with self.connect() as db:
             return [dict(r) for r in db.execute(
-                "SELECT id,title,mode,created_at,updated_at FROM conversations ORDER BY updated_at DESC LIMIT ? OFFSET ?",
-                (limit, offset),
+                "SELECT id,title,mode,created_at,updated_at FROM conversations WHERE owner_id=? OR (owner_id IS NULL AND ?='local-development') ORDER BY updated_at DESC LIMIT ? OFFSET ?",
+                (owner, owner, limit, offset),
             )]
 
     def messages(self, conversation_id, after=0, limit=100):
@@ -159,7 +170,7 @@ class Store:
             messages.append(item)
         return messages
 
-    def commit_commerce_turn(self, conversation_id, user, state, metadata, expected_version):
+    def commit_commerce_turn(self, conversation_id, user, state, metadata, expected_version, identity=None, response=None):
         with self.connect() as db:
             stamp = now()
             changed = db.execute("""UPDATE conversations SET shopping_state=?,state_version=state_version+1,
@@ -173,9 +184,12 @@ class Store:
                                 (conversation_id, metadata["reply"], stamp))
             db.execute("INSERT INTO commerce_turns(message_id,metadata) VALUES (?,?)",
                        (cursor.lastrowid, json.dumps(metadata, ensure_ascii=False)))
+            if response is not None:
+                response["message_id"] = cursor.lastrowid
+                self.complete_request(db, identity, response)
             return cursor.lastrowid
 
-    def commit_turn(self, conversation_id, user, answer, summary, boundary):
+    def commit_turn(self, conversation_id, user, answer, summary, boundary, identity=None, response=None):
         # Save the whole turn and its memory together, only after successful inference.
         with self.connect() as db:
             stamp = now()
@@ -187,6 +201,9 @@ class Store:
                        (conversation_id, user, stamp))
             cursor = db.execute("INSERT INTO messages(conversation_id,role,content,created_at) VALUES (?, 'assistant', ?, ?)",
                                 (conversation_id, answer, stamp))
+            if response is not None:
+                response["message_id"] = cursor.lastrowid
+                self.complete_request(db, identity, response)
             return cursor.lastrowid
 
     def delete(self, conversation_id):
@@ -232,7 +249,8 @@ class RerankRequest(BaseModel):
         return values
 
 
-def create_app(settings=None, transport=None):
+def create_app(settings=None, transport=None, operations=None):
+    operations = operations or OperationsSettings.from_env()
     settings = settings or Settings()
     if settings.max_tokens < 1 or settings.timeout <= 0:
         raise ValueError("OLLAMA_MAX_TOKENS and OLLAMA_TIMEOUT_SECONDS must be positive")
@@ -242,28 +260,70 @@ def create_app(settings=None, transport=None):
     @asynccontextmanager
     async def lifespan(app):
         path = Path(settings.database)
-        app.state.store = Store(path if path.is_absolute() else ROOT / path)
-        # One worker serializes GPU calls and prevents lost/overlapping turns.
-        app.state.generation_lock = asyncio.Lock()
-        app.state.reranker = LocalReranker()
-        app.state.product_search = ProductSearch(reranker=app.state.reranker)
-        async with httpx.AsyncClient(
-            base_url=settings.ollama_url, timeout=httpx.Timeout(settings.timeout, connect=5),
-            transport=transport, trust_env=False,
-        ) as client:
-            app.state.ollama = client
-            app.state.search_warmup = {"status": "disabled"}
-            if os.getenv("SEARCH_WARMUP", "0") == "1":
-                app.state.search_warmup = await asyncio.to_thread(app.state.product_search.warmup)
-            try:
-                yield
-            finally:
-                cache = getattr(app.state.product_search, "cache", None)
-                if cache is not None: cache.close()
+        path = (path if path.is_absolute() else ROOT / path).resolve()
+        path.parent.mkdir(parents=True, exist_ok=True)
+        lock_file = open(str(path) + '.server.lock', 'a')
+        try:
+            fcntl.flock(lock_file, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except OSError:
+            lock_file.close()
+            raise RuntimeError('One API worker per conversation database is supported; stop the other worker first') from None
+        try:
+            app.state.server_lock = lock_file
+            app.state.store = Store(path)
+            app.state.metrics = Metrics()
+            app.state.metrics.increment('recovered_requests_total', app.state.store.recover_requests())
+            app.state.admission = Admission(operations, app.state.metrics)
+            app.state.model_buckets = TokenBuckets()
+            app.state.reranker = LocalReranker()
+            app.state.product_search = ProductSearch(reranker=app.state.reranker)
+            app.state.product_search.cache.metrics = app.state.metrics
+            app.state.probe_lock = asyncio.Lock()
+            async with httpx.AsyncClient(
+                base_url=settings.ollama_url, timeout=httpx.Timeout(settings.timeout, connect=5),
+                transport=transport, trust_env=False,
+            ) as client:
+                app.state.ollama = client
+                app.state.search_warmup = {"status": "disabled"}
+                if os.getenv("SEARCH_WARMUP", "0") == "1":
+                    app.state.search_warmup = await asyncio.to_thread(app.state.product_search.warmup)
+                monitor = asyncio.create_task(monitor_loop()) if operations.monitor_interval else None
+                try:
+                    yield
+                finally:
+                    if monitor:
+                        monitor.cancel()
+                        try: await monitor
+                        except asyncio.CancelledError: pass
+                    cache = getattr(app.state.product_search, "cache", None)
+                    if cache is not None: cache.close()
+        finally:
+            lock_file.close()
 
     app = FastAPI(title="Local Conversational AI", version="1.0.0", lifespan=lifespan)
 
+    app.add_middleware(OperationalMiddleware, settings=operations, state=app.state)
+
+    def owner(request):
+        return request.state.principal['id']
+
+    def claim(request, operation, body):
+        identity, replay = app.state.store.claim_request(owner(request), operation,
+            request.headers.get('Idempotency-Key'), body.model_dump(mode='json'), operations.idempotency_required)
+        if replay:
+            app.state.metrics.increment('idempotency_replays_total')
+            return identity, JSONResponse(replay[0], status_code=replay[1], headers={'Idempotency-Replayed': 'true'})
+        return identity, None
+
+    def model_rate(request):
+        retry = app.state.model_buckets.consume(owner(request), operations.model_requests_per_minute, operations.model_burst)
+        if retry:
+            app.state.metrics.increment('model_rate_limited_total')
+            raise HTTPException(429, 'Model request rate limit exceeded', headers={'Retry-After': str(retry)})
+
     async def ollama_request(method, path, **kwargs):
+        started = time.monotonic()
+        app.state.metrics.increment("ollama_requests_total")
         try:
             result = await app.state.ollama.request(method, path, **kwargs)
             if result.status_code == 404:
@@ -274,11 +334,17 @@ def create_app(settings=None, transport=None):
                 raise ValueError("Invalid Ollama response")
             return payload
         except httpx.TimeoutException as exc:
+            app.state.metrics.increment("ollama_failures_total")
             raise HTTPException(504, "Local model timed out. Retry or increase OLLAMA_TIMEOUT_SECONDS.") from exc
         except httpx.RequestError as exc:
+            app.state.metrics.increment("ollama_failures_total")
             raise HTTPException(503, "Cannot reach Ollama. Start it with: ollama serve") from exc
         except (httpx.HTTPStatusError, ValueError) as exc:
+            app.state.metrics.increment("ollama_failures_total")
             raise HTTPException(502, "Ollama returned an invalid or failed response") from exc
+
+        finally:
+            app.state.metrics.increment("ollama_seconds_total", time.monotonic() - started)
 
     async def complete(messages, summary=False):
         if byte_size(messages) > settings.prompt_budget:
@@ -367,6 +433,40 @@ def create_app(settings=None, transport=None):
             boundary = removed[-1]["id"]
         return prompt(summary, history, user), summary, boundary
 
+    async def refresh_status():
+        async with app.state.probe_lock:
+            await probe_dependencies(app.state, settings.model)
+        return app.state.metrics.evaluate(operations, app.state.admission)
+
+    async def monitor_loop():
+        while True:
+            try:
+                await refresh_status()
+            except Exception:
+                logger.error('Operational monitor failed', exc_info=False)
+                app.state.metrics.increment('monitor_failures_total')
+            await asyncio.sleep(operations.monitor_interval)
+
+    @app.get('/livez')
+    async def livez():
+        return {'status': 'alive'}
+
+    @app.get('/ready')
+    async def ready():
+        status = await refresh_status()
+        required = ('sqlite', 'models', 'postgres', 'reranker')
+        available = all(status['dependencies'][name]['status'] == 'ready' for name in required)
+        return JSONResponse({'status': 'ready' if available else 'unavailable'}, status_code=200 if available else 503)
+
+    @app.get('/ops/status')
+    async def operational_status():
+        return await refresh_status()
+
+    @app.get('/ops/metrics')
+    async def operational_metrics():
+        app.state.metrics.evaluate(operations, app.state.admission)
+        return Response(app.state.metrics.prometheus(app.state.admission), media_type='text/plain; version=0.0.4')
+
     @app.get("/health")
     async def health():
         result = await ollama_request("GET", "/api/tags")
@@ -376,8 +476,12 @@ def create_app(settings=None, transport=None):
         return {"status": "ok", "model": settings.model, "search_warmup": app.state.search_warmup}
 
     @app.post("/products/search")
-    async def products_search(body: ProductSearchRequest):
-        async with app.state.generation_lock:
+    async def products_search(body: ProductSearchRequest, request: Request):
+        model_rate(request)
+        return await finish_on_disconnect(search_work(body))
+
+    async def search_work(body):
+        async with app.state.admission.workload():
             try:
                 return await asyncio.to_thread(app.state.product_search.search, body)
             except CatalogError as exc:
@@ -386,96 +490,134 @@ def create_app(settings=None, transport=None):
                 raise HTTPException(503, "Product search unavailable. Check PostgreSQL and initialize/build the search catalog.") from exc
 
     @app.post("/rerank")
-    async def rerank(body: RerankRequest):
-        # Keep blocking inference off the event loop; serialize with chat on this Mac.
-        async with app.state.generation_lock:
+    async def rerank(body: RerankRequest, request: Request):
+        model_rate(request)
+        return await finish_on_disconnect(rerank_work(body))
+
+    async def rerank_work(body):
+        async with app.state.admission.workload():
             try:
                 return await asyncio.to_thread(app.state.reranker.rank, body.query, body.documents, body.top_k)
             except (RuntimeError, OSError) as exc:
                 raise HTTPException(503, f"Local reranker unavailable: {exc}") from exc
 
     @app.post("/conversations", status_code=201)
-    async def new_conversation(body: NewConversation):
-        return app.state.store.create(body.title, body.mode)
+    async def new_conversation(body: NewConversation, request: Request):
+        identity, replay = claim(request, 'create', body)
+        if replay is not None: return replay
+        try:
+            return app.state.store.create(body.title, body.mode, owner(request), identity)
+        finally:
+            app.state.store.release_request(identity)
 
     @app.get("/conversations")
-    async def list_conversations(limit: int = Query(50, ge=1, le=100), offset: int = Query(0, ge=0)):
-        return {"conversations": app.state.store.list(limit, offset)}
+    async def list_conversations(request: Request, limit: int = Query(50, ge=1, le=100), offset: int = Query(0, ge=0)):
+        return {"conversations": app.state.store.list(limit, offset, owner(request))}
 
     @app.get("/conversations/{conversation_id}")
-    async def get_conversation(conversation_id: UUID):
-        return app.state.store.get(str(conversation_id))
+    async def get_conversation(conversation_id: UUID, request: Request):
+        return app.state.store.check_owner(str(conversation_id), owner(request))
 
     @app.get("/conversations/{conversation_id}/preferences")
-    async def get_preferences(conversation_id: UUID):
-        record = app.state.store.get(str(conversation_id))
+    async def get_preferences(conversation_id: UUID, request: Request):
+        record = app.state.store.check_owner(str(conversation_id), owner(request))
         if record["mode"] != "commerce":
             raise HTTPException(409, "Create a conversation with mode='commerce' to use shopping preferences")
         return {"conversation_id": str(conversation_id), "state_version": record["state_version"],
                 "preferences": preference_view(ShoppingState.model_validate(record["shopping_state"]))}
 
     @app.get("/conversations/{conversation_id}/messages")
-    async def get_messages(conversation_id: UUID, after: int = Query(0, ge=0), limit: int = Query(100, ge=1, le=500)):
+    async def get_messages(conversation_id: UUID, request: Request, after: int = Query(0, ge=0), limit: int = Query(100, ge=1, le=500)):
         key = str(conversation_id)
-        app.state.store.get(key)
+        app.state.store.check_owner(key, owner(request))
         messages = app.state.store.messages(key, after, limit)
         return {"messages": messages, "next_after": messages[-1]["id"] if messages else after}
 
     @app.post("/conversations/{conversation_id}/messages")
-    async def send_message(conversation_id: UUID, body: ChatRequest):
-        async with app.state.generation_lock:
-            key = str(conversation_id)
-            record = app.state.store.get(key)
-            if record["mode"] == "commerce":
-                state = ShoppingState.model_validate(record["shopping_state"])
-                repair_reason, inference = "", []
-                attempts = 1 if direct_plan(body.message) else 2
-                for attempt in range(attempts):
-                    plan, result = await shopping_plan(state, body.message, repair_reason)
-                    inference.append(result)
-                    try:
-                        next_state, commerce = await asyncio.to_thread(
-                            handle_turn, state.model_dump(mode="json"), plan, body.message, app.state.product_search.search)
-                    except (IntentError, ValidationError, InvalidOperation) as exc:
-                        repair_reason = str(exc) if isinstance(exc, IntentError) else "Preference schema or price validation failed"
-                        logger.warning("Shopping intent rejected (attempt %s): %s", attempt + 1, repair_reason)
-                        if attempt + 1 < attempts: continue
-                        next_state, commerce = intent_clarification(state.model_dump(mode="json"), body.message)
-                        state = next_state
-                        # The rejected proposal is not a validated intent or a state patch.
-                        plan = IntentPlan(intent="clarify", evidence=body.message[:500], question_kind="general")
-                        break
-                    except CatalogError as exc:
-                        raise HTTPException(503, str(exc)) from exc
-                    except (psycopg.Error, OSError) as exc:
-                        raise HTTPException(503, "Product search unavailable; shopping turn was not saved") from exc
+    async def send_message(conversation_id: UUID, body: ChatRequest, request: Request):
+        key = str(conversation_id)
+        app.state.store.check_owner(key, owner(request))
+        identity, replay = claim(request, 'message:' + key, body)
+        if replay is not None: return replay
+        async def work():
+            try:
+                model_rate(request)
+                async with app.state.admission.workload(), app.state.admission.conversation(key):
+                    return await process_message(key, body, owner(request), identity)
+            finally:
+                app.state.store.release_request(identity)
+        return await finish_on_disconnect(work())
+
+    async def process_message(key, body, user_id, identity):
+        record = app.state.store.check_owner(key, user_id)
+        if record["mode"] == "commerce":
+            state = ShoppingState.model_validate(record["shopping_state"])
+            repair_reason, inference = "", []
+            attempts = 1 if direct_plan(body.message) else 2
+            for attempt in range(attempts):
+                plan, result = await shopping_plan(state, body.message, repair_reason)
+                inference.append(result)
+                try:
+                    next_state, commerce = await asyncio.to_thread(
+                        handle_turn, state.model_dump(mode="json"), plan, body.message, app.state.product_search.search)
+                except (IntentError, ValidationError, InvalidOperation) as exc:
+                    repair_reason = str(exc) if isinstance(exc, IntentError) else "Preference schema or price validation failed"
+                    logger.warning("Shopping intent rejected (attempt %s): %s", attempt + 1, repair_reason)
+                    if attempt + 1 < attempts: continue
+                    next_state, commerce = intent_clarification(state.model_dump(mode="json"), body.message)
                     state = next_state
+                    # The rejected proposal is not a validated intent or a state patch.
+                    plan = IntentPlan(intent="clarify", evidence=body.message[:500], question_kind="general")
                     break
-                commerce.update(intent=plan.model_dump(mode="json"), preferences=preference_view(state),
-                                state_version=record["state_version"] + 1, intent_attempts=len(inference))
-                message_id = app.state.store.commit_commerce_turn(key, body.message, state, commerce, record["state_version"])
-                return {"conversation_id": key, "message_id": message_id, "reply": commerce["reply"],
-                        "model": settings.model, "done_reason": result.get("done_reason", "deterministic"),
-                        "commerce": commerce,
-                        "usage": {"prompt_tokens": sum(item["prompt_eval_count"] for item in inference) if all(isinstance(item.get("prompt_eval_count"), int) for item in inference) else None,
-                                  "completion_tokens": sum(item["eval_count"] for item in inference) if all(isinstance(item.get("eval_count"), int) for item in inference) else None}}
-            history = app.state.store.messages(key, record["summarized_through"], limit=1000)
-            messages, summary, boundary = await prepare_context(record, history, body.message)
-            answer, result = await complete(messages)
-            message_id = app.state.store.commit_turn(key, body.message, answer, summary, boundary)
-            return {"conversation_id": key, "message_id": message_id, "reply": answer,
-                    "model": settings.model, "done_reason": result.get("done_reason"),
-                    "usage": {"prompt_tokens": result.get("prompt_eval_count"),
-                              "completion_tokens": result.get("eval_count")}}
+                except CatalogError as exc:
+                    raise HTTPException(503, str(exc)) from exc
+                except (psycopg.Error, OSError) as exc:
+                    raise HTTPException(503, "Product search unavailable; shopping turn was not saved") from exc
+                state = next_state
+                break
+            commerce.update(intent=plan.model_dump(mode="json"), preferences=preference_view(state),
+                            state_version=record["state_version"] + 1, intent_attempts=len(inference))
+            response = {"conversation_id": key, "reply": commerce["reply"],
+                    "model": settings.model, "done_reason": result.get("done_reason", "deterministic"),
+                    "commerce": commerce,
+                    "usage": {"prompt_tokens": sum(item["prompt_eval_count"] for item in inference) if all(isinstance(item.get("prompt_eval_count"), int) for item in inference) else None,
+                              "completion_tokens": sum(item["eval_count"] for item in inference) if all(isinstance(item.get("eval_count"), int) for item in inference) else None}}
+            app.state.store.commit_commerce_turn(key, body.message, state, commerce, record["state_version"], identity, response)
+            return response
+        history = app.state.store.messages(key, record["summarized_through"], limit=1000)
+        messages, summary, boundary = await prepare_context(record, history, body.message)
+        answer, result = await complete(messages)
+        response = {"conversation_id": key, "reply": answer,
+                "model": settings.model, "done_reason": result.get("done_reason"),
+                "usage": {"prompt_tokens": result.get("prompt_eval_count"),
+                          "completion_tokens": result.get("eval_count")}}
+
+        app.state.store.commit_turn(key, body.message, answer, summary, boundary, identity, response)
+        return response
 
     @app.delete("/conversations/{conversation_id}", status_code=204)
-    async def delete_conversation(conversation_id: UUID):
-        async with app.state.generation_lock:
+    async def delete_conversation(conversation_id: UUID, request: Request):
+        async with app.state.admission.conversation(str(conversation_id)):
             key = str(conversation_id)
-            app.state.store.get(key)
+            app.state.store.check_owner(key, owner(request))
             app.state.store.delete(key)
         return Response(status_code=204)
 
+    def schema():
+        if app.openapi_schema is None:
+            value = get_openapi(title=app.title, version=app.version, routes=app.routes)
+            value.setdefault('components', {}).setdefault('securitySchemes', {})['BearerAuth'] = {
+                'type': 'http', 'scheme': 'bearer', 'description': 'Token issued by scripts/manage_api_users.py'}
+            for path, methods in value['paths'].items():
+                for method, spec in methods.items():
+                    if operations.auth_required and path != '/livez': spec['security'] = [{'BearerAuth': []}]
+                    if method == 'post' and (path == '/conversations' or path.endswith('/messages')):
+                        spec.setdefault('parameters', []).append({'name': 'Idempotency-Key', 'in': 'header',
+                            'required': operations.idempotency_required, 'schema': {'type': 'string', 'minLength': 8, 'maxLength': 128},
+                            'description': 'Reuse for retries of the same logical request; change for a new request.'})
+            app.openapi_schema = value
+        return app.openapi_schema
+    app.openapi = schema
     return app
 
 

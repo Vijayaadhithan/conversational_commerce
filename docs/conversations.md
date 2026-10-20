@@ -152,14 +152,16 @@ in the displayed list; unknown brands do not satisfy that exclusion.
 SQLite stores transcripts, structured state, and per-turn product metadata in
 one transaction after successful extraction and search. Startup applies an
 additive migration to older chat databases. Optimistic version checks reject
-stale writes with 409; the API generation lock serializes local model work.
-Continue using one server worker. Failed catalog/model/reranker calls do not
-save a half-turn. There is no request-id deduplication; an ambiguous network
-failure should be checked in history before retrying.
+stale writes with 409; per-conversation locks serialize state mutations and bounded
+admission controls model work. Continue using one server worker. Failed
+catalog/model/reranker calls do not save a half-turn. Reuse the original
+`Idempotency-Key` after an ambiguous network failure; completed retries return
+the saved response. Bearer tokens scope access to the conversation owner.
+See [API operations](operations.md) for the full retry and authentication contract.
 
 ## Current boundaries
 
-- Beauty and fashion use the normalized 20,000-product sample and controlled
+- Beauty and fashion use the enriched 50,000-product catalog and controlled
   product families. This is a first implementation, not unrestricted intent
   understanding or a comprehensive relevance evaluation.
 - Each conversation supports five separate shopping tasks; each task remembers
@@ -174,8 +176,7 @@ failure should be checked in history before retrying.
   without an unsupported requirement requires an explicit removal or a clear
   affirmative response to the removal question.
 - Replies are grounded templates with source fields; richer natural language
-  answer generation, cart/checkout, live retailer feeds, multi-user auth, and
-  Redis caching are subsequent work.
+  answer generation, cart/checkout and live retailer feeds remain subsequent work.
 
 ## Validation
 

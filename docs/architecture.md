@@ -12,10 +12,12 @@ window; a conservative UTF-8 byte budget can reduce that further. Older turns
 update a bounded rolling summary using the same local chat model. Original
 messages remain available through the paginated transcript API.
 
-Chat and reranking share a generation lock to limit simultaneous local model
-work. Use one server worker; process-local locks do not coordinate multiple
-workers. This is a local development backend, without multi-user authentication,
-distributed admission control, or automatic retries of ambiguous chat requests.
+Chat, search and reranking share bounded model admission. Per-conversation locks
+serialize state changes, and an OS file lock enforces one API worker per database.
+Local bearer identities scope conversation access to the owner. Request keys and
+responses commit atomically with turns, supporting safe retries after disconnects
+and restarts. See [API operations](operations.md) for limits, monitoring and load
+tests. Distributed admission and external identity federation remain outside scope.
 
 ## Models
 
@@ -62,7 +64,7 @@ dedicated database and importing the normalized subset are implemented through
 `scripts/init_catalog.py` and `scripts/import_catalog.py`. Catalog migrations
 enable pgvector in the chosen database. `scripts/build_search_index.py` builds
 resumable model/digest/input-version-specific embeddings, then atomically
-publishes a complete search generation. Redis caching is not wired into search.
+publishes a complete search generation. Optional bounded Redis caching is integrated into search and instrumented for hits, misses and failures.
 Incremental embedding reuses compatible selected-text hashes across retained
 ready generations. Forced full/selective refreshes build separate resumable
 generations. Removed products stay outside the next active snapshot; protected

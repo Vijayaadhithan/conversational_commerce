@@ -1,0 +1,24 @@
+groups:
+  - name: commerce
+    rules:
+      - alert: CommerceAPIDown
+        expr: up{job="commerce"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: Commerce API cannot be scraped; check process and credentials
+      - alert: CommerceDependencyUnavailable
+        expr: (commerce_dependency_up == 0) and on(job, instance, component) (commerce_dependency_enabled == 1)
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: Commerce dependency unavailable; inspect ops status
+      - alert: CommerceOperationalAlert
+        expr: commerce_alert_active == 1
+        for: 30s
+        labels:
+          severity: warning
+        annotations:
+          summary: Commerce API reports an operational alert

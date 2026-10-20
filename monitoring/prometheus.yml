@@ -1,0 +1,12 @@
+global:
+  scrape_interval: 15s
+rule_files:
+  - alerts.yml
+scrape_configs:
+  - job_name: commerce
+    metrics_path: /ops/metrics
+    authorization:
+      type: Bearer
+      credentials_file: /etc/prometheus/secrets/commerce-admin.token
+    static_configs:
+      - targets: ['127.0.0.1:8000']
