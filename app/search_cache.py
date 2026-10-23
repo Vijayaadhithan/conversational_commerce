@@ -1,10 +1,11 @@
 """Opt-in Redis result cache, bounded per namespace with short TTL and fail-open IO."""
+
 import hashlib
 import json
 import os
 import re
-from pathlib import Path
 import time
+from pathlib import Path
 
 import redis
 from redis.backoff import NoBackoff
@@ -29,7 +30,18 @@ return 1
 def code_signature():
     digest = hashlib.sha256()
     root = Path(__file__).parent
-    for name in ("product_search.py", "product_reranking.py", "listing_explanations.py", "listing_quality.py", "search_cache.py", "reranker.py"):
+    for name in (
+        "product_search.py",
+        "search_models.py",
+        "search_filters.py",
+        "embeddings.py",
+        "embedding_text.py",
+        "product_reranking.py",
+        "listing_explanations.py",
+        "listing_quality.py",
+        "search_cache.py",
+        "reranker.py",
+    ):
         digest.update((root / name).read_bytes())
     return digest.hexdigest()
 
@@ -38,54 +50,100 @@ class SearchCache:
     def __init__(self, url=None, *, client=None, ttl=300, max_entries=128, max_bytes=262144):
         if not 1 <= ttl <= 3600 or not 1 <= max_entries <= 1000 or not 1024 <= max_bytes <= 1048576:
             raise ValueError("Invalid search cache bounds")
-        self.client = client if client is not None else (redis.Redis.from_url(url, socket_timeout=.2,
-            socket_connect_timeout=.2, decode_responses=True, retry=Retry(NoBackoff(), 0)) if url else None)
+        self.client = (
+            client
+            if client is not None
+            else (
+                redis.Redis.from_url(
+                    url,
+                    socket_timeout=0.2,
+                    socket_connect_timeout=0.2,
+                    decode_responses=True,
+                    retry=Retry(NoBackoff(), 0),
+                )
+                if url
+                else None
+            )
+        )
         self.ttl, self.max_entries, self.max_bytes = ttl, max_entries, max_bytes
         self.signature = code_signature()
-        namespace = os.getenv('SEARCH_CACHE_NAMESPACE', 'v1')
-        if not re.fullmatch(r'[A-Za-z0-9_-]{1,64}', namespace): raise ValueError('Invalid search cache namespace')
-        self.prefix = 'commerce:search:' + namespace + ':'
+        namespace = os.getenv("SEARCH_CACHE_NAMESPACE", "v1")
+        if not re.fullmatch(r"[A-Za-z0-9_-]{1,64}", namespace):
+            raise ValueError("Invalid search cache namespace")
+        self.prefix = "commerce:search:" + namespace + ":"
 
     @classmethod
     def from_env(cls):
-        return cls(os.getenv("SEARCH_CACHE_REDIS_URL") or None,
+        return cls(
+            os.getenv("SEARCH_CACHE_REDIS_URL") or None,
             ttl=int(os.getenv("SEARCH_CACHE_TTL_SECONDS", "300")),
-            max_entries=int(os.getenv("SEARCH_CACHE_MAX_ENTRIES", "128")))
+            max_entries=int(os.getenv("SEARCH_CACHE_MAX_ENTRIES", "128")),
+        )
 
     def key(self, request, pinned, runtime):
-        body = {"request": request.model_dump(mode="json"), "build_id": pinned["build_id"],
-                "model_digest": pinned["config"]["model_digest"], "runtime": runtime, "code": self.signature}
-        return self.prefix + hashlib.sha256(json.dumps(body, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+        body = {
+            "request": request.model_dump(mode="json"),
+            "build_id": pinned["build_id"],
+            "model_digest": pinned["config"]["model_digest"],
+            "runtime": runtime,
+            "code": self.signature,
+        }
+        return (
+            self.prefix
+            + hashlib.sha256(
+                json.dumps(body, sort_keys=True, separators=(",", ":")).encode()
+            ).hexdigest()
+        )
 
     def get(self, key):
         value, status = self._get(key)
-        metrics = getattr(self, 'metrics', None)
-        if metrics is not None: metrics.increment('cache_' + status + '_total')
+        metrics = getattr(self, "metrics", None)
+        if metrics is not None:
+            metrics.increment("cache_" + status + "_total")
         return value, status
 
     def _get(self, key):
-        if self.client is None: return None, "disabled"
+        if self.client is None:
+            return None, "disabled"
         try:
             payload = self.client.get(key)
-            if payload is None: return None, "miss"
-            if not isinstance(payload, str): return None, "invalid"
-            if len(payload.encode()) > self.max_bytes: return None, "invalid"
+            if payload is None:
+                return None, "miss"
+            if not isinstance(payload, str):
+                return None, "invalid"
+            if len(payload.encode()) > self.max_bytes:
+                return None, "invalid"
             result = json.loads(payload)
-            if not isinstance(result, dict) or not isinstance(result.get("results"), list): return None, "invalid"
-            if any(not isinstance(row, dict) for row in result["results"]): return None, "invalid"
+            if not isinstance(result, dict) or not isinstance(result.get("results"), list):
+                return None, "invalid"
+            if any(not isinstance(row, dict) for row in result["results"]):
+                return None, "invalid"
             return result, "hit"
         except (redis.RedisError, OSError, ValueError, TypeError):
             return None, "unavailable"
 
     def put(self, key, value):
-        if self.client is None: return
+        if self.client is None:
+            return
         payload = json.dumps(value, separators=(",", ":"), allow_nan=False)
-        if len(payload.encode()) > self.max_bytes: return
+        if len(payload.encode()) > self.max_bytes:
+            return
         try:
-            self.client.eval(STORE, 2, self.prefix + "entries", key, time.time(), payload, self.ttl, self.max_entries)
+            self.client.eval(
+                STORE,
+                2,
+                self.prefix + "entries",
+                key,
+                time.time(),
+                payload,
+                self.ttl,
+                self.max_entries,
+            )
         except (redis.RedisError, OSError):
             metrics = getattr(self, "metrics", None)
-            if metrics is not None: metrics.increment("cache_write_failures_total")
+            if metrics is not None:
+                metrics.increment("cache_write_failures_total")
 
     def close(self):
-        if self.client is not None: self.client.close()
+        if self.client is not None:
+            self.client.close()

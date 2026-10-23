@@ -1,108 +1,63 @@
-# Architecture and storage
+# Architecture
 
-## Implemented
+## Request processing
 
-The FastAPI app talks to Ollama's chat API. Each conversation has a UUID and an
-independent transcript in SQLite. A turn's user message, assistant reply, and
-memory update commit together after successful inference.
+`app/main.py` composes the FastAPI application, provider clients, persistence,
+admission controls, and lifecycle monitoring. Route modules validate HTTP input
+and delegate to services. `chat_service.py` handles inference and bounded context;
+`conversation_service.py` coordinates validated turns and atomic persistence.
+See [development standards](development.md) for module responsibilities.
 
-Model input contains the system prompt, an optional summary, recent turns, and
-the current user message. At most six completed turns remain in the recent
-window; a conservative UTF-8 byte budget can reduce that further. Older turns
-update a bounded rolling summary using the same local chat model. Original
-messages remain available through the paginated transcript API.
+Each conversation has an owner, UUID, and SQLite transcript. User messages,
+assistant responses, state changes, and idempotency results commit together.
+Per-conversation locks serialize changes. An OS lock limits serving to one worker
+per conversation database. Authentication, request limits, and bounded model
+admission apply to local and hosted inference. See [operations](operations.md).
 
-Chat, search and reranking share bounded model admission. Per-conversation locks
-serialize state changes, and an OS file lock enforces one API worker per database.
-Local bearer identities scope conversation access to the owner. Request keys and
-responses commit atomically with turns, supporting safe retries after disconnects
-and restarts. See [API operations](operations.md) for limits, monitoring and load
-tests. Distributed admission and external identity federation remain outside scope.
+Chat context contains the system prompt, optional rolling summary, recent turns,
+and current message. At most six completed turns remain in the recent window;
+the UTF-8 budget may reduce that further. Original transcripts remain available.
+Shopping preferences use structured state rather than transcript summaries.
 
-## Models
+## Shopping workflow
 
-| Role | Model | Runtime |
-| --- | --- | --- |
-| Conversation | `ministral-3:8b` | Native Ollama |
-| Product embeddings | `embeddinggemma:latest`, 768 dimensions | Native Ollama; catalog and query retrieval prompts |
-| Reranking | `mixedbread-ai/mxbai-rerank-large-v2`, 1,543,714,304 parameters | PyTorch / Sentence Transformers, Apple MPS or CPU |
+The model proposes evidence-backed intent. Deterministic validation checks literal
+quotes, constraints, prices, and task scope before applying changes. Separate
+modules handle task selection, preference updates, discovery, and grounded replies.
+Each product task retains its own constraints and recommendation snapshots.
+Invalid proposals clarify without applying rejected changes. See
+[conversation contracts](conversations.md).
 
-The reranker is pinned to revision
-`ca7e1ee484c37c0ddd8d178a9a5c33cec575c5e6`. Its model-provided Sentence Transformers
-modules and tokenizer chat template determine pair formatting and relevance
-scoring. Inference uses local files only and does not execute custom remote
-model code. GPU weights use float16, with batch size 2 and a 512-token pair limit
-by default. CPU weights use float32. The model is a general retrieval reranker;
-the project has no comprehensive fashion/beauty relevance benchmark yet.
-Raw log-odds scores are retained instead of applying sigmoid, avoiding artificial
-ties when strong matches saturate to 1.0 in float16.
+## Inference providers
 
-The `/products/search` endpoint retrieves catalog products and reranks the top
-20 eligible RRF candidates by default. `/rerank` ranks caller-supplied documents.
-Both share one lazy local reranker and the API generation lock. Commerce-mode
-conversations extract evidence-backed intent first, persist separate shopping
-tasks and requirements in SQLite, and invoke filtered search for discovery and
-refinement. Grounded replies retain listing evidence; direct comparisons use
-saved recommendation snapshots. See [conversations.md](conversations.md).
+Chat supports Ollama, Google AI Studio, GroqCloud, and OpenRouter. Embeddings
+support Ollama and Google AI Studio. Reranking supports the local Mixedbread
+model and Voyage. Components are configured independently. See
+[provider configuration](model_providers.md) for credentials and migration.
 
-## Catalog inputs
+Local reranking loads pinned files without remote model code. Hosted calls use
+fixed HTTPS endpoints, bounded timeouts, and sanitized errors. Provider changes
+do not bypass authentication, evidence validation, or mandatory search filters.
 
-Only All Beauty, Amazon Fashion, and Beauty & Personal Care metadata from Amazon
-Reviews 2023 are selected. Downloaded rows may overlap and need deduplication
-by product ID. Preserve source provenance and unknown/missing attributes during
-normalization. Image URLs are metadata, not bundled image files.
+## Retrieval and storage
 
-These snapshots do not establish current stock, prices, commercial rights, or
-complete coverage of product variants, ages, genders, ingredients, or sizes.
+PostgreSQL stores catalog snapshots and 768-dimensional pgvector embeddings.
+Catalog imports retain source provenance, unknown attributes, and historical USD
+prices. Search generations publish atomically after complete validation.
+Incremental builds reuse compatible vectors; inactive generations support rollback.
+See [catalog storage](catalog.md) and [embedding lifecycle](embedding_lifecycle.md).
 
-## Recommended retrieval storage
+Retrieval combines English full-text search and exact cosine distance using RRF.
+Both paths apply identical mandatory SQL filters. The selected reranker scores
+eligible candidates only. Redis optionally caches bounded, versioned results.
+Cache identity includes the search generation, request constraints, reranker
+configuration, and relevant code. See [search](search.md) and
+[reranking](product_reranking.md).
 
-Use a dedicated PostgreSQL database with pgvector for catalog records and
-vectors, and Redis for bounded caches. `scripts/setup.sh --with-services` can
-install PostgreSQL, matching pgvector extension files, and Redis. Creating a
-dedicated database and importing the normalized subset are implemented through
-`scripts/init_catalog.py` and `scripts/import_catalog.py`. Catalog migrations
-enable pgvector in the chosen database. `scripts/build_search_index.py` builds
-resumable model/digest/input-version-specific embeddings, then atomically
-publishes a complete search generation. Optional bounded Redis caching is integrated into search and instrumented for hits, misses and failures.
-Incremental embedding reuses compatible selected-text hashes across retained
-ready generations. Forced full/selective refreshes build separate resumable
-generations. Removed products stay outside the next active snapshot; protected
-retention removes inactive vectors physically. See [embedding_lifecycle.md](embedding_lifecycle.md).
+## Boundaries
 
-The catalog uses the `commerce` schema in its own PostgreSQL database. Immutable
-import snapshots preserve each normalized JSONB product, source provenance,
-unknown fields, historical prices, and the ETL manifest. Generated typed columns
-provide consistent filter values. Importing uses validated client-side COPY,
-transaction-scoped writer coordination, and an atomic active-snapshot pointer;
-repeated imports verify and reuse existing records. The active-products view
-contains only the chosen snapshot, so removed products cannot leak in from old
-imports. See [catalog.md](catalog.md).
-
-PostgreSQL can keep authoritative product filters and vectors together, using
-SQL for category, brand, price, and variant constraints. It stores data on disk
-and caches a working set; index and query memory still need measurement.
-Redis vector sets can support a prototype, but catalog/index memory competes
-with the models on a single Mac.
-
-Two million 768-dimensional float32 vectors alone occupy about 6.14 GB, before
-indexes and metadata. `halfvec(768)` is a possible storage reduction after
-checking retrieval quality. Approximate search needs filtered-recall tests,
-appropriate filter indexes or partitions, and iterative scans where suitable.
-Mandatory constraints must be enforced in code and SQL; reranking cannot relax
-them. See [pgvector](https://github.com/pgvector/pgvector) and
-[Redis vector sets](https://redis.io/docs/latest/develop/data-types/vector-sets/).
-
-The implemented 20,000-product baseline uses exact pgvector cosine distance,
-PostgreSQL English full-text search with weighted title/body terms and a GIN
-index, and RRF (constant 60) over up to 50 candidates per path. It uses PostgreSQL
-text ranking, not BM25. Identical SQL constraints apply before both candidate
-limits. An active search build must match the active catalog, local input
-contract, model name, and Ollama digest. See [search.md](search.md).
-
-Product reranking can only reorder candidates already admitted by the SQL
-filters; it cannot introduce product IDs or change mandatory constraints. It
-runs after hydration and after releasing the PostgreSQL read transaction.
-Responses retain the pinned catalog/build, RRF ranks, reranker scores, model
-revision, device, and bounded candidate count. Invalid/incomplete reranker output
-fails explicitly. See [product_reranking.md](product_reranking.md).
+Catalog snapshots do not establish current stock, prices, medical outcomes, or
+complete ingredient and variant coverage. Distributed admission, identity
+federation, and approximate-search quality validation remain separate work.
+Historical performance measurements are documented in
+[scaling and performance](scaling_and_performance.md).

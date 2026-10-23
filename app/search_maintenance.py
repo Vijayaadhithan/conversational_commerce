@@ -1,9 +1,9 @@
 """Explicit removal and index maintenance within the dedicated commerce DB."""
 
-from contextlib import contextmanager
 import re
+from contextlib import contextmanager
 
-from app.catalog import CatalogError, LOCK_ID, _check_schema
+from app.catalog import LOCK_ID, CatalogError, _check_schema
 from app.search_index import BUILD_LOCK
 
 
@@ -21,7 +21,8 @@ def maintenance_lock(db):
         _check_schema(db)
         yield
     finally:
-        if catalog_locked: db.execute("SELECT pg_advisory_unlock(%s)", (LOCK_ID,))
+        if catalog_locked:
+            db.execute("SELECT pg_advisory_unlock(%s)", (LOCK_ID,))
         db.execute("SELECT pg_advisory_unlock(%s)", (BUILD_LOCK,))
 
 
@@ -29,7 +30,9 @@ def remove_builds(db, *, build_ids=None, keep_ready=1, include_incomplete=False,
     """Default to a concrete dry run; active build is protected even on explicit delete."""
     if type(keep_ready) is not int or keep_ready < 0:
         raise CatalogError("keep-ready must be a non-negative integer")
-    if build_ids is not None and (not build_ids or any(not re.fullmatch(r"[0-9a-f]{64}", item) for item in build_ids)):
+    if build_ids is not None and (
+        not build_ids or any(not re.fullmatch(r"[0-9a-f]{64}", item) for item in build_ids)
+    ):
         raise CatalogError("Specify valid build IDs for deletion")
     with maintenance_lock(db), db.transaction():
         rows = db.execute("""SELECT b.build_id,b.status,count(d.product_id),a.build_id IS NOT NULL
@@ -57,15 +60,21 @@ def remove_builds(db, *, build_ids=None, keep_ready=1, include_incomplete=False,
                 reason = "retained_rollback"
             else:
                 reason = None
-            if reason: preserved.append({**item, "reason": reason})
-            else: delete.append(item)
+            if reason:
+                preserved.append({**item, "reason": reason})
+            else:
+                delete.append(item)
         ids = [item["build_id"] for item in delete]
         if apply and ids:
             db.execute("DELETE FROM commerce.search_documents WHERE build_id=ANY(%s)", (ids,))
             db.execute("DELETE FROM commerce.search_builds WHERE build_id=ANY(%s)", (ids,))
-        return {"status": "deleted" if apply else "planned", "apply": apply,
-                "builds": delete, "vector_rows": sum(item["vectors"] for item in delete),
-                "preserved": preserved}
+        return {
+            "status": "deleted" if apply else "planned",
+            "apply": apply,
+            "builds": delete,
+            "vector_rows": sum(item["vectors"] for item in delete),
+            "preserved": preserved,
+        }
 
 
 def maintain_indexes(db, operation):
@@ -86,6 +95,13 @@ def maintain_indexes(db, operation):
             WHERE n.nspname='commerce' AND t.relname IN ('search_documents','catalog_products')
             ORDER BY c.relname""").fetchall()
         if not indexes or any(not valid or not ready for name, valid, ready in indexes):
-            raise CatalogError("An index is invalid; inspect PostgreSQL before retrying maintenance")
-        return {"status": "complete", "operation": operation,
-                "indexes": [{"name": name, "valid": valid, "ready": ready} for name, valid, ready in indexes]}
+            raise CatalogError(
+                "An index is invalid; inspect PostgreSQL before retrying maintenance"
+            )
+        return {
+            "status": "complete",
+            "operation": operation,
+            "indexes": [
+                {"name": name, "valid": valid, "ready": ready} for name, valid, ready in indexes
+            ],
+        }

@@ -3,19 +3,22 @@ import json
 from pathlib import Path
 
 import pytest
+from test_catalog import make_source, product
 
 from app.catalog import CatalogError, validated_source
 from app.catalog_sampling import expand_sample
 from app.enrichment_pipeline import fingerprint
-from test_catalog import make_source, product
 
 
 def full_catalog(tmp_path):
-    source = tmp_path / "original"; source.mkdir()
+    source = tmp_path / "original"
+    source.mkdir()
     rows = [product(f"B{i:09d}") for i in range(1, 9)]
     # Preserve an existing member whose ID is late in the archive.
     _, run, manifest = make_source(source, [rows[-1]])
-    (run / "catalog.jsonl.gz").write_bytes(gzip.compress("".join(json.dumps(row) + "\n" for row in rows).encode()))
+    (run / "catalog.jsonl.gz").write_bytes(
+        gzip.compress("".join(json.dumps(row) + "\n" for row in rows).encode())
+    )
     manifest["outputs"]["catalog.jsonl.gz"] = fingerprint(run / "catalog.jsonl.gz")
     manifest["counts"]["unique_products"] = len(rows)
     (run / "manifest.json").write_text(json.dumps(manifest))
@@ -31,7 +34,10 @@ def test_expansion_retains_existing_ids_and_is_reproducible(tmp_path):
     assert "amazon:B000000008" in ids and len(set(ids)) == 5
     assert expand_sample(source, tmp_path / "larger", 5) == result
     second = expand_sample(source, tmp_path / "second", 5)
-    assert Path(result["manifest"]).with_name("subset.jsonl").read_bytes() == Path(second["manifest"]).with_name("subset.jsonl").read_bytes()
+    assert (
+        Path(result["manifest"]).with_name("subset.jsonl").read_bytes()
+        == Path(second["manifest"]).with_name("subset.jsonl").read_bytes()
+    )
 
 
 def test_requested_expansion_cannot_silently_shortfall(tmp_path):

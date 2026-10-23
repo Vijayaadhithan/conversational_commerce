@@ -5,10 +5,22 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, StrictBool
 
-from app.product_search import ProductFilters
+from app.search_models import ProductFilters
 
 FAMILIES = {
-    "skin_care": ("beauty", ["moisturi", "cleanser", "serum", "lotion", "sunscreen", "skin care", "skincare", "face cream"]),
+    "skin_care": (
+        "beauty",
+        [
+            "moisturi",
+            "cleanser",
+            "serum",
+            "lotion",
+            "sunscreen",
+            "skin care",
+            "skincare",
+            "face cream",
+        ],
+    ),
     "hair_care": ("beauty", ["shampoo", "conditioner", "hair oil", "hair care"]),
     "makeup": ("beauty", ["lipstick", "makeup", "mascara", "foundation", "eyeliner", "lip gloss"]),
     "fragrance": ("beauty", ["perfume", "fragrance spray", "cologne"]),
@@ -17,19 +29,64 @@ FAMILIES = {
     "beauty_tools": ("beauty", ["makeup brush", "beauty tool", "nail clipper"]),
     "personal_care": ("beauty", ["deodorant", "body wash", "soap", "personal care"]),
     "footwear": ("fashion", ["shoe", "sneaker", "boot", "sandal", "slipper", "footwear"]),
-    "apparel": ("fashion", ["shirt", "dress", "jeans", "trouser", "jacket", "blouse", "clothing", "apparel", "pants"]),
+    "apparel": (
+        "fashion",
+        ["shirt", "dress", "jeans", "trouser", "jacket", "blouse", "clothing", "apparel", "pants"],
+    ),
     "bags": ("fashion", ["handbag", "crossbody", "bag", "purse", "backpack", "wallet"]),
     "jewelry": ("fashion", ["necklace", "earring", "bracelet", "jewelry", "jewellery", "ring"]),
     "watches": ("fashion", ["watch"]),
     "accessories": ("fashion", ["scarf", "belt", "hat", "sunglasses", "accessor"]),
 }
-ATTRIBUTES = ["color", "size", "material", "department", "age_range", "skin_type", "hair_type",
-              "ingredients", "active_ingredients", "benefits", "material_type_free", "scent", "item_form", "unit_count", "fragrance_free", "product_type", "volume", "style"]
-FieldName = Literal["query", "need", "recipient", "domain", "family", "brand", "min_price", "max_price",
-    "unsupported", "attribute.color", "attribute.size", "attribute.material", "attribute.department", "attribute.age_range",
-    "attribute.skin_type", "attribute.hair_type", "attribute.ingredients", "attribute.active_ingredients",
-    "attribute.benefits", "attribute.material_type_free", "attribute.scent", "attribute.item_form", "attribute.unit_count", "attribute.fragrance_free",
-    "attribute.product_type", "attribute.volume", "attribute.style"]
+ATTRIBUTES = [
+    "color",
+    "size",
+    "material",
+    "department",
+    "age_range",
+    "skin_type",
+    "hair_type",
+    "ingredients",
+    "active_ingredients",
+    "benefits",
+    "material_type_free",
+    "scent",
+    "item_form",
+    "unit_count",
+    "fragrance_free",
+    "product_type",
+    "volume",
+    "style",
+]
+FieldName = Literal[
+    "query",
+    "need",
+    "recipient",
+    "domain",
+    "family",
+    "brand",
+    "min_price",
+    "max_price",
+    "unsupported",
+    "attribute.color",
+    "attribute.size",
+    "attribute.material",
+    "attribute.department",
+    "attribute.age_range",
+    "attribute.skin_type",
+    "attribute.hair_type",
+    "attribute.ingredients",
+    "attribute.active_ingredients",
+    "attribute.benefits",
+    "attribute.material_type_free",
+    "attribute.scent",
+    "attribute.item_form",
+    "attribute.unit_count",
+    "attribute.fragrance_free",
+    "attribute.product_type",
+    "attribute.volume",
+    "attribute.style",
+]
 
 
 class Change(BaseModel):
@@ -41,6 +98,7 @@ class Change(BaseModel):
 
 class TaskRequest(BaseModel):
     """One verbatim, independently scoped part of a multi-product message."""
+
     model_config = ConfigDict(extra="forbid")
     evidence: str = Field(min_length=1, max_length=1000)
     changes: list[Change] = Field(default_factory=list, max_length=20)
@@ -48,16 +106,34 @@ class TaskRequest(BaseModel):
 
 class IntentPlan(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    intent: Literal["search", "refine", "more", "cheaper", "different_brand", "details", "compare",
-                    "similar", "clarify", "new_task", "switch_task", "reset", "preferences", "smalltalk"]
+    intent: Literal[
+        "search",
+        "refine",
+        "more",
+        "cheaper",
+        "different_brand",
+        "details",
+        "compare",
+        "similar",
+        "clarify",
+        "new_task",
+        "switch_task",
+        "reset",
+        "preferences",
+        "smalltalk",
+    ]
     evidence: str = Field(min_length=1, max_length=500)
-    recommendation_requested: StrictBool | None = Field(default=None,
-        description="True when the user wants product suggestions now, based on the latest message and saved conversation context; false for discussion, deferral, or refusal. Null is for legacy plans only.")
+    recommendation_requested: StrictBool | None = Field(
+        default=None,
+        description="True when the user wants product suggestions now, based on the latest message and saved conversation context; false for discussion, deferral, or refusal. Null is for legacy plans only.",
+    )
     changes: list[Change] = Field(default_factory=list, max_length=20)
     requests: list[TaskRequest] = Field(default_factory=list, max_length=5)
     positions: list[int] = Field(default_factory=list, max_length=5)
     task_id: int | None = Field(default=None, ge=1, le=5)
-    question_kind: Literal["product_type", "skin_profile", "recipient", "reference", "multiple", "general"] = "product_type"
+    question_kind: Literal[
+        "product_type", "skin_profile", "recipient", "reference", "multiple", "general"
+    ] = "product_type"
 
 
 class Concern(BaseModel):
@@ -156,8 +232,13 @@ If asked to remove a constraint use a null change with the explicit removal quot
 
 def preference_view(state):
     value = state.model_dump(mode="json", exclude={"tasks"})
-    value["tasks"] = [dict(task.model_dump(mode="json", exclude={"shown", "last_search", "seen_ids"}),
-                           seen_count=len(task.seen_ids)) for task in state.tasks]
+    value["tasks"] = [
+        dict(
+            task.model_dump(mode="json", exclude={"shown", "last_search", "seen_ids"}),
+            seen_count=len(task.seen_ids),
+        )
+        for task in state.tasks
+    ]
     return value
 
 
@@ -166,51 +247,165 @@ def planner_context(state, message):
     for task in state.tasks:
         item = {"id": task.id, "query": task.query, "need": task.need, "recipient": task.recipient}
         if task.id == state.active_task_id:
-            item.update(filters=task.filters.model_dump(mode="json"), unsupported=task.unsupported,
-                        last_products=[{"position": i + 1, "title": row["title"][:160], "brand": row.get("brand")}
-                                       for i, row in enumerate(task.shown)])
+            item.update(
+                filters=task.filters.model_dump(mode="json"),
+                unsupported=task.unsupported,
+                last_products=[
+                    {"position": i + 1, "title": row["title"][:160], "brand": row.get("brand")}
+                    for i, row in enumerate(task.shown)
+                ],
+            )
         tasks.append(item)
-    return json.dumps({"active_task_id": state.active_task_id, "tasks": tasks,
-        "pending_question": state.pending_question, "pending_kind": state.pending_kind,
-        "displayed_task_ids": state.displayed_task_ids,
-        "families": list(FAMILIES), "latest_message": message}, ensure_ascii=False)
+    return json.dumps(
+        {
+            "active_task_id": state.active_task_id,
+            "tasks": tasks,
+            "pending_question": state.pending_question,
+            "pending_kind": state.pending_kind,
+            "displayed_task_ids": state.displayed_task_ids,
+            "families": list(FAMILIES),
+            "latest_message": message,
+        },
+        ensure_ascii=False,
+    )
 
 
 def planner_examples():
-    state = ShoppingState(tasks=[ShoppingTask(id=1, query="moisturizer", need="dry skin",
-        filters=ProductFilters(domain="beauty", family="skin_care", max_price="29.99"))], active_task_id=1)
-    discovery = ShoppingState(tasks=[ShoppingTask(id=1, need="lightens my face; kess chemincal")], active_task_id=1,
-        pending_kind="preference_detail", pending_question="Which ingredient do you want to avoid? You can also browse related listings.")
+    state = ShoppingState(
+        tasks=[
+            ShoppingTask(
+                id=1,
+                query="moisturizer",
+                need="dry skin",
+                filters=ProductFilters(domain="beauty", family="skin_care", max_price="29.99"),
+            )
+        ],
+        active_task_id=1,
+    )
+    discovery = ShoppingState(
+        tasks=[ShoppingTask(id=1, need="lightens my face; kess chemincal")],
+        active_task_id=1,
+        pending_kind="preference_detail",
+        pending_question="Which ingredient do you want to avoid? You can also browse related listings.",
+    )
     examples = [
-        (ShoppingState(), "I have dry skin", {"intent": "clarify", "evidence": "I have dry skin",
-            "changes": [{"field": "need", "value": "dry skin", "evidence": "dry skin"}], "question_kind": "product_type"}),
-        (ShoppingState(), "A moisturizer under $30", {"intent": "search", "evidence": "A moisturizer under $30",
-            "changes": [{"field": "query", "value": "moisturizer", "evidence": "moisturizer"},
-                        {"field": "max_price", "value": "30", "evidence": "under $30"}]}),
-        (state, "Under $20 instead", {"intent": "refine", "evidence": "Under $20 instead",
-            "changes": [{"field": "max_price", "value": "20", "evidence": "Under $20"}]}),
-        (state, "Now I also need a shirt", {"intent": "new_task", "evidence": "Now I also need a shirt",
-            "changes": [{"field": "query", "value": "shirt", "evidence": "shirt"}]}),
-        (ShoppingState(), "Something to brighten my face and reduce pimples", {"intent": "clarify",
-            "evidence": "Something to brighten my face and reduce pimples", "question_kind": "skin_profile",
-            "changes": [{"field": "need", "value": "brighten my face", "evidence": "brighten my face"},
-                        {"field": "need", "value": "reduce pimples", "evidence": "reduce pimples"}]}),
-        (state, "something that is kess chemincal", {"intent": "refine", "evidence": "something that is kess chemincal",
-            "changes": [{"field": "need", "value": "kess chemincal", "evidence": "kess chemincal"}]}),
-        (ShoppingState(), "shampoo under $15 and moisturizer under $25", {"intent": "search",
-            "evidence": "shampoo under $15 and moisturizer under $25", "changes": [], "requests": [
-                {"evidence": "shampoo under $15", "changes": [{"field": "query", "value": "shampoo", "evidence": "shampoo"}]},
-                {"evidence": "moisturizer under $25", "changes": [{"field": "query", "value": "moisturizer", "evidence": "moisturizer"}]}]}),
-        (discovery, "give me soem products with the above conditions", {"intent": "search",
-            "evidence": "give me soem products with the above conditions", "recommendation_requested": True, "changes": []}),
-        (discovery, "Don't suggest anything yet; what do you mean by fragrance-free?", {"intent": "clarify",
-            "evidence": "Don't suggest anything yet; what do you mean by fragrance-free?", "recommendation_requested": False,
-            "question_kind": "general", "changes": []}),
+        (
+            ShoppingState(),
+            "I have dry skin",
+            {
+                "intent": "clarify",
+                "evidence": "I have dry skin",
+                "changes": [{"field": "need", "value": "dry skin", "evidence": "dry skin"}],
+                "question_kind": "product_type",
+            },
+        ),
+        (
+            ShoppingState(),
+            "A moisturizer under $30",
+            {
+                "intent": "search",
+                "evidence": "A moisturizer under $30",
+                "changes": [
+                    {"field": "query", "value": "moisturizer", "evidence": "moisturizer"},
+                    {"field": "max_price", "value": "30", "evidence": "under $30"},
+                ],
+            },
+        ),
+        (
+            state,
+            "Under $20 instead",
+            {
+                "intent": "refine",
+                "evidence": "Under $20 instead",
+                "changes": [{"field": "max_price", "value": "20", "evidence": "Under $20"}],
+            },
+        ),
+        (
+            state,
+            "Now I also need a shirt",
+            {
+                "intent": "new_task",
+                "evidence": "Now I also need a shirt",
+                "changes": [{"field": "query", "value": "shirt", "evidence": "shirt"}],
+            },
+        ),
+        (
+            ShoppingState(),
+            "Something to brighten my face and reduce pimples",
+            {
+                "intent": "clarify",
+                "evidence": "Something to brighten my face and reduce pimples",
+                "question_kind": "skin_profile",
+                "changes": [
+                    {"field": "need", "value": "brighten my face", "evidence": "brighten my face"},
+                    {"field": "need", "value": "reduce pimples", "evidence": "reduce pimples"},
+                ],
+            },
+        ),
+        (
+            state,
+            "something that is kess chemincal",
+            {
+                "intent": "refine",
+                "evidence": "something that is kess chemincal",
+                "changes": [
+                    {"field": "need", "value": "kess chemincal", "evidence": "kess chemincal"}
+                ],
+            },
+        ),
+        (
+            ShoppingState(),
+            "shampoo under $15 and moisturizer under $25",
+            {
+                "intent": "search",
+                "evidence": "shampoo under $15 and moisturizer under $25",
+                "changes": [],
+                "requests": [
+                    {
+                        "evidence": "shampoo under $15",
+                        "changes": [{"field": "query", "value": "shampoo", "evidence": "shampoo"}],
+                    },
+                    {
+                        "evidence": "moisturizer under $25",
+                        "changes": [
+                            {"field": "query", "value": "moisturizer", "evidence": "moisturizer"}
+                        ],
+                    },
+                ],
+            },
+        ),
+        (
+            discovery,
+            "give me soem products with the above conditions",
+            {
+                "intent": "search",
+                "evidence": "give me soem products with the above conditions",
+                "recommendation_requested": True,
+                "changes": [],
+            },
+        ),
+        (
+            discovery,
+            "Don't suggest anything yet; what do you mean by fragrance-free?",
+            {
+                "intent": "clarify",
+                "evidence": "Don't suggest anything yet; what do you mean by fragrance-free?",
+                "recommendation_requested": False,
+                "question_kind": "general",
+                "changes": [],
+            },
+        ),
     ]
     messages = []
     for saved, message, answer in examples:
-        answer.setdefault("recommendation_requested", answer["intent"] in {"search", "new_task"}
-                          or message == "Under $20 instead")
-        messages.extend([{"role": "user", "content": planner_context(saved, message)},
-                         {"role": "assistant", "content": json.dumps(answer)}])
+        answer.setdefault(
+            "recommendation_requested",
+            answer["intent"] in {"search", "new_task"} or message == "Under $20 instead",
+        )
+        messages.extend(
+            [
+                {"role": "user", "content": planner_context(saved, message)},
+                {"role": "assistant", "content": json.dumps(answer)},
+            ]
+        )
     return messages

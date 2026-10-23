@@ -1,5 +1,9 @@
 # API operations
 
+Hosted model credentials, readiness limits, and provider selection are documented
+in [model providers](model_providers.md).
+
+
 The API supports local bearer identities, conversation ownership, durable retry
 keys, per-user rates, bounded model admission, metrics and active alerts. Run
 **one Uvicorn worker per conversation SQLite database**. An exclusive OS file

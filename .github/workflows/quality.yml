@@ -1,0 +1,59 @@
+name: Code quality
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.14"]
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: commerce_test
+          POSTGRES_PASSWORD: test_only_password
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U commerce_test -d postgres"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      CATALOG_TEST_ADMIN_URL: postgresql://commerce_test:test_only_password@localhost:5432/postgres
+      CATALOG_TEST_REDIS_URL: redis://localhost:6379/0
+      LLM_PROVIDER: ollama
+      EMBEDDING_PROVIDER: ollama
+      RERANK_PROVIDER: local
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+          cache-dependency-path: |
+            requirements.txt
+            requirements-dev.txt
+      - name: Install development dependencies
+        run: python -m pip install -r requirements-dev.txt
+      - name: Lint
+        run: python -m ruff check app scripts tests
+      - name: Check formatting
+        run: python -m ruff format --check app scripts tests
+      - name: Test with isolated PostgreSQL and Redis data
+        run: python -m pytest -q

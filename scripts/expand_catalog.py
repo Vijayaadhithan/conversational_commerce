@@ -1,10 +1,11 @@
 """Expand from the already downloaded normalized catalog, retaining the original sample."""
+
 import argparse
 import json
-from pathlib import Path
 import resource
 import sys
 import time
+from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from app.catalog_sampling import expand_sample
@@ -17,6 +18,10 @@ if __name__ == "__main__":
     args = parser.parse_args()
     started = time.perf_counter()
     result = expand_sample(args.source_dir, args.output_dir, args.size)
-    result.update(seconds=time.perf_counter() - started, peak_rss_bytes=resource.getrusage(resource.RUSAGE_SELF).ru_maxrss * (1 if sys.platform == "darwin" else 1024))
+    result.update(
+        seconds=time.perf_counter() - started,
+        peak_rss_bytes=resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
+        * (1 if sys.platform == "darwin" else 1024),
+    )
     Path(args.output_dir, "execution_report.json").write_text(json.dumps(result, indent=2))
     print(json.dumps(result, indent=2))

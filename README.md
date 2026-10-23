@@ -1,5 +1,9 @@
 # Conversational Commerce Backend
 
+For Google AI Studio, GroqCloud, OpenRouter, and Voyage API options, see
+[model provider configuration](docs/model_providers.md) and `.env.production.example`.
+
+
 A local FastAPI backend for persistent conversations with Ollama, a local
 1.54B-parameter reranker, and a versioned PostgreSQL fashion/beauty catalog.
 

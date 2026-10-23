@@ -2,16 +2,16 @@
 
 import json
 import os
-from pathlib import Path
 import shutil
 import subprocess
 import sys
+from pathlib import Path
 
 import pytest
 
 ROOT = Path(__file__).resolve().parent.parent
 
-FAKE_TOOL = r'''
+FAKE_TOOL = r"""
 import json, os, pathlib, shutil, sys
 name = pathlib.Path(sys.argv[0]).name
 args = sys.argv[1:]
@@ -83,7 +83,7 @@ elif name in ("service", "systemctl"):
     (root / ("redis.ready" if "redis-server" in args else "pg.ready")).touch()
 elif name not in ("cc", "apt-get"):
     sys.exit("Unexpected command: " + name)
-'''
+"""
 
 
 @pytest.fixture
@@ -91,7 +91,12 @@ def installer(tmp_path):
     checkout = tmp_path / "checkout with spaces"
     (checkout / "scripts").mkdir(parents=True)
     shutil.copyfile(ROOT / "scripts/setup.sh", checkout / "scripts/setup.sh")
-    for filename in (".env.example", "requirements.txt", "requirements-dev.txt", "requirements-reranker.txt"):
+    for filename in (
+        ".env.example",
+        "requirements.txt",
+        "requirements-dev.txt",
+        "requirements-reranker.txt",
+    ):
         shutil.copyfile(ROOT / filename, checkout / filename)
     binaries = tmp_path / "bin"
     binaries.mkdir()
@@ -108,18 +113,44 @@ def installer(tmp_path):
         target.write_text(f"#!{sys.executable}\n" + FAKE_TOOL)
         target.chmod(0o755)
 
-    for name in ("fake-python", "uname", "id", "brew", "redis-cli", "redis-server", "git", "make", "cc", "xcrun", "apt-get", "service", "systemctl"):
+    for name in (
+        "fake-python",
+        "uname",
+        "id",
+        "brew",
+        "redis-cli",
+        "redis-server",
+        "git",
+        "make",
+        "cc",
+        "xcrun",
+        "apt-get",
+        "service",
+        "systemctl",
+    ):
         tool(binaries / name)
     for name in ("pg_config", "pg_ctl", "pg_isready"):
         tool(pg / "bin" / name)
-    env = dict(os.environ, TEST_SETUP_DIR=str(tmp_path), TEST_SETUP_OS="Darwin",
-               PYTHON_BIN=str(binaries / "fake-python"), PG_CONFIG=str(pg / "bin/pg_config"),
-               PATH=str(binaries))
+    env = dict(
+        os.environ,
+        TEST_SETUP_DIR=str(tmp_path),
+        TEST_SETUP_OS="Darwin",
+        PYTHON_BIN=str(binaries / "fake-python"),
+        PG_CONFIG=str(pg / "bin/pg_config"),
+        PATH=str(binaries),
+    )
 
     def run(*args, changes=None):
-        result = subprocess.run(["bash", str(checkout / "scripts/setup.sh"), *args],
-                                cwd=tmp_path, env={**env, **(changes or {})}, capture_output=True, text=True)
-        events = [json.loads(line) for line in (tmp_path / "commands.jsonl").read_text().splitlines()]
+        result = subprocess.run(
+            ["bash", str(checkout / "scripts/setup.sh"), *args],
+            cwd=tmp_path,
+            env={**env, **(changes or {})},
+            capture_output=True,
+            text=True,
+        )
+        events = [
+            json.loads(line) for line in (tmp_path / "commands.jsonl").read_text().splitlines()
+        ]
         return result, events
 
     return checkout, tmp_path, pg, run
@@ -167,7 +198,7 @@ def test_services_build_for_existing_postgres_and_reuse_on_second_run(installer,
     assert not any(event[0] in ("brew", "apt-get") and "install" in event for event in first_events)
     result, all_events = run("--with-services", changes={"TEST_SETUP_OS": platform})
     assert result.returncode == 0, result.stderr
-    new_events = all_events[len(first_events):]
+    new_events = all_events[len(first_events) :]
     assert not any(event[0] in ("git", "make", "service", "systemctl") for event in new_events)
     assert not any(event[0] == "brew" and "start" in event for event in new_events)
 
@@ -223,7 +254,11 @@ def test_broken_existing_venv_is_not_overwritten(installer):
 
 def test_help_and_unknown_flags_have_no_changes(tmp_path):
     for args, expected in [(["--help"], 0), (["--download-models"], 1)]:
-        result = subprocess.run(["bash", str(ROOT / "scripts/setup.sh"), *args],
-                                cwd=tmp_path, capture_output=True, text=True)
+        result = subprocess.run(
+            ["bash", str(ROOT / "scripts/setup.sh"), *args],
+            cwd=tmp_path,
+            capture_output=True,
+            text=True,
+        )
         assert result.returncode == expected
         assert "Usage:" in result.stdout + result.stderr

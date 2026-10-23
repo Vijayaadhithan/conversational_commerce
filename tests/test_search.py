@@ -4,13 +4,19 @@ import json
 
 import httpx
 import pytest
+from test_catalog import make_source, product
 
 from app.catalog import CatalogError, connect_database, import_catalog, validated_source
 from app.embedding_text import DOCUMENT_BYTES, document_text
 from app.embeddings import DIMENSIONS, EmbeddingSettings, OllamaEmbedder, validate_vectors
+from app.product_search import (
+    ProductFilters,
+    ProductSearchRequest,
+    pin_search_build,
+    reciprocal_rank_fusion,
+    search_catalog,
+)
 from app.search_index import build_index, verify_build
-from app.product_search import ProductFilters, ProductSearchRequest, pin_search_build, reciprocal_rank_fusion, search_catalog
-from test_catalog import make_source, pg, product, scratch_database
 
 
 class FakeEmbedder:
@@ -43,19 +49,26 @@ def test_document_contract_bounds_unicode_and_preserves_original():
     assert "fragrance free" not in result["input"]
 
 
-@pytest.mark.parametrize("vectors", [None, [], [[0.0] * 768], [[1.0] * 767], [[float('nan')] * 768], [[True] * 768]])
+@pytest.mark.parametrize(
+    "vectors", [None, [], [[0.0] * 768], [[1.0] * 767], [[float("nan")] * 768], [[True] * 768]]
+)
 def test_invalid_vectors_rejected(vectors):
-    with pytest.raises(CatalogError): validate_vectors(vectors, 1)
+    with pytest.raises(CatalogError):
+        validate_vectors(vectors, 1)
 
 
 def test_embed_protocol_checks_digest_and_disables_silent_truncation():
     seen = []
+
     def handler(request):
         if request.url.path == "/api/tags":
-            return httpx.Response(200, json={"models": [{"name": "embeddinggemma:latest", "digest": "a" * 64}]})
+            return httpx.Response(
+                200, json={"models": [{"name": "embeddinggemma:latest", "digest": "a" * 64}]}
+            )
         body = json.loads(request.content)
         seen.append(body)
         return httpx.Response(200, json={"embeddings": [[2.0] + [0.0] * 767]})
+
     with OllamaEmbedder(EmbeddingSettings(), httpx.MockTransport(handler)) as model:
         assert model.embed(["test"])[0][0] == 1.0
         with pytest.raises(CatalogError, match="digest changed"):
@@ -65,9 +78,13 @@ def test_embed_protocol_checks_digest_and_disables_silent_truncation():
 
 def test_build_resumes_failed_batch_and_reuses_ready_generation(pg, scratch_database, tmp_path):
     make_source(tmp_path, [product(), product("B000000002")])
-    with validated_source(tmp_path) as source: import_catalog(pg, source)
+    with validated_source(tmp_path) as source:
+        import_catalog(pg, source)
     pg.commit()
-    quiet = lambda *args, **kwargs: None
+
+    def quiet(*args, **kwargs):
+        pass
+
     with connect_database(scratch_database, autocommit=True) as db:
         with pytest.raises(CatalogError, match="Injected"):
             build_index(db, FakeEmbedder(fail_after=1), quiet)
@@ -78,16 +95,20 @@ def test_build_resumes_failed_batch_and_reuses_ready_generation(pg, scratch_data
         assert result["products"] == 2 and model.calls == 1
         model = FakeEmbedder(fail_after=0)
         assert build_index(db, model, quiet)["status"] == "reused"
-        with db.transaction(): assert verify_build(db, result["build_id"])["products"] == 2
+        with db.transaction():
+            assert verify_build(db, result["build_id"])["products"] == 2
 
 
 def test_index_verification_detects_changed_catalog(pg, scratch_database, tmp_path):
     make_source(tmp_path)
-    with validated_source(tmp_path) as source: import_catalog(pg, source)
+    with validated_source(tmp_path) as source:
+        import_catalog(pg, source)
     pg.commit()
     with connect_database(scratch_database, autocommit=True) as db:
         build = build_index(db, FakeEmbedder(), lambda *args, **kwargs: None)
-        db.execute("UPDATE commerce.catalog_products SET document=jsonb_set(document,'{title}','\"Changed title\"')")
+        db.execute(
+            "UPDATE commerce.catalog_products SET document=jsonb_set(document,'{title}','\"Changed title\"')"
+        )
         with db.transaction(), pytest.raises(CatalogError, match="differs"):
             verify_build(db, build["build_id"])
 
@@ -98,7 +119,9 @@ def test_rank_fusion_combines_independent_ranks_deterministically():
     assert fused[0][1]["keyword_rank"] == 2 and fused[0][1]["vector_rank"] == 1
 
 
-def test_staged_enrichment_keeps_serving_build_until_both_snapshots_are_ready(pg, scratch_database, tmp_path):
+def test_staged_enrichment_keeps_serving_build_until_both_snapshots_are_ready(
+    pg, scratch_database, tmp_path
+):
     make_source(tmp_path, [product()])
     with validated_source(tmp_path) as source:
         original = import_catalog(pg, source)["import_id"]
@@ -106,7 +129,11 @@ def test_staged_enrichment_keeps_serving_build_until_both_snapshots_are_ready(pg
     with connect_database(scratch_database, autocommit=True) as db:
         old = build_index(db, FakeEmbedder(), lambda *a, **kw: None)
     enriched = product()
-    enriched["attributes"]["volume"] = {"value": "50 ml", "field": "/details/Item Volume", "status": "listing_claim"}
+    enriched["attributes"]["volume"] = {
+        "value": "50 ml",
+        "field": "/details/Item Volume",
+        "status": "listing_claim",
+    }
     enriched["content"]["features"] = ["Brightening lotion.", "For dry skin."]
     enriched["content_source_fields"]["features"] = ["/features/0", "/features/1"]
     make_source(tmp_path, [enriched])
@@ -115,13 +142,22 @@ def test_staged_enrichment_keeps_serving_build_until_both_snapshots_are_ready(pg
     pg.commit()
     with connect_database(scratch_database, autocommit=True) as db:
         with pytest.raises(CatalogError, match="Injected"):
-            build_index(db, FakeEmbedder(fail_after=0), lambda *a, **kw: None, catalog_import_id=staged)
+            build_index(
+                db, FakeEmbedder(fail_after=0), lambda *a, **kw: None, catalog_import_id=staged
+            )
         assert pin_search_build(db)["import_id"] == original
         assert pin_search_build(db)["build_id"] == old["build_id"]
         build_index(db, FakeEmbedder(), lambda *a, **kw: None, catalog_import_id=staged)
         assert pin_search_build(db)["import_id"] == staged
-        response = search_catalog(db, ProductSearchRequest(query="moisturizer", concerns=["dry skin", "brighten my face"],
-            filters={"attributes": {"volume": "50 ml"}}), FakeEmbedder())
+        response = search_catalog(
+            db,
+            ProductSearchRequest(
+                query="moisturizer",
+                concerns=["dry skin", "brighten my face"],
+                filters={"attributes": {"volume": "50 ml"}},
+            ),
+            FakeEmbedder(),
+        )
         row = response["results"][0]
         assert len(row["concern_evidence"]) == 2
         assert all(item["status"] == "listing_mention" for item in row["concern_evidence"])
@@ -129,12 +165,15 @@ def test_staged_enrichment_keeps_serving_build_until_both_snapshots_are_ready(pg
         assert row["variant_metadata"]["purchasable_variants"] is None
 
 
-def test_brand_exclusions_are_sql_constraints_and_unknown_brands_do_not_match(pg, scratch_database, tmp_path):
+def test_brand_exclusions_are_sql_constraints_and_unknown_brands_do_not_match(
+    pg, scratch_database, tmp_path
+):
     rows = [product(), product("B000000002"), product("B000000003")]
     rows[1]["brand"] = {"value": "Acme", "field": "/details/Brand", "status": "listing_claim"}
     rows[2]["brand"] = {"value": "Other", "field": "/details/Brand", "status": "listing_claim"}
     make_source(tmp_path, rows)
-    with validated_source(tmp_path) as source: import_catalog(pg, source)
+    with validated_source(tmp_path) as source:
+        import_catalog(pg, source)
     pg.commit()
     with connect_database(scratch_database, autocommit=True) as db:
         build_index(db, FakeEmbedder(), lambda *args, **kwargs: None)
@@ -144,45 +183,68 @@ def test_brand_exclusions_are_sql_constraints_and_unknown_brands_do_not_match(pg
     assert [row["product_id"] for row in result["results"]] == ["amazon:B000000003"]
 
 
-def test_filtered_search_excludes_unknowns_wrong_categories_and_over_budget(pg, scratch_database, tmp_path):
-    rows = [product(), product("B000000002"), product("B000000003", "100.00"), product("B000000004", "8.00")]
+def test_filtered_search_excludes_unknowns_wrong_categories_and_over_budget(
+    pg, scratch_database, tmp_path
+):
+    rows = [
+        product(),
+        product("B000000002"),
+        product("B000000003", "100.00"),
+        product("B000000004", "8.00"),
+    ]
     rows[1]["title"] = "Fragrance free moisturizer"
     rows[1]["brand"] = {"value": "O'Reilly", "field": "/details/Brand", "status": "listing_claim"}
     for row in rows[1:3]:
-        row["attributes"]["fragrance_free"] = {"value": True, "field": "/details/Scent", "status": "listing_claim"}
+        row["attributes"]["fragrance_free"] = {
+            "value": True,
+            "field": "/details/Scent",
+            "status": "listing_claim",
+        }
     rows[3]["title"] = "Cotton shirt"
     rows[3]["category"].update(domain="fashion", family="apparel")
     make_source(tmp_path, rows)
-    with validated_source(tmp_path) as source: import_catalog(pg, source)
+    with validated_source(tmp_path) as source:
+        import_catalog(pg, source)
     pg.commit()
     with connect_database(scratch_database, autocommit=True) as db:
         build_index(db, FakeEmbedder(), lambda *args, **kwargs: None)
     filters = {"domain": "beauty", "max_price": "30.00", "attributes": {"fragrance_free": True}}
-    result = search_catalog(pg, ProductSearchRequest(query="moisturizer", filters=filters), FakeEmbedder())
+    result = search_catalog(
+        pg, ProductSearchRequest(query="moisturizer", filters=filters), FakeEmbedder()
+    )
     assert [row["product_id"] for row in result["results"]] == ["amazon:B000000002"]
     assert result["eligible_products"] == 1
     assert result["results"][0]["listing_evidence"][0]["field"] == "/title"
     filters["exclude_product_ids"] = ["amazon:B000000002"]
     model = FakeEmbedder(fail_after=0)
-    assert search_catalog(pg, ProductSearchRequest(query="moisturizer", filters=filters), model)["results"] == []
+    assert (
+        search_catalog(pg, ProductSearchRequest(query="moisturizer", filters=filters), model)[
+            "results"
+        ]
+        == []
+    )
     assert model.calls == 0
     result = search_catalog(pg, ProductSearchRequest(query="cotton shirt"), FakeEmbedder())
     assert result["results"][0]["product_id"] == "amazon:B000000004"
     for brand, expected in [("o'reilly", 1), ("' OR true --", 0)]:
-        result = search_catalog(pg, ProductSearchRequest(query="moisturizer", filters={"brand": brand}), FakeEmbedder())
+        result = search_catalog(
+            pg, ProductSearchRequest(query="moisturizer", filters={"brand": brand}), FakeEmbedder()
+        )
         assert result["eligible_products"] == expected
 
 
 def test_catalog_switch_requires_a_matching_complete_search_build(pg, scratch_database, tmp_path):
     make_source(tmp_path)
-    with validated_source(tmp_path) as source: import_catalog(pg, source)
+    with validated_source(tmp_path) as source:
+        import_catalog(pg, source)
     pg.commit()
     with connect_database(scratch_database, autocommit=True) as db:
         old = build_index(db, FakeEmbedder(), lambda *args, **kwargs: None)
     changed = product("B000000002")
     changed["title"] = "A completely different listing"
     make_source(tmp_path, [changed])
-    with validated_source(tmp_path) as source: import_catalog(pg, source)
+    with validated_source(tmp_path) as source:
+        import_catalog(pg, source)
     pg.commit()
     with pytest.raises(CatalogError, match="No complete search"):
         pin_search_build(pg)
@@ -190,87 +252,159 @@ def test_catalog_switch_requires_a_matching_complete_search_build(pg, scratch_da
     with connect_database(scratch_database, autocommit=True) as db:
         with pytest.raises(CatalogError):
             build_index(db, FakeEmbedder(fail_after=0), lambda *args, **kwargs: None)
-        assert db.execute("SELECT build_id FROM commerce.search_active").fetchone() == (old["build_id"],)
+        assert db.execute("SELECT build_id FROM commerce.search_active").fetchone() == (
+            old["build_id"],
+        )
 
 
-@pytest.mark.parametrize("filters", [
-    {"min_price": "30", "max_price": "10"}, {"max_price": "NaN"},
-    {"attributes": {"fragrance_free": "true"}}, {"attributes": {"skin_type": True}},
-    {"attributes": {"unsupported": "value"}}, {"brand": "\x00"}, {"attributes": {"color": "\x00"}},
-])
+@pytest.mark.parametrize(
+    "filters",
+    [
+        {"min_price": "30", "max_price": "10"},
+        {"max_price": "NaN"},
+        {"attributes": {"fragrance_free": "true"}},
+        {"attributes": {"skin_type": True}},
+        {"attributes": {"unsupported": "value"}},
+        {"brand": "\x00"},
+        {"attributes": {"color": "\x00"}},
+    ],
+)
 def test_bad_filters_rejected(filters):
     from pydantic import ValidationError
-    with pytest.raises(ValidationError): ProductFilters(**filters)
+
+    with pytest.raises(ValidationError):
+        ProductFilters(**filters)
 
 
-def test_product_identity_gates_both_retrieval_paths_and_department_aliases(pg, scratch_database, tmp_path):
-    from app.product_search import filter_sql, product_goal_sql
-    titles = ["Face moisturizer for dry skin", "Body and hand lotion", "Curly shampoo", "Crochet braid",
-              "Women's running shoes", "Men's running shoes"]
+def test_product_identity_gates_both_retrieval_paths_and_department_aliases(
+    pg, scratch_database, tmp_path
+):
+    titles = [
+        "Face moisturizer for dry skin",
+        "Body and hand lotion",
+        "Curly shampoo",
+        "Crochet braid",
+        "Women's running shoes",
+        "Men's running shoes",
+    ]
     rows = [product(f"B{i:09d}") for i in range(1, 7)]
     for row, title in zip(rows, titles):
         row["title"] = title
-    rows[4]["attributes"]["department"] = {"value": "Women's", "field": "/details/Department", "status": "listing_claim"}
-    rows[5]["attributes"]["department"] = {"value": "Mens", "field": "/details/Department", "status": "listing_claim"}
+    rows[4]["attributes"]["department"] = {
+        "value": "Women's",
+        "field": "/details/Department",
+        "status": "listing_claim",
+    }
+    rows[5]["attributes"]["department"] = {
+        "value": "Mens",
+        "field": "/details/Department",
+        "status": "listing_claim",
+    }
     make_source(tmp_path, rows)
-    with validated_source(tmp_path) as source: import_catalog(pg, source)
+    with validated_source(tmp_path) as source:
+        import_catalog(pg, source)
     pg.commit()
     with connect_database(scratch_database, autocommit=True) as db:
         build_index(db, FakeEmbedder(), lambda *a, **kw: None)
-        for goal, expected in [("face moisturizer", "amazon:B000000001"), ("shampoo", "amazon:B000000003")]:
-            result = search_catalog(db, ProductSearchRequest(query=goal, product_goal=goal), FakeEmbedder())
+        for goal, expected in [
+            ("face moisturizer", "amazon:B000000001"),
+            ("shampoo", "amazon:B000000003"),
+        ]:
+            result = search_catalog(
+                db, ProductSearchRequest(query=goal, product_goal=goal), FakeEmbedder()
+            )
             assert result["eligible_products"] == 1
             assert [row["product_id"] for row in result["results"]] == [expected]
-        result = search_catalog(db, ProductSearchRequest(query="shoes", product_goal="shoes", filters={"attributes": {"department": "womens"}}), FakeEmbedder())
+        result = search_catalog(
+            db,
+            ProductSearchRequest(
+                query="shoes",
+                product_goal="shoes",
+                filters={"attributes": {"department": "womens"}},
+            ),
+            FakeEmbedder(),
+        )
         assert [row["product_id"] for row in result["results"]] == ["amazon:B000000005"]
 
 
-@pytest.mark.parametrize("goal,title,content,expected", [
-    ("red lipstick", "Empty Lipstick Tubes", "", False),
-    ("lipstick", "Lipstick Brooch Lapel Pin", "", False),
-    ("lipstick", "Red lipstick", "", True),
-    ("red lipstick", "Pink lipstick", "Find your perfect red lipstick among our other shades", False),
-    ("silver necklace", "Alloy Necklace", "silver necklace gold necklace cheap necklace", False),
-    ("handbag", "Handbag Organizer Insert", "", False),
-    ("handbag", "Cosmetic Toiletry Handbag", "", False),
-    ("handbag", "Leather Shoulder Handbag", "", True),
-    ("razor blades", "Single Edge Razor Blades", "Fits scrapers for removing paint", False),
-    ("razor blades", "Double Edge Razor Blades", "For shaving", True),
-    ("razor blades", "Single Edge Razor Blades", "For scraping, trimming and cutting", False),
-    ("razor blades", "Single Edge Razor Blades", "", False),
-    ("razor blades", "40 Box Razor Blades Disposable Shavers", "", False),
-    ("razor blades", "Mens Shaver Replacement Blades", "", True),
-    ("running shoes", "Running Shoe Charm", "", False),
-    ("running shoes", "Winter Ankle Shoes Boots", "", False),
-    ("running shoes", "Women's Running Shoes", "", True),
-    ("running shoes", "Women's Running Shorts Black Tap Shoe", "", False),
-    ("running shoes", "Running Shoe Socks", "", False),
-    ("necklace", "Silver Necklace", "", True),
-    ("necklace", "Necklace Display Holder", "", False),
-    ("moisturizer", "Moisturizing Clay Mask", "", False),
-    ("shirt with pockets", "Cotton shirt", "No pockets", False),
-    ("shirt with pockets", "Cotton shirt", "Two chest pockets", True),
-])
+@pytest.mark.parametrize(
+    "goal,title,content,expected",
+    [
+        ("red lipstick", "Empty Lipstick Tubes", "", False),
+        ("lipstick", "Lipstick Brooch Lapel Pin", "", False),
+        ("lipstick", "Red lipstick", "", True),
+        (
+            "red lipstick",
+            "Pink lipstick",
+            "Find your perfect red lipstick among our other shades",
+            False,
+        ),
+        (
+            "silver necklace",
+            "Alloy Necklace",
+            "silver necklace gold necklace cheap necklace",
+            False,
+        ),
+        ("handbag", "Handbag Organizer Insert", "", False),
+        ("handbag", "Cosmetic Toiletry Handbag", "", False),
+        ("handbag", "Leather Shoulder Handbag", "", True),
+        ("razor blades", "Single Edge Razor Blades", "Fits scrapers for removing paint", False),
+        ("razor blades", "Double Edge Razor Blades", "For shaving", True),
+        ("razor blades", "Single Edge Razor Blades", "For scraping, trimming and cutting", False),
+        ("razor blades", "Single Edge Razor Blades", "", False),
+        ("razor blades", "40 Box Razor Blades Disposable Shavers", "", False),
+        ("razor blades", "Mens Shaver Replacement Blades", "", True),
+        ("running shoes", "Running Shoe Charm", "", False),
+        ("running shoes", "Winter Ankle Shoes Boots", "", False),
+        ("running shoes", "Women's Running Shoes", "", True),
+        ("running shoes", "Women's Running Shorts Black Tap Shoe", "", False),
+        ("running shoes", "Running Shoe Socks", "", False),
+        ("necklace", "Silver Necklace", "", True),
+        ("necklace", "Necklace Display Holder", "", False),
+        ("moisturizer", "Moisturizing Clay Mask", "", False),
+        ("shirt with pockets", "Cotton shirt", "No pockets", False),
+        ("shirt with pockets", "Cotton shirt", "Two chest pockets", True),
+    ],
+)
 def test_misleading_product_name_gate(pg, goal, title, content, expected):
-    from app.product_search import product_goal_sql
     from psycopg.types.json import Jsonb
+
+    from app.product_search import product_goal_sql
+
     suffix, values = product_goal_sql(goal)
     document = {"title": title, "content": {"features": [content], "description": []}}
-    result = pg.execute("SELECT count(*) FROM (SELECT %s::jsonb AS document, '{}'::jsonb AS attributes) p WHERE true" + suffix,
-                        [Jsonb(document), *values]).fetchone()[0]
+    result = pg.execute(
+        "SELECT count(*) FROM (SELECT %s::jsonb AS document, '{}'::jsonb AS attributes) p WHERE true"
+        + suffix,
+        [Jsonb(document), *values],
+    ).fetchone()[0]
     assert bool(result) == expected
 
 
 def test_material_conflicts_and_wrong_selected_color_cannot_satisfy_filters(pg):
-    from app.product_search import filter_sql, product_goal_sql
     from psycopg.types.json import Jsonb
+
+    from app.product_search import filter_sql, product_goal_sql
+
     suffix, params = filter_sql(ProductFilters(attributes={"material": "Cotton"}))
     document = {"quality": {"warnings": ["conflicting_material_composition"]}}
     attributes = {"material": {"value": "Cotton"}}
-    assert pg.execute("SELECT count(*) FROM (SELECT %s::jsonb AS document, %s::jsonb AS attributes) p WHERE true" + suffix,
-                      [Jsonb(document), Jsonb(attributes), *params]).fetchone()[0] == 0
+    assert (
+        pg.execute(
+            "SELECT count(*) FROM (SELECT %s::jsonb AS document, %s::jsonb AS attributes) p WHERE true"
+            + suffix,
+            [Jsonb(document), Jsonb(attributes), *params],
+        ).fetchone()[0]
+        == 0
+    )
     suffix, params = product_goal_sql("red lipstick")
     document = {"title": "Red and pink lipstick", "content": {"features": [], "description": []}}
     attributes = {"color": {"value": "Pink"}}
-    assert pg.execute("SELECT count(*) FROM (SELECT %s::jsonb AS document, %s::jsonb AS attributes) p WHERE true" + suffix,
-                      [Jsonb(document), Jsonb(attributes), *params]).fetchone()[0] == 0
+    assert (
+        pg.execute(
+            "SELECT count(*) FROM (SELECT %s::jsonb AS document, %s::jsonb AS attributes) p WHERE true"
+            + suffix,
+            [Jsonb(document), Jsonb(attributes), *params],
+        ).fetchone()[0]
+        == 0
+    )
