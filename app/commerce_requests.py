@@ -31,31 +31,21 @@ def split_product_requests(message):
 def multi_requests(plan, message):
     clauses = split_product_requests(message)
     if len(clauses) < 2:
-        if (
-            plan.requests
-            and not product_mentions(message)
-            and all(evidence_ok(request.evidence, message) for request in plan.requests)
-        ):
-            # Some planners wrap separate concerns in requests. Without a named
-            # product these are candidate changes to the current task, not new
-            # shopping tasks. They still pass all normal field/evidence checks.
-            changes = [
-                *plan.changes,
-                *(change for request in plan.requests for change in request.changes),
-            ]
-            if len(changes) > 20:
-                raise IntentError("Too many preference changes for one task")
-            plan.changes, plan.requests = changes, []
-            return []
         if plan.requests:
-            if len(plan.requests) != 1 or not evidence_ok(plan.requests[0].evidence, message):
+            if len(plan.requests) > 1 and len(product_mentions(message)) > 1:
                 raise IntentError("Multiple requests need separate explicit product clauses")
-            request = plan.requests[0]
-            if any(
-                not evidence_ok(change.evidence, request.evidence) for change in request.changes
-            ):
-                raise IntentError("Preference evidence belongs to a different product")
-            combined = [*plan.changes, *request.changes]
+            # A planner may wrap several concerns for one named product (or
+            # the current task) in requests. Flatten only unambiguous wrappers;
+            # the usual field/value checks still reject invented requirements.
+            combined = list(plan.changes)
+            for request in plan.requests:
+                if not evidence_ok(request.evidence, message):
+                    raise IntentError("Product request lacks current-message evidence")
+                if any(
+                    not evidence_ok(change.evidence, request.evidence) for change in request.changes
+                ):
+                    raise IntentError("Preference evidence belongs to a different product")
+                combined.extend(request.changes)
             plan.changes = list({(c.field, c.value, c.evidence): c for c in combined}.values())
             if len(plan.changes) > 20:
                 raise IntentError("Too many preference changes for one task")

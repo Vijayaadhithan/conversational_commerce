@@ -34,6 +34,26 @@ def fill_explicit_goal(plan, message):
 
 def direct_plan(message):
     text = normalized(message).rstrip(".!?")
+    # UI actions carry an explicit task suffix. Route only otherwise complete
+    # inspection/navigation commands; free-form requirements still use the planner.
+    scoped = re.fullmatch(r"(.+) (?:for|in) task ([1-5])", text)
+    if scoped:
+        proposal = direct_plan(scoped.group(1))
+        if (
+            proposal
+            and proposal.task_id is None
+            and proposal.intent
+            in {
+                "more",
+                "cheaper",
+                "different_brand",
+                "compare",
+                "details",
+            }
+        ):
+            proposal.evidence = message
+            proposal.task_id = int(scoped.group(2))
+            return proposal
     action = None
     if re.fullmatch(r"(?:please )?(?:start over|reset|forget my preferences|new search)", text):
         action = "reset"
@@ -80,6 +100,8 @@ def direct_plan(message):
         r"(?:show |tell me |give me )?(?:more )?(?:details|information)(?: about| on| for)? (?:the )?(?:first|second|third|fourth|fifth|[1-5])(?: one| product| option)?",
         text,
     ):
+        action = "details"
+    elif re.fullmatch(r"details about amazon:[a-z0-9]{10}", text):
         action = "details"
     return (
         IntentPlan(

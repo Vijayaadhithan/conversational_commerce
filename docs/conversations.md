@@ -178,6 +178,25 @@ See [API operations](operations.md) for the full retry and authentication contra
 - Replies are grounded templates with source fields; richer natural language
   answer generation, cart/checkout and live retailer feeds remain subsequent work.
 
+## Streamed browser responses
+
+The existing message POST endpoint accepts `Accept: text/event-stream`. JSON
+clients keep their existing response contract and use the same retry keys.
+Stream events are `status` (actual queue/planning/search progress), `delta`
+(validated reply text), `commerce` (product and preference metadata), and `done`
+(the committed response including its message ID). Mid-stream failures emit a
+sanitized `error` event with status and retry delay; clients must wait for `done`
+before considering a turn complete. Heartbeat comments keep idle streams open.
+
+The structured intent model does not generate a free-form answer token by token.
+Reply text and products are emitted after validation and atomic persistence.
+Disconnecting stops delivery while admitted work finishes and saves normally;
+repeating the same request key recovers that response without a duplicate turn.
+
+The Querix UI renders products and comparisons inside each assistant turn,
+retains earlier result sets, and offers follow-up actions on the current response.
+Its Stop waiting control closes delivery and leaves response recovery available.
+
 ## Validation
 
 ```bash
@@ -204,3 +223,105 @@ typo conversation, four natural browsing requests from the same saved context,
 two non-browsing turns, and restart with real local models and catalog data.
 It writes `data/search/recommendation_intent_report.json` using temporary
 conversation storage, without modifying existing sessions.
+
+## Four isolated storefronts
+
+Querix now has `/clothing`, `/beauty`, `/footwear`, and `/fashion`. The last route
+means **fashion accessories**, not all fashion products. `/demo/commerce` keeps
+the original mixed-category chat and fictional sample walkthrough. Section routes
+use the real catalog; they never fall back to mixed fictional sample products.
+
+| Route | Catalog families | Products audited 2026-10-24 |
+| --- | --- | ---: |
+| `/clothing` | apparel | 5,318 |
+| `/beauty` | skin_care, hair_care, makeup, fragrance, oral_care, shaving, beauty_tools, personal_care | 34,099 |
+| `/footwear` | footwear | 1,466 |
+| `/fashion` | bags, jewelry, watches, accessories | 9,117 |
+
+All 50,000 products in the currently serving catalog/index snapshot are mapped
+once, with zero unmapped products. These are catalog classifications, not a
+manual audit of every listing's category accuracy. Recheck the active snapshot:
+
+```bash
+.venv/bin/python scripts/audit_storefronts.py
+```
+
+Create a scoped conversation with `{"mode":"commerce","storefront_id":"beauty"}`.
+The optional scope is stored in an additive SQLite column. It is immutable for
+that conversation and reloaded from storage on every turn. Omitting it preserves
+the legacy behavior. `department` retains its original recipient meaning.
+
+Each section has its own signed browser cookie, conversation, pending retry,
+preferences, shown products, and task numbers. Cookie signatures bind the
+storefront to the conversation, including when several tabs are open. A new-chat
+reset deletes only that section. Cookies from the legacy demo remain separate.
+An older backend that ignores the new scope is refused by the section gateway;
+restart the backend before checking the new routes.
+
+`ProductFilters.storefront_id` intersects the family's allowlist and domain with
+all existing filters. Both lexical and vector candidates use the same eligible
+set; hydration, cached results, and final results are checked against the scope.
+The cache key includes the section and taxonomy code. Conversation search always
+injects the stored section; a model proposal cannot remove this boundary.
+
+Explicit cross-section products receive a visible handoff. Multi-section clauses
+receive separate links containing only each literal request. The destination
+restores its own history and prefills that request for review and sending; no
+source budget, concern, or shown-product reference is copied. The source tasks
+stay unchanged. Shared ambiguous budgets ask for allocation first. Semantic
+routing proposals can offer a section for an implicit request such as scalp care;
+ambiguous requests require clarification, not a forced product recommendation.
+
+A small reviewed search alias map handles forms such as `dandruf` → `dandruff`
+and `shampo` → `shampoo` in retrieval text only. Saved requirements and evidence
+retain the user's spelling. Search metadata records original and normalized
+queries. Hard attributes and unsupported requirements are never rewritten or
+silently relaxed. Section-specific prompts and clarification examples keep the
+conversation focused; they do not establish universal understanding of unusual
+language.
+
+### Local check
+
+Use two terminals, stopping an older instance yourself before restarting:
+
+```bash
+cd /Users/vjaadhi2799/Downloads/conversational_commerce
+.venv/bin/python -m uvicorn app.main:app --host 127.0.0.1 --port 8000
+```
+
+```bash
+cd /Users/vjaadhi2799/Downloads/querixco
+npm run dev -- --host 127.0.0.1 --port 5173
+```
+
+Open `http://127.0.0.1:5173/beauty`. Try the shampoo starter, refine its budget,
+then ask for a shirt. Open the clothing handoff, send the prefilled request, and
+return to beauty: the shampoo preferences should still be there. Check a mixed
+request (`shampoo under $15 and shirt for men under $40`), comparison, more
+options, refresh, and two tabs with different sections. If a constraint yields
+no matching listing, the response should say so without broadening it.
+
+### Evaluation boundaries
+
+The deterministic suite includes 224 explicit routing cases across all fourteen
+families and four source sections, plus persistence, replay, negation, ambiguous
+budgets, search normalization, cookie isolation, and PostgreSQL branch/hydration
+checks with mocked embeddings. These tests are not measured model-routing or
+human-judged recommendation accuracy.
+
+`evals/storefront_conversations.json` contains 252 synthetic conversation cases:
+224 explicit combinations and 28 additional multi-turn, vague, typo, mixed,
+negated, and nonsensical cases. Capture actual model responses when ready:
+
+```bash
+.venv/bin/python scripts/evaluate_conversations.py \
+  --cases evals/storefront_conversations.json \
+  --output data/search/storefront_evaluation.json
+```
+
+This command uses configured models and the active catalog with temporary
+conversation storage. It may be slow and can incur provider costs if configured
+for hosted models. Each captured turn separates mechanical section/destination
+checks from the required human review of product relevance and clarification
+quality. The 252-case live evaluation has **not** been run as part of this change;
+servers and model runs were left under user control.

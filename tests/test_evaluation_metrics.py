@@ -40,7 +40,7 @@ def test_http_success_is_not_counted_as_conversation_success():
     assert result["conversation_outcome_counts"] == {0: 1}
     assert result["strong_relevance_fraction"] is None
     review["cases"][0]["product_grades"] = {"invented-product-id": 2}
-    with pytest.raises(AssertionError):
+    with pytest.raises(ValueError, match="Product grade IDs"):
         module.summarize(capture, review)
 
 
@@ -89,3 +89,87 @@ def test_multi_group_cards_and_department_aliases_are_counted():
     assert result["conversations_with_recommendations"] == 1
     assert result["returned_card_occurrences_checked"] == 1
     assert not result["structured_filter_violations"]
+
+
+def empty_capture_and_review():
+    return (
+        {"cases": [{"id": "one", "observations": []}]},
+        {
+            "human_reviewed": False,
+            "cases": [{"id": "one", "outcome": 0, "product_grades": {}, "note": "No results"}],
+        },
+    )
+
+
+def test_review_attribution_and_duplicate_case_validation():
+    from copy import deepcopy
+
+    capture, review = empty_capture_and_review()
+    review["human_reviewed"] = True
+    result = module.summarize(capture, review)
+    assert result["human_reviewed"] is True
+    assert result["review_type"] == "Human-reviewed synthetic conversations"
+    assert result["reviewed_product_scope"] == "final recommendation turn per conversation"
+    for data in [capture, review]:
+        original = deepcopy(data["cases"])
+        data["cases"] += deepcopy(original)
+        with pytest.raises(ValueError, match="unique"):
+            module.summarize(capture, review)
+        data["cases"] = original
+    review["human_reviewed"] = "true"
+    with pytest.raises(ValueError, match="human_reviewed"):
+        module.summarize(capture, review)
+
+
+def test_mislabeled_scope_is_checked_against_conversation_not_just_returned_filters():
+    capture, review = empty_capture_and_review()
+    capture["cases"][0].update(
+        storefront_id="beauty",
+        observations=[
+            {
+                "http_status": 200,
+                "response": {
+                    "commerce": {
+                        "action": "recommend",
+                        "products": [
+                            {
+                                "product_id": "p1",
+                                "price": {"amount": "10"},
+                                "attributes": {},
+                                "category": {"family": "apparel", "domain": "fashion"},
+                            }
+                        ],
+                        "search": {"filters_applied": {"storefront_id": "clothing"}},
+                    }
+                },
+            }
+        ],
+    )
+    review["cases"][0]["product_grades"] = {"p1": 0}
+    result = module.summarize(capture, review)
+    assert result["structured_filter_violations"] == [{"case": "one", "product_id": "p1"}]
+
+
+def test_invalid_review_is_rejected_with_python_optimization_enabled():
+    import subprocess
+    import sys
+
+    code = """
+from scripts.summarize_evaluation import summarize
+try:
+    summarize({'cases':[]}, {'human_reviewed':'false', 'cases':[]})
+except ValueError:
+    pass
+else:
+    raise RuntimeError('Invalid review was accepted')
+"""
+    result = subprocess.run([sys.executable, "-O", "-c", code], capture_output=True, text=True)
+    assert result.returncode == 0, result.stderr
+
+
+@pytest.mark.parametrize("value", [True, -1, 3, "2"])
+def test_invalid_grades_fail_explicitly(value):
+    capture, review = empty_capture_and_review()
+    review["cases"][0]["outcome"] = value
+    with pytest.raises(ValueError, match="integer"):
+        module.summarize(capture, review)

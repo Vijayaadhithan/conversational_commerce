@@ -7,8 +7,14 @@ from fastapi import HTTPException
 from starlette.datastructures import State
 
 from app.catalog import strict_json
-from app.commerce import direct_plan
-from app.commerce_models import PLANNER_PROMPT, IntentPlan, planner_context, planner_examples
+from app.commerce_intent import direct_plan
+from app.commerce_models import IntentPlan
+from app.commerce_prompts import (
+    PLANNER_PROMPT,
+    STOREFRONT_PROMPT,
+    planner_context,
+    planner_examples,
+)
 from app.config import Settings
 from app.providers import hosted_chat
 from app.text_budget import byte_size, chunks, clip
@@ -85,7 +91,10 @@ class ChatService:
         if deterministic:
             return deterministic, {}
         messages = [
-            {"role": "system", "content": PLANNER_PROMPT},
+            {
+                "role": "system",
+                "content": PLANNER_PROMPT + (STOREFRONT_PROMPT if state.storefront_id else ""),
+            },
             {"role": "user", "content": planner_context(state, user)},
         ]
         if repair_reason:
@@ -99,6 +108,7 @@ class ChatService:
                     "A facial concern is need, not a named product query. Generic 'product' is not a product type. "
                     "Omit inferred product types, unstated attributes, and unchanged preferences. "
                     "A request for suggestions from saved conditions has requests=[]; never put your own product suggestions in requests. "
+                    "One named product with several concerns also has requests=[] and separate top-level need changes. "
                     "Remove saved constraints only when the latest message explicitly asks for it.",
                 },
             )

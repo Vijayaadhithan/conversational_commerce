@@ -1,0 +1,3594 @@
+[
+  {
+    "id": "clothing_skin_care_1",
+    "storefront_id": "clothing",
+    "turns": [
+      "I need moisturizer"
+    ],
+    "expected_destinations": [
+      "beauty"
+    ],
+    "review_focus": [
+      "routing",
+      "literal requirements",
+      "product relevance or focused clarification"
+    ]
+  },
+  {
+    "id": "clothing_skin_care_2",
+    "storefront_id": "clothing",
+    "turns": [
+      "Please find moisturizer under $30"
+    ],
+    "expected_destinations": [
+      "beauty"
+    ],
+    "review_focus": [
+      "routing",
+      "literal requirements",
+      "product relevance or focused clarification"
+    ]
+  },
+  {
+    "id": "clothing_skin_care_3",
+    "storefront_id": "clothing",
+    "turns": [
+      "Show me moisturizer"
+    ],
+    "expected_destinations": [
+      "beauty"
+    ],
+    "review_focus": [
+      "routing",
+      "literal requirements",
+      "product relevance or focused clarification"
+    ]
+  },
+  {
+    "id": "clothing_skin_care_4",
+    "storefront_id": "clothing",
+    "turns": [
+      "Can you suggest moisturizer for me?"
+    ],
+    "expected_destinations": [
+      "beauty"
+    ],
+    "review_focus": [
+      "routing",
+      "literal requirements",
+      "product relevance or focused clarification"
+    ]
+  },
+  {
+    "id": "clothing_hair_care_1",
+    "storefront_id": "clothing",
+    "turns": [
+      "I need shampoo"
+    ],
+    "expected_destinations": [
+      "beauty"
+    ],
+    "review_focus": [
+      "routing",
+      "literal requirements",
+      "product relevance or focused clarification"
+    ]
+  },
+  {
+    "id": "clothing_hair_care_2",
+    "storefront_id": "clothing",
+    "turns": [
+      "Please find shampoo under $30"
+    ],
+    "expected_destinations": [
+      "beauty"
+    ],
+    "review_focus": [
+      "routing",
+      "literal requirements",
+      "product relevance or focused clarification"
+    ]
+  },
+  {
+    "id": "clothing_hair_care_3",
+    "storefront_id": "clothing",
+    "turns": [
+      "Show me shampoo"
+    ],
+    "expected_destinations": [
+      "beauty"
+    ],
+    "review_focus": [
+      "routing",
+      "literal requirements",
+      "product relevance or focused clarification"
+    ]
+  },
+  {
+    "id": "clothing_hair_care_4",
+    "storefront_id": "clothing",
+    "turns": [
+      "Can you suggest shampoo for me?"
+    ],
+    "expected_destinations": [
+      "beauty"
+    ],
+    "review_focus": [
+      "routing",
+      "literal requirements",
+      "product relevance or focused clarification"
+    ]
+  },
+  {
+    "id": "clothing_makeup_1",
+    "storefront_id": "clothing",
+    "turns": [
+      "I need lipstick"
+    ],
+    "expected_destinations": [
+      "beauty"
+    ],
+    "review_focus": [
+      "routing",
+      "literal requirements",
+      "product relevance or focused clarification"
+    ]
+  },
+  {
+    "id": "clothing_makeup_2",
+    "storefront_id": "clothing",
+    "turns": [
+      "Please find lipstick under $30"
+    ],
+    "expected_destinations": [
+      "beauty"
+    ],
+    "review_focus": [
+      "routing",
+      "literal requirements",
+      "product relevance or focused clarification"
+    ]
+  },
+  {
+    "id": "clothing_makeup_3",
+    "storefront_id": "clothing",
+    "turns": [
+      "Show me lipstick"
+    ],
+    "expected_destinations": [
+      "beauty"
+    ],
+    "review_focus": [
+      "routing",
+      "literal requirements",
+      "product relevance or focused clarification"
+    ]
+  },
+  {
+    "id": "clothing_makeup_4",
+    "storefront_id": "clothing",
+    "turns": [
+      "Can you suggest lipstick for me?"
+    ],
+    "expected_destinations": [
+      "beauty"
+    ],
+    "review_focus": [
+      "routing",
+      "literal requirements",
+      "product relevance or focused clarification"
+    ]
+  },
+  {
+    "id": "clothing_fragrance_1",
+    "storefront_id": "clothing",
+    "turns": [
+      "I need perfume"
+    ],
+    "expected_destinations": [
+      "beauty"
+    ],
+    "review_focus": [
+      "routing",
+      "literal requirements",
+      "product relevance or focused clarification"
+    ]
+  },
+  {
+    "id": "clothing_fragrance_2",
+    "storefront_id": "clothing",
+    "turns": [
+      "Please find perfume under $30"
+    ],
+    "expected_destinations": [
+      "beauty"
+    ],
+    "review_focus": [
+      "routing",
+      "literal requirements",
+      "product relevance or focused clarification"
+    ]
+  },
+  {
+    "id": "clothing_fragrance_3",
+    "storefront_id": "clothing",
+    "turns": [
+      "Show me perfume"
+    ],
+    "expected_destinations": [
+      "beauty"
+    ],
+    "review_focus": [
+      "routing",
+      "literal requirements",
+      "product relevance or focused clarification"
+    ]
+  },
+  {
+    "id": "clothing_fragrance_4",
+    "storefront_id": "clothing",
+    "turns": [
+      "Can you suggest perfume for me?"
+    ],
+    "expected_destinations": [
+      "beauty"
+    ],
+    "review_focus": [
+      "routing",
+      "literal requirements",
+      "product relevance or focused clarification"
+    ]
+  },
+  {
+    "id": "clothing_oral_care_1",
+    "storefront_id": "clothing",
+    "turns": [
+      "I need toothpaste"
+    ],
+    "expected_destinations": [
+      "beauty"
+    ],
+    "review_focus": [
+      "routing",
+      "literal requirements",
+      "product relevance or focused clarification"
+    ]
+  },
+  {
+    "id": "clothing_oral_care_2",
+    "storefront_id": "clothing",
+    "turns": [
+      "Please find toothpaste under $30"
+    ],
+    "expected_destinations": [
+      "beauty"
+    ],
+    "review_focus": [
+      "routing",
+      "literal requirements",
+      "product relevance or focused clarification"
+    ]
+  },
+  {
+    "id": "clothing_oral_care_3",
+    "storefront_id": "clothing",
+    "turns": [
+      "Show me toothpaste"
+    ],
+    "expected_destinations": [
+      "beauty"
+    ],
+    "review_focus": [
+      "routing",
+      "literal requirements",
+      "product relevance or focused clarification"
+    ]
+  },
+  {
+    "id": "clothing_oral_care_4",
+    "storefront_id": "clothing",
+    "turns": [
+      "Can you suggest toothpaste for me?"
+    ],
+    "expected_destinations": [
+      "beauty"
+    ],
+    "review_focus": [
+      "routing",
+      "literal requirements",
+      "product relevance or focused clarification"
+    ]
+  },
+  {
+    "id": "clothing_shaving_1",
+    "storefront_id": "clothing",
+    "turns": [
+      "I need razor"
+    ],
+    "expected_destinations": [
+      "beauty"
+    ],
+    "review_focus": [
+      "routing",
+      "literal requirements",
+      "product relevance or focused clarification"
+    ]
+  },
+  {
+    "id": "clothing_shaving_2",
+    "storefront_id": "clothing",
+    "turns": [
+      "Please find razor under $30"
+    ],
+    "expected_destinations": [
+      "beauty"
+    ],
+    "review_focus": [
+      "routing",
+      "literal requirements",
+      "product relevance or focused clarification"
+    ]
+  },
+  {
+    "id": "clothing_shaving_3",
+    "storefront_id": "clothing",
+    "turns": [
+      "Show me razor"
+    ],
+    "expected_destinations": [
+      "beauty"
+    ],
+    "review_focus": [
+      "routing",
+      "literal requirements",
+      "product relevance or focused clarification"
+    ]
+  },
+  {
+    "id": "clothing_shaving_4",
+    "storefront_id": "clothing",
+    "turns": [
+      "Can you suggest razor for me?"
+    ],
+    "expected_destinations": [
+      "beauty"
+    ],
+    "review_focus": [
+      "routing",
+      "literal requirements",
+      "product relevance or focused clarification"
+    ]
+  },
+  {
+    "id": "clothing_beauty_tools_1",
+    "storefront_id": "clothing",
+    "turns": [
+      "I need makeup brush"
+    ],
+    "expected_destinations": [
+      "beauty"
+    ],
+    "review_focus": [
+      "routing",
+      "literal requirements",
+      "product relevance or focused clarification"
+    ]
+  },
+  {
+    "id": "clothing_beauty_tools_2",
+    "storefront_id": "clothing",
+    "turns": [
+      "Please find makeup brush under $30"
+    ],
+    "expected_destinations": [
+      "beauty"
+    ],
+    "review_focus": [
+      "routing",
+      "literal requirements",
+      "product relevance or focused clarification"
+    ]
+  },
+  {
+    "id": "clothing_beauty_tools_3",
+    "storefront_id": "clothing",
+    "turns": [
+      "Show me makeup brush"
+    ],
+    "expected_destinations": [
+      "beauty"
+    ],
+    "review_focus": [
+      "routing",
+      "literal requirements",
+      "product relevance or focused clarification"
+    ]
+  },
+  {
+    "id": "clothing_beauty_tools_4",
+    "storefront_id": "clothing",
+    "turns": [
+      "Can you suggest makeup brush for me?"
+    ],
+    "expected_destinations": [
+      "beauty"
+    ],
+    "review_focus": [
+      "routing",
+      "literal requirements",
+      "product relevance or focused clarification"
+    ]
+  },
+  {
+    "id": "clothing_personal_care_1",
+    "storefront_id": "clothing",
+    "turns": [
+      "I need deodorant"
+    ],
+    "expected_destinations": [
+      "beauty"
+    ],
+    "review_focus": [
+      "routing",
+      "literal requirements",
+      "product relevance or focused clarification"
+    ]
+  },
+  {
+    "id": "clothing_personal_care_2",
+    "storefront_id": "clothing",
+    "turns": [
+      "Please find deodorant under $30"
+    ],
+    "expected_destinations": [
+      "beauty"
+    ],
+    "review_focus": [
+      "routing",
+      "literal requirements",
+      "product relevance or focused clarification"
+    ]
+  },
+  {
+    "id": "clothing_personal_care_3",
+    "storefront_id": "clothing",
+    "turns": [
+      "Show me deodorant"
+    ],
+    "expected_destinations": [
+      "beauty"
+    ],
+    "review_focus": [
+      "routing",
+      "literal requirements",
+      "product relevance or focused clarification"
+    ]
+  },
+  {
+    "id": "clothing_personal_care_4",
+    "storefront_id": "clothing",
+    "turns": [
+      "Can you suggest deodorant for me?"
+    ],
+    "expected_destinations": [
+      "beauty"
+    ],
+    "review_focus": [
+      "routing",
+      "literal requirements",
+      "product relevance or focused clarification"
+    ]
+  },
+  {
+    "id": "clothing_apparel_1",
+    "storefront_id": "clothing",
+    "turns": [
+      "I need shirt"
+    ],
+    "expected_destinations": [],
+    "review_focus": [
+      "routing",
+      "literal requirements",
+      "product relevance or focused clarification"
+    ]
+  },
+  {
+    "id": "clothing_apparel_2",
+    "storefront_id": "clothing",
+    "turns": [
+      "Please find shirt under $30"
+    ],
+    "expected_destinations": [],
+    "review_focus": [
+      "routing",
+      "literal requirements",
+      "product relevance or focused clarification"
+    ]
+  },
+  {
+    "id": "clothing_apparel_3",
+    "storefront_id": "clothing",
+    "turns": [
+      "Show me shirt"
+    ],
+    "expected_destinations": [],
+    "review_focus": [
+      "routing",
+      "literal requirements",
+      "product relevance or focused clarification"
+    ]
+  },
+  {
+    "id": "clothing_apparel_4",
+    "storefront_id": "clothing",
+    "turns": [
+      "Can you suggest shirt for me?"
+    ],
+    "expected_destinations": [],
+    "review_focus": [
+      "routing",
+      "literal requirements",
+      "product relevance or focused clarification"
+    ]
+  },
+  {
+    "id": "clothing_footwear_1",
+    "storefront_id": "clothing",
+    "turns": [
+      "I need shoes"
+    ],
+    "expected_destinations": [
+      "footwear"
+    ],
+    "review_focus": [
+      "routing",
+      "literal requirements",
+      "product relevance or focused clarification"
+    ]
+  },
+  {
+    "id": "clothing_footwear_2",
+    "storefront_id": "clothing",
+    "turns": [
+      "Please find shoes under $30"
+    ],
+    "expected_destinations": [
+      "footwear"
+    ],
+    "review_focus": [
+      "routing",
+      "literal requirements",
+      "product relevance or focused clarification"
+    ]
+  },
+  {
+    "id": "clothing_footwear_3",
+    "storefront_id": "clothing",
+    "turns": [
+      "Show me shoes"
+    ],
+    "expected_destinations": [
+      "footwear"
+    ],
+    "review_focus": [
+      "routing",
+      "literal requirements",
+      "product relevance or focused clarification"
+    ]
+  },
+  {
+    "id": "clothing_footwear_4",
+    "storefront_id": "clothing",
+    "turns": [
+      "Can you suggest shoes for me?"
+    ],
+    "expected_destinations": [
+      "footwear"
+    ],
+    "review_focus": [
+      "routing",
+      "literal requirements",
+      "product relevance or focused clarification"
+    ]
+  },
+  {
+    "id": "clothing_bags_1",
+    "storefront_id": "clothing",
+    "turns": [
+      "I need handbag"
+    ],
+    "expected_destinations": [
+      "fashion"
+    ],
+    "review_focus": [
+      "routing",
+      "literal requirements",
+      "product relevance or focused clarification"
+    ]
+  },
+  {
+    "id": "clothing_bags_2",
+    "storefront_id": "clothing",
+    "turns": [
+      "Please find handbag under $30"
+    ],
+    "expected_destinations": [
+      "fashion"
+    ],
+    "review_focus": [
+      "routing",
+      "literal requirements",
+      "product relevance or focused clarification"
+    ]
+  },
+  {
+    "id": "clothing_bags_3",
+    "storefront_id": "clothing",
+    "turns": [
+      "Show me handbag"
+    ],
+    "expected_destinations": [
+      "fashion"
+    ],
+    "review_focus": [
+      "routing",
+      "literal requirements",
+      "product relevance or focused clarification"
+    ]
+  },
+  {
+    "id": "clothing_bags_4",
+    "storefront_id": "clothing",
+    "turns": [
+      "Can you suggest handbag for me?"
+    ],
+    "expected_destinations": [
+      "fashion"
+    ],
+    "review_focus": [
+      "routing",
+      "literal requirements",
+      "product relevance or focused clarification"
+    ]
+  },
+  {
+    "id": "clothing_jewelry_1",
+    "storefront_id": "clothing",
+    "turns": [
+      "I need necklace"
+    ],
+    "expected_destinations": [
+      "fashion"
+    ],
+    "review_focus": [
+      "routing",
+      "literal requirements",
+      "product relevance or focused clarification"
+    ]
+  },
+  {
+    "id": "clothing_jewelry_2",
+    "storefront_id": "clothing",
+    "turns": [
+      "Please find necklace under $30"
+    ],
+    "expected_destinations": [
+      "fashion"
+    ],
+    "review_focus": [
+      "routing",
+      "literal requirements",
+      "product relevance or focused clarification"
+    ]
+  },
+  {
+    "id": "clothing_jewelry_3",
+    "storefront_id": "clothing",
+    "turns": [
+      "Show me necklace"
+    ],
+    "expected_destinations": [
+      "fashion"
+    ],
+    "review_focus": [
+      "routing",
+      "literal requirements",
+      "product relevance or focused clarification"
+    ]
+  },
+  {
+    "id": "clothing_jewelry_4",
+    "storefront_id": "clothing",
+    "turns": [
+      "Can you suggest necklace for me?"
+    ],
+    "expected_destinations": [
+      "fashion"
+    ],
+    "review_focus": [
+      "routing",
+      "literal requirements",
+      "product relevance or focused clarification"
+    ]
+  },
+  {
+    "id": "clothing_watches_1",
+    "storefront_id": "clothing",
+    "turns": [
+      "I need watch"
+    ],
+    "expected_destinations": [
+      "fashion"
+    ],
+    "review_focus": [
+      "routing",
+      "literal requirements",
+      "product relevance or focused clarification"
+    ]
+  },
+  {
+    "id": "clothing_watches_2",
+    "storefront_id": "clothing",
+    "turns": [
+      "Please find watch under $30"
+    ],
+    "expected_destinations": [
+      "fashion"
+    ],
+    "review_focus": [
+      "routing",
+      "literal requirements",
+      "product relevance or focused clarification"
+    ]
+  },
+  {
+    "id": "clothing_watches_3",
+    "storefront_id": "clothing",
+    "turns": [
+      "Show me watch"
+    ],
+    "expected_destinations": [
+      "fashion"
+    ],
+    "review_focus": [
+      "routing",
+      "literal requirements",
+      "product relevance or focused clarification"
+    ]
+  },
+  {
+    "id": "clothing_watches_4",
+    "storefront_id": "clothing",
+    "turns": [
+      "Can you suggest watch for me?"
+    ],
+    "expected_destinations": [
+      "fashion"
+    ],
+    "review_focus": [
+      "routing",
+      "literal requirements",
+      "product relevance or focused clarification"
+    ]
+  },
+  {
+    "id": "clothing_accessories_1",
+    "storefront_id": "clothing",
+    "turns": [
+      "I need belt"
+    ],
+    "expected_destinations": [
+      "fashion"
+    ],
+    "review_focus": [
+      "routing",
+      "literal requirements",
+      "product relevance or focused clarification"
+    ]
+  },
+  {
+    "id": "clothing_accessories_2",
+    "storefront_id": "clothing",
+    "turns": [
+      "Please find belt under $30"
+    ],
+    "expected_destinations": [
+      "fashion"
+    ],
+    "review_focus": [
+      "routing",
+      "literal requirements",
+      "product relevance or focused clarification"
+    ]
+  },
+  {
+    "id": "clothing_accessories_3",
+    "storefront_id": "clothing",
+    "turns": [
+      "Show me belt"
+    ],
+    "expected_destinations": [
+      "fashion"
+    ],
+    "review_focus": [
+      "routing",
+      "literal requirements",
+      "product relevance or focused clarification"
+    ]
+  },
+  {
+    "id": "clothing_accessories_4",
+    "storefront_id": "clothing",
+    "turns": [
+      "Can you suggest belt for me?"
+    ],
+    "expected_destinations": [
+      "fashion"
+    ],
+    "review_focus": [
+      "routing",
+      "literal requirements",
+      "product relevance or focused clarification"
+    ]
+  },
+  {
+    "id": "beauty_skin_care_1",
+    "storefront_id": "beauty",
+    "turns": [
+      "I need moisturizer"
+    ],
+    "expected_destinations": [],
+    "review_focus": [
+      "routing",
+      "literal requirements",
+      "product relevance or focused clarification"
+    ]
+  },
+  {
+    "id": "beauty_skin_care_2",
+    "storefront_id": "beauty",
+    "turns": [
+      "Please find moisturizer under $30"
+    ],
+    "expected_destinations": [],
+    "review_focus": [
+      "routing",
+      "literal requirements",
+      "product relevance or focused clarification"
+    ]
+  },
+  {
+    "id": "beauty_skin_care_3",
+    "storefront_id": "beauty",
+    "turns": [
+      "Show me moisturizer"
+    ],
+    "expected_destinations": [],
+    "review_focus": [
+      "routing",
+      "literal requirements",
+      "product relevance or focused clarification"
+    ]
+  },
+  {
+    "id": "beauty_skin_care_4",
+    "storefront_id": "beauty",
+    "turns": [
+      "Can you suggest moisturizer for me?"
+    ],
+    "expected_destinations": [],
+    "review_focus": [
+      "routing",
+      "literal requirements",
+      "product relevance or focused clarification"
+    ]
+  },
+  {
+    "id": "beauty_hair_care_1",
+    "storefront_id": "beauty",
+    "turns": [
+      "I need shampoo"
+    ],
+    "expected_destinations": [],
+    "review_focus": [
+      "routing",
+      "literal requirements",
+      "product relevance or focused clarification"
+    ]
+  },
+  {
+    "id": "beauty_hair_care_2",
+    "storefront_id": "beauty",
+    "turns": [
+      "Please find shampoo under $30"
+    ],
+    "expected_destinations": [],
+    "review_focus": [
+      "routing",
+      "literal requirements",
+      "product relevance or focused clarification"
+    ]
+  },
+  {
+    "id": "beauty_hair_care_3",
+    "storefront_id": "beauty",
+    "turns": [
+      "Show me shampoo"
+    ],
+    "expected_destinations": [],
+    "review_focus": [
+      "routing",
+      "literal requirements",
+      "product relevance or focused clarification"
+    ]
+  },
+  {
+    "id": "beauty_hair_care_4",
+    "storefront_id": "beauty",
+    "turns": [
+      "Can you suggest shampoo for me?"
+    ],
+    "expected_destinations": [],
+    "review_focus": [
+      "routing",
+      "literal requirements",
+      "product relevance or focused clarification"
+    ]
+  },
+  {
+    "id": "beauty_makeup_1",
+    "storefront_id": "beauty",
+    "turns": [
+      "I need lipstick"
+    ],
+    "expected_destinations": [],
+    "review_focus": [
+      "routing",
+      "literal requirements",
+      "product relevance or focused clarification"
+    ]
+  },
+  {
+    "id": "beauty_makeup_2",
+    "storefront_id": "beauty",
+    "turns": [
+      "Please find lipstick under $30"
+    ],
+    "expected_destinations": [],
+    "review_focus": [
+      "routing",
+      "literal requirements",
+      "product relevance or focused clarification"
+    ]
+  },
+  {
+    "id": "beauty_makeup_3",
+    "storefront_id": "beauty",
+    "turns": [
+      "Show me lipstick"
+    ],
+    "expected_destinations": [],
+    "review_focus": [
+      "routing",
+      "literal requirements",
+      "product relevance or focused clarification"
+    ]
+  },
+  {
+    "id": "beauty_makeup_4",
+    "storefront_id": "beauty",
+    "turns": [
+      "Can you suggest lipstick for me?"
+    ],
+    "expected_destinations": [],
+    "review_focus": [
+      "routing",
+      "literal requirements",
+      "product relevance or focused clarification"
+    ]
+  },
+  {
+    "id": "beauty_fragrance_1",
+    "storefront_id": "beauty",
+    "turns": [
+      "I need perfume"
+    ],
+    "expected_destinations": [],
+    "review_focus": [
+      "routing",
+      "literal requirements",
+      "product relevance or focused clarification"
+    ]
+  },
+  {
+    "id": "beauty_fragrance_2",
+    "storefront_id": "beauty",
+    "turns": [
+      "Please find perfume under $30"
+    ],
+    "expected_destinations": [],
+    "review_focus": [
+      "routing",
+      "literal requirements",
+      "product relevance or focused clarification"
+    ]
+  },
+  {
+    "id": "beauty_fragrance_3",
+    "storefront_id": "beauty",
+    "turns": [
+      "Show me perfume"
+    ],
+    "expected_destinations": [],
+    "review_focus": [
+      "routing",
+      "literal requirements",
+      "product relevance or focused clarification"
+    ]
+  },
+  {
+    "id": "beauty_fragrance_4",
+    "storefront_id": "beauty",
+    "turns": [
+      "Can you suggest perfume for me?"
+    ],
+    "expected_destinations": [],
+    "review_focus": [
+      "routing",
+      "literal requirements",
+      "product relevance or focused clarification"
+    ]
+  },
+  {
+    "id": "beauty_oral_care_1",
+    "storefront_id": "beauty",
+    "turns": [
+      "I need toothpaste"
+    ],
+    "expected_destinations": [],
+    "review_focus": [
+      "routing",
+      "literal requirements",
+      "product relevance or focused clarification"
+    ]
+  },
+  {
+    "id": "beauty_oral_care_2",
+    "storefront_id": "beauty",
+    "turns": [
+      "Please find toothpaste under $30"
+    ],
+    "expected_destinations": [],
+    "review_focus": [
+      "routing",
+      "literal requirements",
+      "product relevance or focused clarification"
+    ]
+  },
+  {
+    "id": "beauty_oral_care_3",
+    "storefront_id": "beauty",
+    "turns": [
+      "Show me toothpaste"
+    ],
+    "expected_destinations": [],
+    "review_focus": [
+      "routing",
+      "literal requirements",
+      "product relevance or focused clarification"
+    ]
+  },
+  {
+    "id": "beauty_oral_care_4",
+    "storefront_id": "beauty",
+    "turns": [
+      "Can you suggest toothpaste for me?"
+    ],
+    "expected_destinations": [],
+    "review_focus": [
+      "routing",
+      "literal requirements",
+      "product relevance or focused clarification"
+    ]
+  },
+  {
+    "id": "beauty_shaving_1",
+    "storefront_id": "beauty",
+    "turns": [
+      "I need razor"
+    ],
+    "expected_destinations": [],
+    "review_focus": [
+      "routing",
+      "literal requirements",
+      "product relevance or focused clarification"
+    ]
+  },
+  {
+    "id": "beauty_shaving_2",
+    "storefront_id": "beauty",
+    "turns": [
+      "Please find razor under $30"
+    ],
+    "expected_destinations": [],
+    "review_focus": [
+      "routing",
+      "literal requirements",
+      "product relevance or focused clarification"
+    ]
+  },
+  {
+    "id": "beauty_shaving_3",
+    "storefront_id": "beauty",
+    "turns": [
+      "Show me razor"
+    ],
+    "expected_destinations": [],
+    "review_focus": [
+      "routing",
+      "literal requirements",
+      "product relevance or focused clarification"
+    ]
+  },
+  {
+    "id": "beauty_shaving_4",
+    "storefront_id": "beauty",
+    "turns": [
+      "Can you suggest razor for me?"
+    ],
+    "expected_destinations": [],
+    "review_focus": [
+      "routing",
+      "literal requirements",
+      "product relevance or focused clarification"
+    ]
+  },
+  {
+    "id": "beauty_beauty_tools_1",
+    "storefront_id": "beauty",
+    "turns": [
+      "I need makeup brush"
+    ],
+    "expected_destinations": [],
+    "review_focus": [
+      "routing",
+      "literal requirements",
+      "product relevance or focused clarification"
+    ]
+  },
+  {
+    "id": "beauty_beauty_tools_2",
+    "storefront_id": "beauty",
+    "turns": [
+      "Please find makeup brush under $30"
+    ],
+    "expected_destinations": [],
+    "review_focus": [
+      "routing",
+      "literal requirements",
+      "product relevance or focused clarification"
+    ]
+  },
+  {
+    "id": "beauty_beauty_tools_3",
+    "storefront_id": "beauty",
+    "turns": [
+      "Show me makeup brush"
+    ],
+    "expected_destinations": [],
+    "review_focus": [
+      "routing",
+      "literal requirements",
+      "product relevance or focused clarification"
+    ]
+  },
+  {
+    "id": "beauty_beauty_tools_4",
+    "storefront_id": "beauty",
+    "turns": [
+      "Can you suggest makeup brush for me?"
+    ],
+    "expected_destinations": [],
+    "review_focus": [
+      "routing",
+      "literal requirements",
+      "product relevance or focused clarification"
+    ]
+  },
+  {
+    "id": "beauty_personal_care_1",
+    "storefront_id": "beauty",
+    "turns": [
+      "I need deodorant"
+    ],
+    "expected_destinations": [],
+    "review_focus": [
+      "routing",
+      "literal requirements",
+      "product relevance or focused clarification"
+    ]
+  },
+  {
+    "id": "beauty_personal_care_2",
+    "storefront_id": "beauty",
+    "turns": [
+      "Please find deodorant under $30"
+    ],
+    "expected_destinations": [],
+    "review_focus": [
+      "routing",
+      "literal requirements",
+      "product relevance or focused clarification"
+    ]
+  },
+  {
+    "id": "beauty_personal_care_3",
+    "storefront_id": "beauty",
+    "turns": [
+      "Show me deodorant"
+    ],
+    "expected_destinations": [],
+    "review_focus": [
+      "routing",
+      "literal requirements",
+      "product relevance or focused clarification"
+    ]
+  },
+  {
+    "id": "beauty_personal_care_4",
+    "storefront_id": "beauty",
+    "turns": [
+      "Can you suggest deodorant for me?"
+    ],
+    "expected_destinations": [],
+    "review_focus": [
+      "routing",
+      "literal requirements",
+      "product relevance or focused clarification"
+    ]
+  },
+  {
+    "id": "beauty_apparel_1",
+    "storefront_id": "beauty",
+    "turns": [
+      "I need shirt"
+    ],
+    "expected_destinations": [
+      "clothing"
+    ],
+    "review_focus": [
+      "routing",
+      "literal requirements",
+      "product relevance or focused clarification"
+    ]
+  },
+  {
+    "id": "beauty_apparel_2",
+    "storefront_id": "beauty",
+    "turns": [
+      "Please find shirt under $30"
+    ],
+    "expected_destinations": [
+      "clothing"
+    ],
+    "review_focus": [
+      "routing",
+      "literal requirements",
+      "product relevance or focused clarification"
+    ]
+  },
+  {
+    "id": "beauty_apparel_3",
+    "storefront_id": "beauty",
+    "turns": [
+      "Show me shirt"
+    ],
+    "expected_destinations": [
+      "clothing"
+    ],
+    "review_focus": [
+      "routing",
+      "literal requirements",
+      "product relevance or focused clarification"
+    ]
+  },
+  {
+    "id": "beauty_apparel_4",
+    "storefront_id": "beauty",
+    "turns": [
+      "Can you suggest shirt for me?"
+    ],
+    "expected_destinations": [
+      "clothing"
+    ],
+    "review_focus": [
+      "routing",
+      "literal requirements",
+      "product relevance or focused clarification"
+    ]
+  },
+  {
+    "id": "beauty_footwear_1",
+    "storefront_id": "beauty",
+    "turns": [
+      "I need shoes"
+    ],
+    "expected_destinations": [
+      "footwear"
+    ],
+    "review_focus": [
+      "routing",
+      "literal requirements",
+      "product relevance or focused clarification"
+    ]
+  },
+  {
+    "id": "beauty_footwear_2",
+    "storefront_id": "beauty",
+    "turns": [
+      "Please find shoes under $30"
+    ],
+    "expected_destinations": [
+      "footwear"
+    ],
+    "review_focus": [
+      "routing",
+      "literal requirements",
+      "product relevance or focused clarification"
+    ]
+  },
+  {
+    "id": "beauty_footwear_3",
+    "storefront_id": "beauty",
+    "turns": [
+      "Show me shoes"
+    ],
+    "expected_destinations": [
+      "footwear"
+    ],
+    "review_focus": [
+      "routing",
+      "literal requirements",
+      "product relevance or focused clarification"
+    ]
+  },
+  {
+    "id": "beauty_footwear_4",
+    "storefront_id": "beauty",
+    "turns": [
+      "Can you suggest shoes for me?"
+    ],
+    "expected_destinations": [
+      "footwear"
+    ],
+    "review_focus": [
+      "routing",
+      "literal requirements",
+      "product relevance or focused clarification"
+    ]
+  },
+  {
+    "id": "beauty_bags_1",
+    "storefront_id": "beauty",
+    "turns": [
+      "I need handbag"
+    ],
+    "expected_destinations": [
+      "fashion"
+    ],
+    "review_focus": [
+      "routing",
+      "literal requirements",
+      "product relevance or focused clarification"
+    ]
+  },
+  {
+    "id": "beauty_bags_2",
+    "storefront_id": "beauty",
+    "turns": [
+      "Please find handbag under $30"
+    ],
+    "expected_destinations": [
+      "fashion"
+    ],
+    "review_focus": [
+      "routing",
+      "literal requirements",
+      "product relevance or focused clarification"
+    ]
+  },
+  {
+    "id": "beauty_bags_3",
+    "storefront_id": "beauty",
+    "turns": [
+      "Show me handbag"
+    ],
+    "expected_destinations": [
+      "fashion"
+    ],
+    "review_focus": [
+      "routing",
+      "literal requirements",
+      "product relevance or focused clarification"
+    ]
+  },
+  {
+    "id": "beauty_bags_4",
+    "storefront_id": "beauty",
+    "turns": [
+      "Can you suggest handbag for me?"
+    ],
+    "expected_destinations": [
+      "fashion"
+    ],
+    "review_focus": [
+      "routing",
+      "literal requirements",
+      "product relevance or focused clarification"
+    ]
+  },
+  {
+    "id": "beauty_jewelry_1",
+    "storefront_id": "beauty",
+    "turns": [
+      "I need necklace"
+    ],
+    "expected_destinations": [
+      "fashion"
+    ],
+    "review_focus": [
+      "routing",
+      "literal requirements",
+      "product relevance or focused clarification"
+    ]
+  },
+  {
+    "id": "beauty_jewelry_2",
+    "storefront_id": "beauty",
+    "turns": [
+      "Please find necklace under $30"
+    ],
+    "expected_destinations": [
+      "fashion"
+    ],
+    "review_focus": [
+      "routing",
+      "literal requirements",
+      "product relevance or focused clarification"
+    ]
+  },
+  {
+    "id": "beauty_jewelry_3",
+    "storefront_id": "beauty",
+    "turns": [
+      "Show me necklace"
+    ],
+    "expected_destinations": [
+      "fashion"
+    ],
+    "review_focus": [
+      "routing",
+      "literal requirements",
+      "product relevance or focused clarification"
+    ]
+  },
+  {
+    "id": "beauty_jewelry_4",
+    "storefront_id": "beauty",
+    "turns": [
+      "Can you suggest necklace for me?"
+    ],
+    "expected_destinations": [
+      "fashion"
+    ],
+    "review_focus": [
+      "routing",
+      "literal requirements",
+      "product relevance or focused clarification"
+    ]
+  },
+  {
+    "id": "beauty_watches_1",
+    "storefront_id": "beauty",
+    "turns": [
+      "I need watch"
+    ],
+    "expected_destinations": [
+      "fashion"
+    ],
+    "review_focus": [
+      "routing",
+      "literal requirements",
+      "product relevance or focused clarification"
+    ]
+  },
+  {
+    "id": "beauty_watches_2",
+    "storefront_id": "beauty",
+    "turns": [
+      "Please find watch under $30"
+    ],
+    "expected_destinations": [
+      "fashion"
+    ],
+    "review_focus": [
+      "routing",
+      "literal requirements",
+      "product relevance or focused clarification"
+    ]
+  },
+  {
+    "id": "beauty_watches_3",
+    "storefront_id": "beauty",
+    "turns": [
+      "Show me watch"
+    ],
+    "expected_destinations": [
+      "fashion"
+    ],
+    "review_focus": [
+      "routing",
+      "literal requirements",
+      "product relevance or focused clarification"
+    ]
+  },
+  {
+    "id": "beauty_watches_4",
+    "storefront_id": "beauty",
+    "turns": [
+      "Can you suggest watch for me?"
+    ],
+    "expected_destinations": [
+      "fashion"
+    ],
+    "review_focus": [
+      "routing",
+      "literal requirements",
+      "product relevance or focused clarification"
+    ]
+  },
+  {
+    "id": "beauty_accessories_1",
+    "storefront_id": "beauty",
+    "turns": [
+      "I need belt"
+    ],
+    "expected_destinations": [
+      "fashion"
+    ],
+    "review_focus": [
+      "routing",
+      "literal requirements",
+      "product relevance or focused clarification"
+    ]
+  },
+  {
+    "id": "beauty_accessories_2",
+    "storefront_id": "beauty",
+    "turns": [
+      "Please find belt under $30"
+    ],
+    "expected_destinations": [
+      "fashion"
+    ],
+    "review_focus": [
+      "routing",
+      "literal requirements",
+      "product relevance or focused clarification"
+    ]
+  },
+  {
+    "id": "beauty_accessories_3",
+    "storefront_id": "beauty",
+    "turns": [
+      "Show me belt"
+    ],
+    "expected_destinations": [
+      "fashion"
+    ],
+    "review_focus": [
+      "routing",
+      "literal requirements",
+      "product relevance or focused clarification"
+    ]
+  },
+  {
+    "id": "beauty_accessories_4",
+    "storefront_id": "beauty",
+    "turns": [
+      "Can you suggest belt for me?"
+    ],
+    "expected_destinations": [
+      "fashion"
+    ],
+    "review_focus": [
+      "routing",
+      "literal requirements",
+      "product relevance or focused clarification"
+    ]
+  },
+  {
+    "id": "footwear_skin_care_1",
+    "storefront_id": "footwear",
+    "turns": [
+      "I need moisturizer"
+    ],
+    "expected_destinations": [
+      "beauty"
+    ],
+    "review_focus": [
+      "routing",
+      "literal requirements",
+      "product relevance or focused clarification"
+    ]
+  },
+  {
+    "id": "footwear_skin_care_2",
+    "storefront_id": "footwear",
+    "turns": [
+      "Please find moisturizer under $30"
+    ],
+    "expected_destinations": [
+      "beauty"
+    ],
+    "review_focus": [
+      "routing",
+      "literal requirements",
+      "product relevance or focused clarification"
+    ]
+  },
+  {
+    "id": "footwear_skin_care_3",
+    "storefront_id": "footwear",
+    "turns": [
+      "Show me moisturizer"
+    ],
+    "expected_destinations": [
+      "beauty"
+    ],
+    "review_focus": [
+      "routing",
+      "literal requirements",
+      "product relevance or focused clarification"
+    ]
+  },
+  {
+    "id": "footwear_skin_care_4",
+    "storefront_id": "footwear",
+    "turns": [
+      "Can you suggest moisturizer for me?"
+    ],
+    "expected_destinations": [
+      "beauty"
+    ],
+    "review_focus": [
+      "routing",
+      "literal requirements",
+      "product relevance or focused clarification"
+    ]
+  },
+  {
+    "id": "footwear_hair_care_1",
+    "storefront_id": "footwear",
+    "turns": [
+      "I need shampoo"
+    ],
+    "expected_destinations": [
+      "beauty"
+    ],
+    "review_focus": [
+      "routing",
+      "literal requirements",
+      "product relevance or focused clarification"
+    ]
+  },
+  {
+    "id": "footwear_hair_care_2",
+    "storefront_id": "footwear",
+    "turns": [
+      "Please find shampoo under $30"
+    ],
+    "expected_destinations": [
+      "beauty"
+    ],
+    "review_focus": [
+      "routing",
+      "literal requirements",
+      "product relevance or focused clarification"
+    ]
+  },
+  {
+    "id": "footwear_hair_care_3",
+    "storefront_id": "footwear",
+    "turns": [
+      "Show me shampoo"
+    ],
+    "expected_destinations": [
+      "beauty"
+    ],
+    "review_focus": [
+      "routing",
+      "literal requirements",
+      "product relevance or focused clarification"
+    ]
+  },
+  {
+    "id": "footwear_hair_care_4",
+    "storefront_id": "footwear",
+    "turns": [
+      "Can you suggest shampoo for me?"
+    ],
+    "expected_destinations": [
+      "beauty"
+    ],
+    "review_focus": [
+      "routing",
+      "literal requirements",
+      "product relevance or focused clarification"
+    ]
+  },
+  {
+    "id": "footwear_makeup_1",
+    "storefront_id": "footwear",
+    "turns": [
+      "I need lipstick"
+    ],
+    "expected_destinations": [
+      "beauty"
+    ],
+    "review_focus": [
+      "routing",
+      "literal requirements",
+      "product relevance or focused clarification"
+    ]
+  },
+  {
+    "id": "footwear_makeup_2",
+    "storefront_id": "footwear",
+    "turns": [
+      "Please find lipstick under $30"
+    ],
+    "expected_destinations": [
+      "beauty"
+    ],
+    "review_focus": [
+      "routing",
+      "literal requirements",
+      "product relevance or focused clarification"
+    ]
+  },
+  {
+    "id": "footwear_makeup_3",
+    "storefront_id": "footwear",
+    "turns": [
+      "Show me lipstick"
+    ],
+    "expected_destinations": [
+      "beauty"
+    ],
+    "review_focus": [
+      "routing",
+      "literal requirements",
+      "product relevance or focused clarification"
+    ]
+  },
+  {
+    "id": "footwear_makeup_4",
+    "storefront_id": "footwear",
+    "turns": [
+      "Can you suggest lipstick for me?"
+    ],
+    "expected_destinations": [
+      "beauty"
+    ],
+    "review_focus": [
+      "routing",
+      "literal requirements",
+      "product relevance or focused clarification"
+    ]
+  },
+  {
+    "id": "footwear_fragrance_1",
+    "storefront_id": "footwear",
+    "turns": [
+      "I need perfume"
+    ],
+    "expected_destinations": [
+      "beauty"
+    ],
+    "review_focus": [
+      "routing",
+      "literal requirements",
+      "product relevance or focused clarification"
+    ]
+  },
+  {
+    "id": "footwear_fragrance_2",
+    "storefront_id": "footwear",
+    "turns": [
+      "Please find perfume under $30"
+    ],
+    "expected_destinations": [
+      "beauty"
+    ],
+    "review_focus": [
+      "routing",
+      "literal requirements",
+      "product relevance or focused clarification"
+    ]
+  },
+  {
+    "id": "footwear_fragrance_3",
+    "storefront_id": "footwear",
+    "turns": [
+      "Show me perfume"
+    ],
+    "expected_destinations": [
+      "beauty"
+    ],
+    "review_focus": [
+      "routing",
+      "literal requirements",
+      "product relevance or focused clarification"
+    ]
+  },
+  {
+    "id": "footwear_fragrance_4",
+    "storefront_id": "footwear",
+    "turns": [
+      "Can you suggest perfume for me?"
+    ],
+    "expected_destinations": [
+      "beauty"
+    ],
+    "review_focus": [
+      "routing",
+      "literal requirements",
+      "product relevance or focused clarification"
+    ]
+  },
+  {
+    "id": "footwear_oral_care_1",
+    "storefront_id": "footwear",
+    "turns": [
+      "I need toothpaste"
+    ],
+    "expected_destinations": [
+      "beauty"
+    ],
+    "review_focus": [
+      "routing",
+      "literal requirements",
+      "product relevance or focused clarification"
+    ]
+  },
+  {
+    "id": "footwear_oral_care_2",
+    "storefront_id": "footwear",
+    "turns": [
+      "Please find toothpaste under $30"
+    ],
+    "expected_destinations": [
+      "beauty"
+    ],
+    "review_focus": [
+      "routing",
+      "literal requirements",
+      "product relevance or focused clarification"
+    ]
+  },
+  {
+    "id": "footwear_oral_care_3",
+    "storefront_id": "footwear",
+    "turns": [
+      "Show me toothpaste"
+    ],
+    "expected_destinations": [
+      "beauty"
+    ],
+    "review_focus": [
+      "routing",
+      "literal requirements",
+      "product relevance or focused clarification"
+    ]
+  },
+  {
+    "id": "footwear_oral_care_4",
+    "storefront_id": "footwear",
+    "turns": [
+      "Can you suggest toothpaste for me?"
+    ],
+    "expected_destinations": [
+      "beauty"
+    ],
+    "review_focus": [
+      "routing",
+      "literal requirements",
+      "product relevance or focused clarification"
+    ]
+  },
+  {
+    "id": "footwear_shaving_1",
+    "storefront_id": "footwear",
+    "turns": [
+      "I need razor"
+    ],
+    "expected_destinations": [
+      "beauty"
+    ],
+    "review_focus": [
+      "routing",
+      "literal requirements",
+      "product relevance or focused clarification"
+    ]
+  },
+  {
+    "id": "footwear_shaving_2",
+    "storefront_id": "footwear",
+    "turns": [
+      "Please find razor under $30"
+    ],
+    "expected_destinations": [
+      "beauty"
+    ],
+    "review_focus": [
+      "routing",
+      "literal requirements",
+      "product relevance or focused clarification"
+    ]
+  },
+  {
+    "id": "footwear_shaving_3",
+    "storefront_id": "footwear",
+    "turns": [
+      "Show me razor"
+    ],
+    "expected_destinations": [
+      "beauty"
+    ],
+    "review_focus": [
+      "routing",
+      "literal requirements",
+      "product relevance or focused clarification"
+    ]
+  },
+  {
+    "id": "footwear_shaving_4",
+    "storefront_id": "footwear",
+    "turns": [
+      "Can you suggest razor for me?"
+    ],
+    "expected_destinations": [
+      "beauty"
+    ],
+    "review_focus": [
+      "routing",
+      "literal requirements",
+      "product relevance or focused clarification"
+    ]
+  },
+  {
+    "id": "footwear_beauty_tools_1",
+    "storefront_id": "footwear",
+    "turns": [
+      "I need makeup brush"
+    ],
+    "expected_destinations": [
+      "beauty"
+    ],
+    "review_focus": [
+      "routing",
+      "literal requirements",
+      "product relevance or focused clarification"
+    ]
+  },
+  {
+    "id": "footwear_beauty_tools_2",
+    "storefront_id": "footwear",
+    "turns": [
+      "Please find makeup brush under $30"
+    ],
+    "expected_destinations": [
+      "beauty"
+    ],
+    "review_focus": [
+      "routing",
+      "literal requirements",
+      "product relevance or focused clarification"
+    ]
+  },
+  {
+    "id": "footwear_beauty_tools_3",
+    "storefront_id": "footwear",
+    "turns": [
+      "Show me makeup brush"
+    ],
+    "expected_destinations": [
+      "beauty"
+    ],
+    "review_focus": [
+      "routing",
+      "literal requirements",
+      "product relevance or focused clarification"
+    ]
+  },
+  {
+    "id": "footwear_beauty_tools_4",
+    "storefront_id": "footwear",
+    "turns": [
+      "Can you suggest makeup brush for me?"
+    ],
+    "expected_destinations": [
+      "beauty"
+    ],
+    "review_focus": [
+      "routing",
+      "literal requirements",
+      "product relevance or focused clarification"
+    ]
+  },
+  {
+    "id": "footwear_personal_care_1",
+    "storefront_id": "footwear",
+    "turns": [
+      "I need deodorant"
+    ],
+    "expected_destinations": [
+      "beauty"
+    ],
+    "review_focus": [
+      "routing",
+      "literal requirements",
+      "product relevance or focused clarification"
+    ]
+  },
+  {
+    "id": "footwear_personal_care_2",
+    "storefront_id": "footwear",
+    "turns": [
+      "Please find deodorant under $30"
+    ],
+    "expected_destinations": [
+      "beauty"
+    ],
+    "review_focus": [
+      "routing",
+      "literal requirements",
+      "product relevance or focused clarification"
+    ]
+  },
+  {
+    "id": "footwear_personal_care_3",
+    "storefront_id": "footwear",
+    "turns": [
+      "Show me deodorant"
+    ],
+    "expected_destinations": [
+      "beauty"
+    ],
+    "review_focus": [
+      "routing",
+      "literal requirements",
+      "product relevance or focused clarification"
+    ]
+  },
+  {
+    "id": "footwear_personal_care_4",
+    "storefront_id": "footwear",
+    "turns": [
+      "Can you suggest deodorant for me?"
+    ],
+    "expected_destinations": [
+      "beauty"
+    ],
+    "review_focus": [
+      "routing",
+      "literal requirements",
+      "product relevance or focused clarification"
+    ]
+  },
+  {
+    "id": "footwear_apparel_1",
+    "storefront_id": "footwear",
+    "turns": [
+      "I need shirt"
+    ],
+    "expected_destinations": [
+      "clothing"
+    ],
+    "review_focus": [
+      "routing",
+      "literal requirements",
+      "product relevance or focused clarification"
+    ]
+  },
+  {
+    "id": "footwear_apparel_2",
+    "storefront_id": "footwear",
+    "turns": [
+      "Please find shirt under $30"
+    ],
+    "expected_destinations": [
+      "clothing"
+    ],
+    "review_focus": [
+      "routing",
+      "literal requirements",
+      "product relevance or focused clarification"
+    ]
+  },
+  {
+    "id": "footwear_apparel_3",
+    "storefront_id": "footwear",
+    "turns": [
+      "Show me shirt"
+    ],
+    "expected_destinations": [
+      "clothing"
+    ],
+    "review_focus": [
+      "routing",
+      "literal requirements",
+      "product relevance or focused clarification"
+    ]
+  },
+  {
+    "id": "footwear_apparel_4",
+    "storefront_id": "footwear",
+    "turns": [
+      "Can you suggest shirt for me?"
+    ],
+    "expected_destinations": [
+      "clothing"
+    ],
+    "review_focus": [
+      "routing",
+      "literal requirements",
+      "product relevance or focused clarification"
+    ]
+  },
+  {
+    "id": "footwear_footwear_1",
+    "storefront_id": "footwear",
+    "turns": [
+      "I need shoes"
+    ],
+    "expected_destinations": [],
+    "review_focus": [
+      "routing",
+      "literal requirements",
+      "product relevance or focused clarification"
+    ]
+  },
+  {
+    "id": "footwear_footwear_2",
+    "storefront_id": "footwear",
+    "turns": [
+      "Please find shoes under $30"
+    ],
+    "expected_destinations": [],
+    "review_focus": [
+      "routing",
+      "literal requirements",
+      "product relevance or focused clarification"
+    ]
+  },
+  {
+    "id": "footwear_footwear_3",
+    "storefront_id": "footwear",
+    "turns": [
+      "Show me shoes"
+    ],
+    "expected_destinations": [],
+    "review_focus": [
+      "routing",
+      "literal requirements",
+      "product relevance or focused clarification"
+    ]
+  },
+  {
+    "id": "footwear_footwear_4",
+    "storefront_id": "footwear",
+    "turns": [
+      "Can you suggest shoes for me?"
+    ],
+    "expected_destinations": [],
+    "review_focus": [
+      "routing",
+      "literal requirements",
+      "product relevance or focused clarification"
+    ]
+  },
+  {
+    "id": "footwear_bags_1",
+    "storefront_id": "footwear",
+    "turns": [
+      "I need handbag"
+    ],
+    "expected_destinations": [
+      "fashion"
+    ],
+    "review_focus": [
+      "routing",
+      "literal requirements",
+      "product relevance or focused clarification"
+    ]
+  },
+  {
+    "id": "footwear_bags_2",
+    "storefront_id": "footwear",
+    "turns": [
+      "Please find handbag under $30"
+    ],
+    "expected_destinations": [
+      "fashion"
+    ],
+    "review_focus": [
+      "routing",
+      "literal requirements",
+      "product relevance or focused clarification"
+    ]
+  },
+  {
+    "id": "footwear_bags_3",
+    "storefront_id": "footwear",
+    "turns": [
+      "Show me handbag"
+    ],
+    "expected_destinations": [
+      "fashion"
+    ],
+    "review_focus": [
+      "routing",
+      "literal requirements",
+      "product relevance or focused clarification"
+    ]
+  },
+  {
+    "id": "footwear_bags_4",
+    "storefront_id": "footwear",
+    "turns": [
+      "Can you suggest handbag for me?"
+    ],
+    "expected_destinations": [
+      "fashion"
+    ],
+    "review_focus": [
+      "routing",
+      "literal requirements",
+      "product relevance or focused clarification"
+    ]
+  },
+  {
+    "id": "footwear_jewelry_1",
+    "storefront_id": "footwear",
+    "turns": [
+      "I need necklace"
+    ],
+    "expected_destinations": [
+      "fashion"
+    ],
+    "review_focus": [
+      "routing",
+      "literal requirements",
+      "product relevance or focused clarification"
+    ]
+  },
+  {
+    "id": "footwear_jewelry_2",
+    "storefront_id": "footwear",
+    "turns": [
+      "Please find necklace under $30"
+    ],
+    "expected_destinations": [
+      "fashion"
+    ],
+    "review_focus": [
+      "routing",
+      "literal requirements",
+      "product relevance or focused clarification"
+    ]
+  },
+  {
+    "id": "footwear_jewelry_3",
+    "storefront_id": "footwear",
+    "turns": [
+      "Show me necklace"
+    ],
+    "expected_destinations": [
+      "fashion"
+    ],
+    "review_focus": [
+      "routing",
+      "literal requirements",
+      "product relevance or focused clarification"
+    ]
+  },
+  {
+    "id": "footwear_jewelry_4",
+    "storefront_id": "footwear",
+    "turns": [
+      "Can you suggest necklace for me?"
+    ],
+    "expected_destinations": [
+      "fashion"
+    ],
+    "review_focus": [
+      "routing",
+      "literal requirements",
+      "product relevance or focused clarification"
+    ]
+  },
+  {
+    "id": "footwear_watches_1",
+    "storefront_id": "footwear",
+    "turns": [
+      "I need watch"
+    ],
+    "expected_destinations": [
+      "fashion"
+    ],
+    "review_focus": [
+      "routing",
+      "literal requirements",
+      "product relevance or focused clarification"
+    ]
+  },
+  {
+    "id": "footwear_watches_2",
+    "storefront_id": "footwear",
+    "turns": [
+      "Please find watch under $30"
+    ],
+    "expected_destinations": [
+      "fashion"
+    ],
+    "review_focus": [
+      "routing",
+      "literal requirements",
+      "product relevance or focused clarification"
+    ]
+  },
+  {
+    "id": "footwear_watches_3",
+    "storefront_id": "footwear",
+    "turns": [
+      "Show me watch"
+    ],
+    "expected_destinations": [
+      "fashion"
+    ],
+    "review_focus": [
+      "routing",
+      "literal requirements",
+      "product relevance or focused clarification"
+    ]
+  },
+  {
+    "id": "footwear_watches_4",
+    "storefront_id": "footwear",
+    "turns": [
+      "Can you suggest watch for me?"
+    ],
+    "expected_destinations": [
+      "fashion"
+    ],
+    "review_focus": [
+      "routing",
+      "literal requirements",
+      "product relevance or focused clarification"
+    ]
+  },
+  {
+    "id": "footwear_accessories_1",
+    "storefront_id": "footwear",
+    "turns": [
+      "I need belt"
+    ],
+    "expected_destinations": [
+      "fashion"
+    ],
+    "review_focus": [
+      "routing",
+      "literal requirements",
+      "product relevance or focused clarification"
+    ]
+  },
+  {
+    "id": "footwear_accessories_2",
+    "storefront_id": "footwear",
+    "turns": [
+      "Please find belt under $30"
+    ],
+    "expected_destinations": [
+      "fashion"
+    ],
+    "review_focus": [
+      "routing",
+      "literal requirements",
+      "product relevance or focused clarification"
+    ]
+  },
+  {
+    "id": "footwear_accessories_3",
+    "storefront_id": "footwear",
+    "turns": [
+      "Show me belt"
+    ],
+    "expected_destinations": [
+      "fashion"
+    ],
+    "review_focus": [
+      "routing",
+      "literal requirements",
+      "product relevance or focused clarification"
+    ]
+  },
+  {
+    "id": "footwear_accessories_4",
+    "storefront_id": "footwear",
+    "turns": [
+      "Can you suggest belt for me?"
+    ],
+    "expected_destinations": [
+      "fashion"
+    ],
+    "review_focus": [
+      "routing",
+      "literal requirements",
+      "product relevance or focused clarification"
+    ]
+  },
+  {
+    "id": "fashion_skin_care_1",
+    "storefront_id": "fashion",
+    "turns": [
+      "I need moisturizer"
+    ],
+    "expected_destinations": [
+      "beauty"
+    ],
+    "review_focus": [
+      "routing",
+      "literal requirements",
+      "product relevance or focused clarification"
+    ]
+  },
+  {
+    "id": "fashion_skin_care_2",
+    "storefront_id": "fashion",
+    "turns": [
+      "Please find moisturizer under $30"
+    ],
+    "expected_destinations": [
+      "beauty"
+    ],
+    "review_focus": [
+      "routing",
+      "literal requirements",
+      "product relevance or focused clarification"
+    ]
+  },
+  {
+    "id": "fashion_skin_care_3",
+    "storefront_id": "fashion",
+    "turns": [
+      "Show me moisturizer"
+    ],
+    "expected_destinations": [
+      "beauty"
+    ],
+    "review_focus": [
+      "routing",
+      "literal requirements",
+      "product relevance or focused clarification"
+    ]
+  },
+  {
+    "id": "fashion_skin_care_4",
+    "storefront_id": "fashion",
+    "turns": [
+      "Can you suggest moisturizer for me?"
+    ],
+    "expected_destinations": [
+      "beauty"
+    ],
+    "review_focus": [
+      "routing",
+      "literal requirements",
+      "product relevance or focused clarification"
+    ]
+  },
+  {
+    "id": "fashion_hair_care_1",
+    "storefront_id": "fashion",
+    "turns": [
+      "I need shampoo"
+    ],
+    "expected_destinations": [
+      "beauty"
+    ],
+    "review_focus": [
+      "routing",
+      "literal requirements",
+      "product relevance or focused clarification"
+    ]
+  },
+  {
+    "id": "fashion_hair_care_2",
+    "storefront_id": "fashion",
+    "turns": [
+      "Please find shampoo under $30"
+    ],
+    "expected_destinations": [
+      "beauty"
+    ],
+    "review_focus": [
+      "routing",
+      "literal requirements",
+      "product relevance or focused clarification"
+    ]
+  },
+  {
+    "id": "fashion_hair_care_3",
+    "storefront_id": "fashion",
+    "turns": [
+      "Show me shampoo"
+    ],
+    "expected_destinations": [
+      "beauty"
+    ],
+    "review_focus": [
+      "routing",
+      "literal requirements",
+      "product relevance or focused clarification"
+    ]
+  },
+  {
+    "id": "fashion_hair_care_4",
+    "storefront_id": "fashion",
+    "turns": [
+      "Can you suggest shampoo for me?"
+    ],
+    "expected_destinations": [
+      "beauty"
+    ],
+    "review_focus": [
+      "routing",
+      "literal requirements",
+      "product relevance or focused clarification"
+    ]
+  },
+  {
+    "id": "fashion_makeup_1",
+    "storefront_id": "fashion",
+    "turns": [
+      "I need lipstick"
+    ],
+    "expected_destinations": [
+      "beauty"
+    ],
+    "review_focus": [
+      "routing",
+      "literal requirements",
+      "product relevance or focused clarification"
+    ]
+  },
+  {
+    "id": "fashion_makeup_2",
+    "storefront_id": "fashion",
+    "turns": [
+      "Please find lipstick under $30"
+    ],
+    "expected_destinations": [
+      "beauty"
+    ],
+    "review_focus": [
+      "routing",
+      "literal requirements",
+      "product relevance or focused clarification"
+    ]
+  },
+  {
+    "id": "fashion_makeup_3",
+    "storefront_id": "fashion",
+    "turns": [
+      "Show me lipstick"
+    ],
+    "expected_destinations": [
+      "beauty"
+    ],
+    "review_focus": [
+      "routing",
+      "literal requirements",
+      "product relevance or focused clarification"
+    ]
+  },
+  {
+    "id": "fashion_makeup_4",
+    "storefront_id": "fashion",
+    "turns": [
+      "Can you suggest lipstick for me?"
+    ],
+    "expected_destinations": [
+      "beauty"
+    ],
+    "review_focus": [
+      "routing",
+      "literal requirements",
+      "product relevance or focused clarification"
+    ]
+  },
+  {
+    "id": "fashion_fragrance_1",
+    "storefront_id": "fashion",
+    "turns": [
+      "I need perfume"
+    ],
+    "expected_destinations": [
+      "beauty"
+    ],
+    "review_focus": [
+      "routing",
+      "literal requirements",
+      "product relevance or focused clarification"
+    ]
+  },
+  {
+    "id": "fashion_fragrance_2",
+    "storefront_id": "fashion",
+    "turns": [
+      "Please find perfume under $30"
+    ],
+    "expected_destinations": [
+      "beauty"
+    ],
+    "review_focus": [
+      "routing",
+      "literal requirements",
+      "product relevance or focused clarification"
+    ]
+  },
+  {
+    "id": "fashion_fragrance_3",
+    "storefront_id": "fashion",
+    "turns": [
+      "Show me perfume"
+    ],
+    "expected_destinations": [
+      "beauty"
+    ],
+    "review_focus": [
+      "routing",
+      "literal requirements",
+      "product relevance or focused clarification"
+    ]
+  },
+  {
+    "id": "fashion_fragrance_4",
+    "storefront_id": "fashion",
+    "turns": [
+      "Can you suggest perfume for me?"
+    ],
+    "expected_destinations": [
+      "beauty"
+    ],
+    "review_focus": [
+      "routing",
+      "literal requirements",
+      "product relevance or focused clarification"
+    ]
+  },
+  {
+    "id": "fashion_oral_care_1",
+    "storefront_id": "fashion",
+    "turns": [
+      "I need toothpaste"
+    ],
+    "expected_destinations": [
+      "beauty"
+    ],
+    "review_focus": [
+      "routing",
+      "literal requirements",
+      "product relevance or focused clarification"
+    ]
+  },
+  {
+    "id": "fashion_oral_care_2",
+    "storefront_id": "fashion",
+    "turns": [
+      "Please find toothpaste under $30"
+    ],
+    "expected_destinations": [
+      "beauty"
+    ],
+    "review_focus": [
+      "routing",
+      "literal requirements",
+      "product relevance or focused clarification"
+    ]
+  },
+  {
+    "id": "fashion_oral_care_3",
+    "storefront_id": "fashion",
+    "turns": [
+      "Show me toothpaste"
+    ],
+    "expected_destinations": [
+      "beauty"
+    ],
+    "review_focus": [
+      "routing",
+      "literal requirements",
+      "product relevance or focused clarification"
+    ]
+  },
+  {
+    "id": "fashion_oral_care_4",
+    "storefront_id": "fashion",
+    "turns": [
+      "Can you suggest toothpaste for me?"
+    ],
+    "expected_destinations": [
+      "beauty"
+    ],
+    "review_focus": [
+      "routing",
+      "literal requirements",
+      "product relevance or focused clarification"
+    ]
+  },
+  {
+    "id": "fashion_shaving_1",
+    "storefront_id": "fashion",
+    "turns": [
+      "I need razor"
+    ],
+    "expected_destinations": [
+      "beauty"
+    ],
+    "review_focus": [
+      "routing",
+      "literal requirements",
+      "product relevance or focused clarification"
+    ]
+  },
+  {
+    "id": "fashion_shaving_2",
+    "storefront_id": "fashion",
+    "turns": [
+      "Please find razor under $30"
+    ],
+    "expected_destinations": [
+      "beauty"
+    ],
+    "review_focus": [
+      "routing",
+      "literal requirements",
+      "product relevance or focused clarification"
+    ]
+  },
+  {
+    "id": "fashion_shaving_3",
+    "storefront_id": "fashion",
+    "turns": [
+      "Show me razor"
+    ],
+    "expected_destinations": [
+      "beauty"
+    ],
+    "review_focus": [
+      "routing",
+      "literal requirements",
+      "product relevance or focused clarification"
+    ]
+  },
+  {
+    "id": "fashion_shaving_4",
+    "storefront_id": "fashion",
+    "turns": [
+      "Can you suggest razor for me?"
+    ],
+    "expected_destinations": [
+      "beauty"
+    ],
+    "review_focus": [
+      "routing",
+      "literal requirements",
+      "product relevance or focused clarification"
+    ]
+  },
+  {
+    "id": "fashion_beauty_tools_1",
+    "storefront_id": "fashion",
+    "turns": [
+      "I need makeup brush"
+    ],
+    "expected_destinations": [
+      "beauty"
+    ],
+    "review_focus": [
+      "routing",
+      "literal requirements",
+      "product relevance or focused clarification"
+    ]
+  },
+  {
+    "id": "fashion_beauty_tools_2",
+    "storefront_id": "fashion",
+    "turns": [
+      "Please find makeup brush under $30"
+    ],
+    "expected_destinations": [
+      "beauty"
+    ],
+    "review_focus": [
+      "routing",
+      "literal requirements",
+      "product relevance or focused clarification"
+    ]
+  },
+  {
+    "id": "fashion_beauty_tools_3",
+    "storefront_id": "fashion",
+    "turns": [
+      "Show me makeup brush"
+    ],
+    "expected_destinations": [
+      "beauty"
+    ],
+    "review_focus": [
+      "routing",
+      "literal requirements",
+      "product relevance or focused clarification"
+    ]
+  },
+  {
+    "id": "fashion_beauty_tools_4",
+    "storefront_id": "fashion",
+    "turns": [
+      "Can you suggest makeup brush for me?"
+    ],
+    "expected_destinations": [
+      "beauty"
+    ],
+    "review_focus": [
+      "routing",
+      "literal requirements",
+      "product relevance or focused clarification"
+    ]
+  },
+  {
+    "id": "fashion_personal_care_1",
+    "storefront_id": "fashion",
+    "turns": [
+      "I need deodorant"
+    ],
+    "expected_destinations": [
+      "beauty"
+    ],
+    "review_focus": [
+      "routing",
+      "literal requirements",
+      "product relevance or focused clarification"
+    ]
+  },
+  {
+    "id": "fashion_personal_care_2",
+    "storefront_id": "fashion",
+    "turns": [
+      "Please find deodorant under $30"
+    ],
+    "expected_destinations": [
+      "beauty"
+    ],
+    "review_focus": [
+      "routing",
+      "literal requirements",
+      "product relevance or focused clarification"
+    ]
+  },
+  {
+    "id": "fashion_personal_care_3",
+    "storefront_id": "fashion",
+    "turns": [
+      "Show me deodorant"
+    ],
+    "expected_destinations": [
+      "beauty"
+    ],
+    "review_focus": [
+      "routing",
+      "literal requirements",
+      "product relevance or focused clarification"
+    ]
+  },
+  {
+    "id": "fashion_personal_care_4",
+    "storefront_id": "fashion",
+    "turns": [
+      "Can you suggest deodorant for me?"
+    ],
+    "expected_destinations": [
+      "beauty"
+    ],
+    "review_focus": [
+      "routing",
+      "literal requirements",
+      "product relevance or focused clarification"
+    ]
+  },
+  {
+    "id": "fashion_apparel_1",
+    "storefront_id": "fashion",
+    "turns": [
+      "I need shirt"
+    ],
+    "expected_destinations": [
+      "clothing"
+    ],
+    "review_focus": [
+      "routing",
+      "literal requirements",
+      "product relevance or focused clarification"
+    ]
+  },
+  {
+    "id": "fashion_apparel_2",
+    "storefront_id": "fashion",
+    "turns": [
+      "Please find shirt under $30"
+    ],
+    "expected_destinations": [
+      "clothing"
+    ],
+    "review_focus": [
+      "routing",
+      "literal requirements",
+      "product relevance or focused clarification"
+    ]
+  },
+  {
+    "id": "fashion_apparel_3",
+    "storefront_id": "fashion",
+    "turns": [
+      "Show me shirt"
+    ],
+    "expected_destinations": [
+      "clothing"
+    ],
+    "review_focus": [
+      "routing",
+      "literal requirements",
+      "product relevance or focused clarification"
+    ]
+  },
+  {
+    "id": "fashion_apparel_4",
+    "storefront_id": "fashion",
+    "turns": [
+      "Can you suggest shirt for me?"
+    ],
+    "expected_destinations": [
+      "clothing"
+    ],
+    "review_focus": [
+      "routing",
+      "literal requirements",
+      "product relevance or focused clarification"
+    ]
+  },
+  {
+    "id": "fashion_footwear_1",
+    "storefront_id": "fashion",
+    "turns": [
+      "I need shoes"
+    ],
+    "expected_destinations": [
+      "footwear"
+    ],
+    "review_focus": [
+      "routing",
+      "literal requirements",
+      "product relevance or focused clarification"
+    ]
+  },
+  {
+    "id": "fashion_footwear_2",
+    "storefront_id": "fashion",
+    "turns": [
+      "Please find shoes under $30"
+    ],
+    "expected_destinations": [
+      "footwear"
+    ],
+    "review_focus": [
+      "routing",
+      "literal requirements",
+      "product relevance or focused clarification"
+    ]
+  },
+  {
+    "id": "fashion_footwear_3",
+    "storefront_id": "fashion",
+    "turns": [
+      "Show me shoes"
+    ],
+    "expected_destinations": [
+      "footwear"
+    ],
+    "review_focus": [
+      "routing",
+      "literal requirements",
+      "product relevance or focused clarification"
+    ]
+  },
+  {
+    "id": "fashion_footwear_4",
+    "storefront_id": "fashion",
+    "turns": [
+      "Can you suggest shoes for me?"
+    ],
+    "expected_destinations": [
+      "footwear"
+    ],
+    "review_focus": [
+      "routing",
+      "literal requirements",
+      "product relevance or focused clarification"
+    ]
+  },
+  {
+    "id": "fashion_bags_1",
+    "storefront_id": "fashion",
+    "turns": [
+      "I need handbag"
+    ],
+    "expected_destinations": [],
+    "review_focus": [
+      "routing",
+      "literal requirements",
+      "product relevance or focused clarification"
+    ]
+  },
+  {
+    "id": "fashion_bags_2",
+    "storefront_id": "fashion",
+    "turns": [
+      "Please find handbag under $30"
+    ],
+    "expected_destinations": [],
+    "review_focus": [
+      "routing",
+      "literal requirements",
+      "product relevance or focused clarification"
+    ]
+  },
+  {
+    "id": "fashion_bags_3",
+    "storefront_id": "fashion",
+    "turns": [
+      "Show me handbag"
+    ],
+    "expected_destinations": [],
+    "review_focus": [
+      "routing",
+      "literal requirements",
+      "product relevance or focused clarification"
+    ]
+  },
+  {
+    "id": "fashion_bags_4",
+    "storefront_id": "fashion",
+    "turns": [
+      "Can you suggest handbag for me?"
+    ],
+    "expected_destinations": [],
+    "review_focus": [
+      "routing",
+      "literal requirements",
+      "product relevance or focused clarification"
+    ]
+  },
+  {
+    "id": "fashion_jewelry_1",
+    "storefront_id": "fashion",
+    "turns": [
+      "I need necklace"
+    ],
+    "expected_destinations": [],
+    "review_focus": [
+      "routing",
+      "literal requirements",
+      "product relevance or focused clarification"
+    ]
+  },
+  {
+    "id": "fashion_jewelry_2",
+    "storefront_id": "fashion",
+    "turns": [
+      "Please find necklace under $30"
+    ],
+    "expected_destinations": [],
+    "review_focus": [
+      "routing",
+      "literal requirements",
+      "product relevance or focused clarification"
+    ]
+  },
+  {
+    "id": "fashion_jewelry_3",
+    "storefront_id": "fashion",
+    "turns": [
+      "Show me necklace"
+    ],
+    "expected_destinations": [],
+    "review_focus": [
+      "routing",
+      "literal requirements",
+      "product relevance or focused clarification"
+    ]
+  },
+  {
+    "id": "fashion_jewelry_4",
+    "storefront_id": "fashion",
+    "turns": [
+      "Can you suggest necklace for me?"
+    ],
+    "expected_destinations": [],
+    "review_focus": [
+      "routing",
+      "literal requirements",
+      "product relevance or focused clarification"
+    ]
+  },
+  {
+    "id": "fashion_watches_1",
+    "storefront_id": "fashion",
+    "turns": [
+      "I need watch"
+    ],
+    "expected_destinations": [],
+    "review_focus": [
+      "routing",
+      "literal requirements",
+      "product relevance or focused clarification"
+    ]
+  },
+  {
+    "id": "fashion_watches_2",
+    "storefront_id": "fashion",
+    "turns": [
+      "Please find watch under $30"
+    ],
+    "expected_destinations": [],
+    "review_focus": [
+      "routing",
+      "literal requirements",
+      "product relevance or focused clarification"
+    ]
+  },
+  {
+    "id": "fashion_watches_3",
+    "storefront_id": "fashion",
+    "turns": [
+      "Show me watch"
+    ],
+    "expected_destinations": [],
+    "review_focus": [
+      "routing",
+      "literal requirements",
+      "product relevance or focused clarification"
+    ]
+  },
+  {
+    "id": "fashion_watches_4",
+    "storefront_id": "fashion",
+    "turns": [
+      "Can you suggest watch for me?"
+    ],
+    "expected_destinations": [],
+    "review_focus": [
+      "routing",
+      "literal requirements",
+      "product relevance or focused clarification"
+    ]
+  },
+  {
+    "id": "fashion_accessories_1",
+    "storefront_id": "fashion",
+    "turns": [
+      "I need belt"
+    ],
+    "expected_destinations": [],
+    "review_focus": [
+      "routing",
+      "literal requirements",
+      "product relevance or focused clarification"
+    ]
+  },
+  {
+    "id": "fashion_accessories_2",
+    "storefront_id": "fashion",
+    "turns": [
+      "Please find belt under $30"
+    ],
+    "expected_destinations": [],
+    "review_focus": [
+      "routing",
+      "literal requirements",
+      "product relevance or focused clarification"
+    ]
+  },
+  {
+    "id": "fashion_accessories_3",
+    "storefront_id": "fashion",
+    "turns": [
+      "Show me belt"
+    ],
+    "expected_destinations": [],
+    "review_focus": [
+      "routing",
+      "literal requirements",
+      "product relevance or focused clarification"
+    ]
+  },
+  {
+    "id": "fashion_accessories_4",
+    "storefront_id": "fashion",
+    "turns": [
+      "Can you suggest belt for me?"
+    ],
+    "expected_destinations": [],
+    "review_focus": [
+      "routing",
+      "literal requirements",
+      "product relevance or focused clarification"
+    ]
+  },
+  {
+    "id": "clothing_vague",
+    "storefront_id": "clothing",
+    "turns": [
+      "something nice for tomorrow",
+      "I am not sure yet"
+    ],
+    "review_focus": [
+      "ask a focused question",
+      "do not invent an item"
+    ]
+  },
+  {
+    "id": "clothing_nonsense",
+    "storefront_id": "clothing",
+    "turns": [
+      "purple triangles ate my homework",
+      "show me quantum socks for a sandwich"
+    ],
+    "review_focus": [
+      "do not force unrelated recommendations",
+      "clarify unusual wording"
+    ]
+  },
+  {
+    "id": "clothing_cross_switch",
+    "storefront_id": "clothing",
+    "turns": [
+      "a shirt for men under $40",
+      "shampoo for dandruf under 30$"
+    ],
+    "review_focus": [
+      "visible cross-section handoff",
+      "no carried budgets"
+    ]
+  },
+  {
+    "id": "clothing_mixed",
+    "storefront_id": "clothing",
+    "turns": [
+      "shampoo under $15 and shirt for men under $40"
+    ],
+    "review_focus": [
+      "separate clauses and budgets",
+      "no mixed product cards"
+    ]
+  },
+  {
+    "id": "clothing_shared",
+    "storefront_id": "clothing",
+    "turns": [
+      "a shampoo and a shirt under $40 total"
+    ],
+    "review_focus": [
+      "ask budget allocation",
+      "no guessed split"
+    ]
+  },
+  {
+    "id": "clothing_negation",
+    "storefront_id": "clothing",
+    "turns": [
+      "no shampoo; I want a shirt for men under $40"
+    ],
+    "review_focus": [
+      "ignore negated request",
+      "preserve explicit recipient and budget"
+    ]
+  },
+  {
+    "id": "clothing_followups",
+    "storefront_id": "clothing",
+    "turns": [
+      "a shirt for men under $40",
+      "Compare the first two",
+      "More options",
+      "Under $5 instead",
+      "Forget the budget"
+    ],
+    "review_focus": [
+      "references stay in section",
+      "no duplicate more results",
+      "no silent relaxation",
+      "explicit removal only"
+    ]
+  },
+  {
+    "id": "beauty_vague",
+    "storefront_id": "beauty",
+    "turns": [
+      "something nice for tomorrow",
+      "I am not sure yet"
+    ],
+    "review_focus": [
+      "ask a focused question",
+      "do not invent an item"
+    ]
+  },
+  {
+    "id": "beauty_nonsense",
+    "storefront_id": "beauty",
+    "turns": [
+      "purple triangles ate my homework",
+      "show me quantum socks for a sandwich"
+    ],
+    "review_focus": [
+      "do not force unrelated recommendations",
+      "clarify unusual wording"
+    ]
+  },
+  {
+    "id": "beauty_cross_switch",
+    "storefront_id": "beauty",
+    "turns": [
+      "a shirt for men under $40",
+      "shampoo for dandruf under 30$"
+    ],
+    "review_focus": [
+      "visible cross-section handoff",
+      "no carried budgets"
+    ]
+  },
+  {
+    "id": "beauty_mixed",
+    "storefront_id": "beauty",
+    "turns": [
+      "shampoo under $15 and shirt for men under $40"
+    ],
+    "review_focus": [
+      "separate clauses and budgets",
+      "no mixed product cards"
+    ]
+  },
+  {
+    "id": "beauty_shared",
+    "storefront_id": "beauty",
+    "turns": [
+      "a shampoo and a shirt under $40 total"
+    ],
+    "review_focus": [
+      "ask budget allocation",
+      "no guessed split"
+    ]
+  },
+  {
+    "id": "beauty_negation",
+    "storefront_id": "beauty",
+    "turns": [
+      "no shampoo; I want a shirt for men under $40"
+    ],
+    "review_focus": [
+      "ignore negated request",
+      "preserve explicit recipient and budget"
+    ]
+  },
+  {
+    "id": "beauty_followups",
+    "storefront_id": "beauty",
+    "turns": [
+      "moisturizer for dry skin under $30",
+      "Compare the first two",
+      "More options",
+      "Under $5 instead",
+      "Forget the budget"
+    ],
+    "review_focus": [
+      "references stay in section",
+      "no duplicate more results",
+      "no silent relaxation",
+      "explicit removal only"
+    ]
+  },
+  {
+    "id": "footwear_vague",
+    "storefront_id": "footwear",
+    "turns": [
+      "something nice for tomorrow",
+      "I am not sure yet"
+    ],
+    "review_focus": [
+      "ask a focused question",
+      "do not invent an item"
+    ]
+  },
+  {
+    "id": "footwear_nonsense",
+    "storefront_id": "footwear",
+    "turns": [
+      "purple triangles ate my homework",
+      "show me quantum socks for a sandwich"
+    ],
+    "review_focus": [
+      "do not force unrelated recommendations",
+      "clarify unusual wording"
+    ]
+  },
+  {
+    "id": "footwear_cross_switch",
+    "storefront_id": "footwear",
+    "turns": [
+      "a shirt for men under $40",
+      "shampoo for dandruf under 30$"
+    ],
+    "review_focus": [
+      "visible cross-section handoff",
+      "no carried budgets"
+    ]
+  },
+  {
+    "id": "footwear_mixed",
+    "storefront_id": "footwear",
+    "turns": [
+      "shampoo under $15 and shirt for men under $40"
+    ],
+    "review_focus": [
+      "separate clauses and budgets",
+      "no mixed product cards"
+    ]
+  },
+  {
+    "id": "footwear_shared",
+    "storefront_id": "footwear",
+    "turns": [
+      "a shampoo and a shirt under $40 total"
+    ],
+    "review_focus": [
+      "ask budget allocation",
+      "no guessed split"
+    ]
+  },
+  {
+    "id": "footwear_negation",
+    "storefront_id": "footwear",
+    "turns": [
+      "no shampoo; I want a shirt for men under $40"
+    ],
+    "review_focus": [
+      "ignore negated request",
+      "preserve explicit recipient and budget"
+    ]
+  },
+  {
+    "id": "footwear_followups",
+    "storefront_id": "footwear",
+    "turns": [
+      "shoes for men under $60",
+      "Compare the first two",
+      "More options",
+      "Under $5 instead",
+      "Forget the budget"
+    ],
+    "review_focus": [
+      "references stay in section",
+      "no duplicate more results",
+      "no silent relaxation",
+      "explicit removal only"
+    ]
+  },
+  {
+    "id": "fashion_vague",
+    "storefront_id": "fashion",
+    "turns": [
+      "something nice for tomorrow",
+      "I am not sure yet"
+    ],
+    "review_focus": [
+      "ask a focused question",
+      "do not invent an item"
+    ]
+  },
+  {
+    "id": "fashion_nonsense",
+    "storefront_id": "fashion",
+    "turns": [
+      "purple triangles ate my homework",
+      "show me quantum socks for a sandwich"
+    ],
+    "review_focus": [
+      "do not force unrelated recommendations",
+      "clarify unusual wording"
+    ]
+  },
+  {
+    "id": "fashion_cross_switch",
+    "storefront_id": "fashion",
+    "turns": [
+      "a shirt for men under $40",
+      "shampoo for dandruf under 30$"
+    ],
+    "review_focus": [
+      "visible cross-section handoff",
+      "no carried budgets"
+    ]
+  },
+  {
+    "id": "fashion_mixed",
+    "storefront_id": "fashion",
+    "turns": [
+      "shampoo under $15 and shirt for men under $40"
+    ],
+    "review_focus": [
+      "separate clauses and budgets",
+      "no mixed product cards"
+    ]
+  },
+  {
+    "id": "fashion_shared",
+    "storefront_id": "fashion",
+    "turns": [
+      "a shampoo and a shirt under $40 total"
+    ],
+    "review_focus": [
+      "ask budget allocation",
+      "no guessed split"
+    ]
+  },
+  {
+    "id": "fashion_negation",
+    "storefront_id": "fashion",
+    "turns": [
+      "no shampoo; I want a shirt for men under $40"
+    ],
+    "review_focus": [
+      "ignore negated request",
+      "preserve explicit recipient and budget"
+    ]
+  },
+  {
+    "id": "fashion_followups",
+    "storefront_id": "fashion",
+    "turns": [
+      "handbag under $40",
+      "Compare the first two",
+      "More options",
+      "Under $5 instead",
+      "Forget the budget"
+    ],
+    "review_focus": [
+      "references stay in section",
+      "no duplicate more results",
+      "no silent relaxation",
+      "explicit removal only"
+    ]
+  }
+]

@@ -2,12 +2,21 @@
 
 from typing import Literal
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
+
+from app.storefronts import StorefrontID
 
 
 class NewConversation(BaseModel):
     title: str = Field(default="New conversation", min_length=1, max_length=120)
     mode: Literal["chat", "commerce"] = "chat"
+    storefront_id: StorefrontID | None = None
+
+    @model_validator(mode="after")
+    def commerce_storefront(self):
+        if self.storefront_id and self.mode != "commerce":
+            raise ValueError("A storefront requires commerce mode")
+        return self
 
 
 class ChatRequest(BaseModel):

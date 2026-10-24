@@ -5,7 +5,10 @@
 `app/main.py` composes the FastAPI application, provider clients, persistence,
 admission controls, and lifecycle monitoring. Route modules validate HTTP input
 and delegate to services. `chat_service.py` handles inference and bounded context;
-`conversation_service.py` coordinates validated turns and atomic persistence.
+`conversation_service.py` checks ownership and dispatches chat versus commerce;
+`commerce_service.py` coordinates validated shopping turns and atomic persistence.
+`commerce_models.py` owns schemas, `commerce_taxonomy.py` owns the literal product
+vocabulary, and `commerce_prompts.py` owns planner instructions and examples.
 See [development standards](development.md) for module responsibilities.
 
 Each conversation has an owner, UUID, and SQLite transcript. User messages,

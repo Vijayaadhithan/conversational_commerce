@@ -206,7 +206,7 @@ def build_index(
                 with db.cursor().copy("""COPY commerce.search_documents
                     (build_id,import_id,product_id,source_line_sha256,input_sha256,title,body,input_clipped,embedding,embedding_reused)
                     FROM STDIN""") as copy:
-                    for index, ((product_id, record, source_sha), item) in enumerate(
+                    for index, ((product_id, _record, source_sha), item) in enumerate(
                         zip(rows, inputs, strict=True)
                     ):
                         reused = index not in vectors

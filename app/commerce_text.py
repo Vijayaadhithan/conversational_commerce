@@ -4,7 +4,7 @@ import re
 import unicodedata
 from decimal import Decimal
 
-from app.commerce_models import FAMILIES
+from app.commerce_taxonomy import FAMILIES
 
 
 def normalized(value):

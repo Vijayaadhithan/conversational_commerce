@@ -7,11 +7,19 @@ from fastapi import HTTPException, Request
 
 from app.api_models import RerankRequest
 from app.catalog import CatalogError
+from app.catalog_summary import catalog_summary
 from app.operations import finish_on_disconnect
 from app.search_models import ProductSearchRequest
 
 
 def register_routes(app, access):
+    @app.get("/catalog/summary")
+    async def summary():
+        try:
+            return await asyncio.to_thread(catalog_summary, app.state.product_search.database_url)
+        except (CatalogError, psycopg.Error, OSError):
+            raise HTTPException(503, "Catalog overview unavailable") from None
+
     @app.post("/products/search")
     async def products_search(body: ProductSearchRequest, request: Request):
         access.model_rate(request)

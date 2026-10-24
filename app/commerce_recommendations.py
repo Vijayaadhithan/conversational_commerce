@@ -73,9 +73,15 @@ def recommend_or_inspect(state, plan, message, old_pending, search):
             return state, guided
         query = " ".join(part for part in (task.query, task.need) if part)
     if not task.query:
+        examples = {
+            "clothing": "a shirt, dress, or jacket",
+            "beauty": "a moisturizer, shampoo, or lipstick",
+            "footwear": "running shoes, sandals, or boots",
+            "fashion": "a bag, watch, or necklace",
+        }.get(state.storefront_id, "a moisturizer, cleanser, shirt, or bag")
         return state, question(
             state,
-            "What type of product are you looking for—for example a moisturizer, cleanser, shirt, or bag?",
+            f"What type of product are you looking for—for example {examples}?",
             "product_type",
         )
     if task.filters.family in {"footwear", "apparel"} and not any(

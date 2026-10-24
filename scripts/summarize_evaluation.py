@@ -10,11 +10,32 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
+from app.storefronts import category_allowed
+
+
+def indexed_cases(cases, source):
+    indexed = {}
+    for case in cases:
+        key = case.get("id")
+        if not isinstance(key, str) or not key.strip() or key in indexed:
+            raise ValueError(f"{source} case IDs must be nonblank, unique strings")
+        indexed[key] = case
+    return indexed
+
+
+def validate_grade(value, name):
+    if type(value) is not int or value not in (0, 1, 2):
+        raise ValueError(f"{name} must be an integer: 0, 1, or 2")
+
 
 def summarize(capture, review):
-    assert review["human_reviewed"] is False
-    judgments = {case["id"]: case for case in review["cases"]}
-    assert set(judgments) == {case["id"] for case in capture["cases"]}
+    human_reviewed = review.get("human_reviewed")
+    if type(human_reviewed) is not bool:
+        raise ValueError("human_reviewed must explicitly be true or false")
+    judgments = indexed_cases(review["cases"], "review")
+    captured = indexed_cases(capture["cases"], "capture")
+    if set(judgments) != set(captured):
+        raise ValueError("Review case IDs must exactly match captured case IDs")
     outcomes, grades = Counter(), Counter()
     http = Counter()
     producing = 0
@@ -23,7 +44,7 @@ def summarize(capture, review):
     rows = []
     for case in capture["cases"]:
         judgment = judgments[case["id"]]
-        assert type(judgment["outcome"]) is int and judgment["outcome"] in (0, 1, 2)
+        validate_grade(judgment["outcome"], "conversation outcome")
         outcomes[judgment["outcome"]] += 1
         recommendations = []
         for observed in case["observations"]:
@@ -36,7 +57,11 @@ def summarize(capture, review):
                 for product in group.get("products", []):
                     cards += 1
                     amount = Decimal(product["price"]["amount"])
-                    checks = []
+                    checks = [category_allowed(product.get("category"), case.get("storefront_id"))]
+                    if filters.get("storefront_id"):
+                        checks.append(
+                            category_allowed(product.get("category"), filters["storefront_id"])
+                        )
                     for key in ("domain", "family"):
                         if filters.get(key):
                             checks.append(product["category"][key] == filters[key])
@@ -77,9 +102,10 @@ def summarize(capture, review):
                         violations.append({"case": case["id"], "product_id": product["product_id"]})
         producing += bool(recommendations)
         products = recommendations[-1]["products"] if recommendations else []
-        assert set(judgment["product_grades"]) == {p["product_id"] for p in products}, case["id"]
+        if set(judgment["product_grades"]) != {p["product_id"] for p in products}:
+            raise ValueError(f"Product grade IDs must match the final recommendation: {case['id']}")
         for grade in judgment["product_grades"].values():
-            assert type(grade) is int and grade in (0, 1, 2)
+            validate_grade(grade, "product grade")
             grades[grade] += 1
         rows.append(
             {
@@ -91,8 +117,11 @@ def summarize(capture, review):
         )
     total = sum(grades.values())
     return {
-        "review_type": "AI-reviewed synthetic conversations",
-        "human_reviewed": False,
+        "review_type": "Human-reviewed synthetic conversations"
+        if human_reviewed
+        else "AI-reviewed synthetic conversations",
+        "human_reviewed": human_reviewed,
+        "reviewed_product_scope": "final recommendation turn per conversation",
         "conversations": len(capture["cases"]),
         "http_status_counts": dict(http),
         "conversation_outcome_counts": dict(outcomes),

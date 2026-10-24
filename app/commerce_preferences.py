@@ -6,10 +6,10 @@ from difflib import SequenceMatcher
 
 from app.commerce_errors import IntentError, PreferenceConflict
 from app.commerce_models import (
-    FAMILIES,
     Change,
     Concern,
 )
+from app.commerce_taxonomy import FAMILIES
 from app.commerce_text import (
     FOREIGN_CURRENCY,
     amounts,
@@ -195,7 +195,7 @@ def apply_changes(task, plan, message):
             if value is not None:
                 amount = (
                     re.fullmatch(
-                        r"(?:USD\s*|\$\s*)?([+-]?\d+(?:\.\d{1,2})?)\s*(?:USD|dollars?)?",
+                        r"(?:USD\s*|\$\s*)?([+-]?\d+(?:\.\d{1,2})?)\s*(?:USD|dollars?|\$)?",
                         value.strip(),
                         re.I,
                     )
@@ -393,7 +393,6 @@ def preserve_literal_preferences(plan, message):
             and evidence_ok(change.evidence, message)
             and not evidence_ok(change.value, change.evidence)
             and not matching_families(change.evidence)
-            and len(change.evidence.split()) >= 2
         ):
             # Store what was actually said. A rewritten model value is never evidence.
             change.value = change.evidence

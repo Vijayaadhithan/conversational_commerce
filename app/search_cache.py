@@ -34,6 +34,8 @@ def code_signature():
         "product_search.py",
         "search_models.py",
         "search_filters.py",
+        "storefronts.py",
+        "search_normalization.py",
         "embeddings.py",
         "embedding_text.py",
         "product_reranking.py",

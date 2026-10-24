@@ -2,9 +2,15 @@
 
 import re
 
+from app.storefronts import STOREFRONTS
+
 
 def filter_sql(filters):
     clauses, values = [], []
+    if filters.storefront_id:
+        section = STOREFRONTS[filters.storefront_id]
+        clauses.extend(["p.family=ANY(%s)", "p.domain=%s"])
+        values.extend([list(section["families"]), section["domain"]])
     for field in ("domain", "family", "brand"):
         value = getattr(filters, field)
         if value is not None:

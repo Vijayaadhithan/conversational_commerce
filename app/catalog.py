@@ -209,7 +209,7 @@ def validated_source(output_dir, manifest_path=None):
         try:
             ids.execute("PRAGMA cache_size=-2048")
             ids.execute("CREATE TABLE ids (id TEXT PRIMARY KEY) WITHOUT ROWID")
-            for ordinal, line, record in _read_rows(stream):
+            for _ordinal, line, record in _read_rows(stream):
                 _validate_record(record, validator, sources)
                 try:
                     ids.execute("INSERT INTO ids VALUES (?)", (record["product_id"],))

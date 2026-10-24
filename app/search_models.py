@@ -13,6 +13,8 @@ from pydantic import (
     model_validator,
 )
 
+from app.storefronts import StorefrontID
+
 AttributeName = Literal[
     "color",
     "size",
@@ -46,6 +48,7 @@ ProductID = Annotated[str, StringConstraints(pattern=r"^amazon:[A-Z0-9]{10}$")]
 
 class ProductFilters(BaseModel):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+    storefront_id: StorefrontID | None = None
     domain: Literal["beauty", "fashion"] | None = None
     family: str | None = Field(default=None, pattern=r"^[a-z][a-z_]{1,40}$")
     brand: str | None = Field(default=None, min_length=1, max_length=160)

@@ -57,7 +57,7 @@ def support_for(text, match):
 def evidence_fields(record):
     """Yield full source fields internally; only bounded matching excerpts leave search."""
     yield "/title", record.get("title", "")
-    for name, claim in record.get("attributes", {}).items():
+    for claim in record.get("attributes", {}).values():
         if claim and isinstance(claim["value"], str):
             yield claim["field"], claim["value"]
     for name in ("features", "description"):

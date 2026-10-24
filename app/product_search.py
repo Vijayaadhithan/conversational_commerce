@@ -19,6 +19,7 @@ from app.search_models import AttributeValue as AttributeValue
 from app.search_models import ProductFilters as ProductFilters
 from app.search_models import ProductID as ProductID
 from app.search_models import ProductSearchRequest as ProductSearchRequest
+from app.storefronts import category_allowed
 
 
 def pin_search_build(db):
@@ -183,6 +184,8 @@ def search_catalog(
     )
     for product_id, ranking in fused:
         record = records[product_id]
+        if not category_allowed(record.get("category"), request.filters.storefront_id):
+            raise CatalogError("Catalog category does not match the requested storefront")
         evidence = concern_evidence(record, request.concerns)
         if candidate_texts is not None:
             candidate_texts[product_id] = rerank_document(record)
@@ -273,6 +276,7 @@ class ProductSearch:
                             name in row
                             for name in ("product_id", "title", "price", "attributes", "category")
                         )
+                        and category_allowed(row.get("category"), request.filters.storefront_id)
                         for row in cached["results"]
                     )
                 ):
@@ -305,6 +309,11 @@ class ProductSearch:
                 "candidate_count": 0,
             }
         result = prioritize_listing_evidence(result, request)
+        if any(
+            not category_allowed(row.get("category"), request.filters.storefront_id)
+            for row in result["results"]
+        ):
+            raise CatalogError("Search results do not match the requested storefront")
         self.cache.put(key, result)
         result["cache"] = {"status": cache_status}
         result["timings"] = {

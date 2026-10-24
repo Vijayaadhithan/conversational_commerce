@@ -14,7 +14,7 @@ from app import routes_conversations, routes_operations, routes_search
 from app.api_access import RequestAccess
 from app.api_schema import configure_schema
 from app.chat_service import ChatService
-from app.commerce import handle_turn
+from app.commerce_flow import handle_turn
 from app.config import ROOT as ROOT
 from app.config import Settings as Settings
 from app.conversation_service import ConversationService

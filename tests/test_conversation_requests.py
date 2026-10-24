@@ -1,5 +1,6 @@
 """Regression conversations: literal preferences, product scope, replay, and recovery."""
 
+import json
 from decimal import Decimal
 
 import pytest
@@ -265,7 +266,7 @@ def test_optional_examples_make_room_for_saved_tasks_and_repair_feedback(tmp_pat
         assert result["intent_attempts"] == 2 and len(result["preferences"]["tasks"]) == 5
         for call in calls:
             assert byte_size(call["messages"]) + byte_size(call["format"]) <= config.prompt_budget
-            assert '"id": 5' in call["messages"][-1]["content"]
+            assert json.loads(call["messages"][-1]["content"])["tasks"][-1]["id"] == 5
 
 
 def test_each_product_enforces_its_own_attributes():
@@ -504,7 +505,7 @@ def test_concerns_wrapped_as_product_requests_still_use_one_task_and_validate_fi
         handle_turn(state.model_dump(), invalid, message, search.search)
 
 
-@pytest.mark.parametrize("amount", ["$20", "20 USD", "USD 20", "20 dollars"])
+@pytest.mark.parametrize("amount", ["$20", "20 USD", "USD 20", "20 dollars", "20$"])
 def test_browsing_accepts_quoted_currency_format_without_relaxing_budget(amount):
     message = "oily skin, under $20, show me options"
     state = ShoppingState(
@@ -571,6 +572,74 @@ def test_single_request_wrapper_is_validated_as_one_task(product):
     state, result = handle_turn({}, proposal, message, search.search)
     assert len(state.tasks) == 1 and state.active().query == product
     assert search.calls[-1].filters.max_price == Decimal("24.99")
+
+
+@pytest.mark.parametrize("concern_value", ["dandruf", "dandruff"])
+@pytest.mark.parametrize("amount", ["30", "30$"])
+def test_shampoo_with_wrapped_concerns_is_one_request(tmp_path, concern_value, amount):
+    message = "hair fall need a shampoo and dandruf under 30$"
+    proposal = plan(
+        "search",
+        message,
+        recommendation_requested=True,
+        requests=[
+            {
+                "evidence": "hair fall need a shampoo",
+                "changes": [
+                    change("query", "shampoo", "shampoo"),
+                    change("need", "hair fall", "hair fall"),
+                ],
+            },
+            {
+                "evidence": "dandruf under 30$",
+                "changes": [
+                    change("need", concern_value, "dandruf"),
+                    change("max_price", amount, "under 30$"),
+                ],
+            },
+        ],
+    )
+    _, app, calls = harness(tmp_path, {message: proposal})
+    with TestClient(app) as client:
+        search = app.state.product_search = Search()
+        result = commerce(client, new(client), message)
+        assert result["action"] == "recommend"
+        assert len(calls) == len(search.calls) == 1
+        tasks = result["preferences"]["tasks"]
+        assert len(tasks) == 1 and tasks[0]["query"] == "shampoo"
+        assert {item["value"] for item in tasks[0]["needs"]} == {"hair fall", "dandruf"}
+        request = search.calls[0]
+        assert request.filters.family == "hair_care"
+        assert request.filters.max_price == Decimal("29.99")
+        assert request.filters.attributes == {}
+        assert "hair fall" in request.query and "dandruf" in request.query
+
+
+@pytest.mark.parametrize(
+    "extra",
+    [
+        {"evidence": "dandruff", "changes": []},
+        {"evidence": "dandruf", "changes": [change("max_price", "30", "under 30$")]},
+        {"evidence": "dandruf", "changes": [change("brand", "Invented", "dandruf")]},
+    ],
+)
+def test_single_product_wrapper_recovery_keeps_evidence_validation(extra):
+    message = "hair fall need a shampoo and dandruf under 30$"
+    proposal = IntentPlan.model_validate(
+        plan(
+            "search",
+            message,
+            recommendation_requested=True,
+            requests=[
+                {"evidence": "shampoo", "changes": [change("query", "shampoo", "shampoo")]},
+                extra,
+            ],
+        )
+    )
+    search = Search()
+    with pytest.raises(IntentError):
+        handle_turn({}, proposal, message, search.search)
+    assert not search.calls
 
 
 def test_multi_clauses_accept_omitted_request_verb_but_keep_complete_requirements():
@@ -797,6 +866,54 @@ def test_budget_discussion_or_deferral_still_goes_through_semantic_planner(messa
     ],
 )
 def test_more_options_router_does_not_capture_other_requests(message):
+    from app.commerce import direct_plan
+
+    assert direct_plan(message) is None
+
+
+def test_frontend_task_actions_preserve_scope_and_skip_seen_products():
+    from app.commerce import direct_plan
+
+    search = Search()
+    message = "moisturizer under $20"
+    state, first = handle_turn(
+        {}, IntentPlan(intent="search", evidence=message), message, search.search
+    )
+    state.tasks.append(ShoppingTask(id=2, query="shampoo"))
+    state.active_task_id = 2
+    state.displayed_task_ids = [1, 2]
+    message = "More options for task 1"
+    proposal = direct_plan(message)
+    assert proposal.intent == "more" and proposal.task_id == 1
+    state, more = handle_turn(state.model_dump(), proposal, message, search.search)
+    assert more["products"] and state.active_task_id == 1
+    assert not {p["product_id"] for p in first["products"]} & {
+        p["product_id"] for p in more["products"]
+    }
+    assert state.tasks[1].filters.max_price is None
+    message = "Compare the first two in task 1"
+    state, compared = handle_turn(state.model_dump(), direct_plan(message), message, search.search)
+    assert compared["action"] == "compare" and len(compared["products"]) == 2
+    product_id = compared["products"][0]["product_id"]
+    message = f"Details about {product_id} in task 1"
+    state, detail = handle_turn(state.model_dump(), direct_plan(message), message, search.search)
+    assert detail["action"] == "details" and detail["products"][0]["product_id"] == product_id
+    message = "Cheaper options for task 1"
+    state, _ = handle_turn(state.model_dump(), direct_plan(message), message, search.search)
+    assert state.active().filters.max_price < Decimal(more["products"][0]["price"]["amount"])
+
+
+@pytest.mark.parametrize(
+    "message",
+    [
+        "More expensive products for task 1",
+        "No more choices for task 1",
+        "More options but don't show products yet for task 1",
+        "More options for task 1 and task 2",
+        "More options for task 1 for task 2",
+    ],
+)
+def test_task_suffix_does_not_swallow_freeform_or_negated_requests(message):
     from app.commerce import direct_plan
 
     assert direct_plan(message) is None

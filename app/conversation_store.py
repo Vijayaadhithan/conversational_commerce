@@ -49,6 +49,7 @@ class Store(SecurityStore):
                 "mode": "TEXT NOT NULL DEFAULT 'chat'",
                 "shopping_state": "TEXT NOT NULL DEFAULT '{}'",
                 "state_version": "INTEGER NOT NULL DEFAULT 0",
+                "storefront_id": "TEXT",
             }.items():
                 if name not in columns:
                     db.execute(f"ALTER TABLE conversations ADD COLUMN {name} {declaration}")
@@ -66,11 +67,20 @@ class Store(SecurityStore):
         finally:
             db.close()
 
-    def create(self, title, mode="chat", owner="local-development", identity=None):
-        record = dict(id=str(uuid4()), title=title, mode=mode, created_at=now(), updated_at=now())
+    def create(
+        self, title, mode="chat", owner="local-development", identity=None, storefront_id=None
+    ):
+        record = dict(
+            id=str(uuid4()),
+            title=title,
+            mode=mode,
+            created_at=now(),
+            updated_at=now(),
+            storefront_id=storefront_id,
+        )
         with self.connect() as db:
             db.execute(
-                "INSERT INTO conversations(id,title,mode,created_at,updated_at,owner_id) VALUES (:id,:title,:mode,:created_at,:updated_at,:owner)",
+                "INSERT INTO conversations(id,title,mode,created_at,updated_at,owner_id,storefront_id) VALUES (:id,:title,:mode,:created_at,:updated_at,:owner,:storefront_id)",
                 dict(record, owner=owner),
             )
             self.complete_request(db, identity, record, 201)
@@ -92,7 +102,7 @@ class Store(SecurityStore):
             return [
                 dict(r)
                 for r in db.execute(
-                    "SELECT id,title,mode,created_at,updated_at FROM conversations WHERE owner_id=? OR (owner_id IS NULL AND ?='local-development') ORDER BY updated_at DESC LIMIT ? OFFSET ?",
+                    "SELECT id,title,mode,created_at,updated_at,storefront_id FROM conversations WHERE owner_id=? OR (owner_id IS NULL AND ?='local-development') ORDER BY updated_at DESC LIMIT ? OFFSET ?",
                     (owner, owner, limit, offset),
                 )
             ]

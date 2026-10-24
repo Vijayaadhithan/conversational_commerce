@@ -7,3 +7,7 @@ class IntentError(ValueError):
 
 class PreferenceConflict(ValueError):
     pass
+
+
+class ScopeConflict(Exception):
+    """A proposed task cannot be applied inside the stored storefront."""
