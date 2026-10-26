@@ -9,7 +9,7 @@ Long SQL, regular expressions, and prompt strings retain their exact contents.
 
 CI checks formatting, imports, undefined names, unused imports/locals/loop bindings,
 and redundant lint suppressions, plus tests on Python
-3.11 and 3.14. PostgreSQL/pgvector, Qdrant, and Redis run as isolated test services.
+3.11 and 3.14. PostgreSQL, Qdrant, and Redis run as isolated test services.
 Hosted inference tests use mock transports and require no provider credentials.
 
 For local integration tests, set `CATALOG_TEST_ADMIN_URL` and
@@ -62,3 +62,14 @@ Include new ranking/filter modules in the search-cache code signature.
 
 Keep Markdown factual, concise, and task-focused. Document commands, contracts,
 limitations, and operational decisions; avoid duplicated explanations.
+
+## Conversation evaluation
+
+Use `scripts/evaluate_conversations.py` to capture configured model responses with
+isolated conversation storage. Cases live in `evals/`; section-specific instructions
+are in [conversations](conversations.md#evaluation-boundaries).
+`scripts/summarize_evaluation.py --capture CAPTURE.json --review REVIEW.json --output SUMMARY.json`
+validates explicit review labels against captured product IDs. Prepare labels for
+the actual capture; historical labels cannot be assumed valid after a rebuild.
+Report execution, constraint compliance, and reviewed relevance separately, and
+identify AI-only reviews as such. Captures and summaries remain under ignored `data/`.

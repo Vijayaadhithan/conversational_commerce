@@ -69,16 +69,6 @@ elif name == "redis-cli":
         print("NOAUTH Authentication required." if os.environ.get("TEST_SETUP_REDIS_AUTH") else "PONG")
     else:
         sys.exit(1)
-elif name == "git":
-    if args[0] != "clone" or args[-2] != "https://github.com/pgvector/pgvector.git":
-        sys.exit("Unexpected git command")
-    pathlib.Path(args[-1]).mkdir(parents=True)
-elif name == "make":
-    if args[-1] == "install":
-        (sharedir / "extension/vector.control").touch()
-        (libdir / "vector.so").touch()
-elif name == "xcrun":
-    print("clang")
 elif name in ("service", "systemctl"):
     (root / ("redis.ready" if "redis-server" in args else "pg.ready")).touch()
 elif name not in ("cc", "apt-get"):
@@ -179,7 +169,7 @@ def test_dry_run_with_all_flags_has_no_mutations(installer):
     checkout, _, _, run = installer
     result, events = run("--dry-run", "--with-services", "--with-reranker", "--dev")
     assert result.returncode == 0, result.stderr
-    assert "pgvector v0.8.7" in result.stdout
+    assert "PostgreSQL and Redis" in result.stdout
     assert not (checkout / ".venv").exists() and not (checkout / ".env").exists()
     assert not any(event[0] in ("git", "make", "apt-get") for event in events)
     assert not any(event[0] == "brew" and event[1:] != ["--prefix"] for event in events)
@@ -187,14 +177,14 @@ def test_dry_run_with_all_flags_has_no_mutations(installer):
 
 
 @pytest.mark.parametrize("platform", ["Darwin", "Linux"])
-def test_services_build_for_existing_postgres_and_reuse_on_second_run(installer, platform):
+def test_services_reuse_existing_postgres_without_compiling_extensions(installer, platform):
     _, temp, pg, run = installer
     result, first_events = run("--with-services", changes={"TEST_SETUP_OS": platform})
     assert result.returncode == 0, result.stderr
-    assert (pg / "share/extension/vector.control").exists()
-    assert (pg / "lib/vector.so").exists()
+    assert not (pg / "share/extension/vector.control").exists()
+    assert not (pg / "lib/vector.so").exists()
     assert (temp / "pg.ready").exists() and (temp / "redis.ready").exists()
-    assert any(event[0] == "git" and "v0.8.7" in event for event in first_events)
+    assert not any(event[0] in ("git", "make", "cc", "xcrun") for event in first_events)
     assert not any(event[0] in ("brew", "apt-get") and "install" in event for event in first_events)
     result, all_events = run("--with-services", changes={"TEST_SETUP_OS": platform})
     assert result.returncode == 0, result.stderr
@@ -222,17 +212,15 @@ def test_fresh_homebrew_service_installation(installer):
     assert result.returncode == 0, result.stderr
     assert ["brew", "install", "postgresql@18"] in events
     assert ["brew", "install", "redis"] in events
-    assert (temp / "brew/opt/postgresql@18/lib/vector.so").exists()
+    assert (temp / "brew/opt/postgresql@18/bin/pg_ctl").exists()
 
 
-def test_linux_installs_matching_server_headers(installer):
+def test_linux_needs_no_server_headers_or_compiler(installer):
     _, _, pg, run = installer
     (pg / "include/server/postgres.h").unlink()
     result, events = run("--with-services", changes={"TEST_SETUP_OS": "Linux"})
     assert result.returncode == 0, result.stderr
-    assert ["apt-get", "update"] in events
-    assert any(event[0] == "apt-get" and "postgresql-server-dev-16" in event for event in events)
-    assert not any(event[0] == "apt-get" and "postgresql" in event for event in events)
+    assert not any(event[0] in ("apt-get", "make", "git", "cc") for event in events)
 
 
 def test_install_failure_stops_before_service_or_env_changes(installer):

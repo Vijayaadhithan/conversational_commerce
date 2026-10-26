@@ -46,9 +46,10 @@ do not bypass authentication, evidence validation, or mandatory search filters.
 
 The separate ETL repository uses DuckDB to normalize and validate source archives,
 then publishes versioned Parquet and JSONL. PostgreSQL stores authoritative product
-snapshots, hard-filter projections, and generation metadata. PostgreSQL vectors remain
-as the durable embedding cache for Qdrant export, verification, and rebuilds; pgvector
-is still required. Conversation SQLite is independent live state.
+snapshots, hard-filter projections, and generation metadata. Backend DuckDB writes
+immutable, checksummed Parquet embedding batches; PostgreSQL stores only their
+references. These snapshots support reuse, verification, and Qdrant rebuilds.
+Conversation SQLite is independent live state.
 
 Qdrant is the only online candidate-retrieval engine: native BM25 and dense cosine
 search return candidates, which the backend fuses with RRF. Mandatory SQL eligibility
@@ -59,8 +60,7 @@ reranking preserve the response contract. See [search](search.md).
 The builder finishes and verifies the Qdrant collection before publishing catalog
 and search pointers. Queries require that exact ready collection, including before
 serving cached results. Qdrant errors fail explicitly; PostgreSQL is not an online
-fallback. The offline ANN comparison tool retains exact PostgreSQL neighbors as a
-reference. Redis caches are bounded and include generation, collection, retrieval
+fallback. Redis caches are bounded and include generation, collection, retrieval
 mode, model identity, request constraints, and ranking-code identity.
 
 See [catalog storage](catalog.md), [embedding lifecycle](embedding_lifecycle.md),
@@ -71,5 +71,3 @@ See [catalog storage](catalog.md), [embedding lifecycle](embedding_lifecycle.md)
 Catalog snapshots do not establish current stock, prices, medical outcomes, or
 complete ingredient and variant coverage. Distributed admission, identity
 federation, and approximate-search quality validation remain separate work.
-Historical performance measurements are documented in
-[scaling and performance](scaling_and_performance.md).

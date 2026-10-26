@@ -1,4 +1,4 @@
-"""Export/verify existing PostgreSQL embeddings in Qdrant without model calls."""
+"""Export/verify Parquet embedding snapshots in Qdrant without model calls."""
 
 import argparse
 import json

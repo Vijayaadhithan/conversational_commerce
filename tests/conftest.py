@@ -45,12 +45,13 @@ def scratch_database():
 
 
 @pytest.fixture
-def pg(scratch_database, monkeypatch):
+def pg(scratch_database, monkeypatch, tmp_path):
     from app.qdrant_client import QdrantClient, QdrantSettings
 
     url = os.getenv("QDRANT_TEST_URL")
     if not url:
         pytest.skip("Set QDRANT_TEST_URL for catalog/search integration tests")
+    monkeypatch.setenv("SEARCH_ARTIFACT_DIR", str(tmp_path / "embeddings"))
     prefix = "test_" + uuid4().hex[:16]
     monkeypatch.setenv("QDRANT_URL", url)
     monkeypatch.setenv("QDRANT_COLLECTION_PREFIX", prefix)

@@ -185,7 +185,8 @@ are under the supplied ignored `data/` output path.
   ETL artifacts need an explicit path allowlist and backend-reference check; age alone
   cannot establish that an output is unused.
 - Preserve raw sources, active JSONL and Parquet, credentials, conversation state, and
-  required model files. Current rebuild/verification code still uses PostgreSQL vectors.
+  required model files. Preserve backend Parquet embedding snapshots together with
+  their PostgreSQL build metadata; these are required for model-free Qdrant rebuilds.
 
 ## Database maintenance
 
@@ -209,6 +210,10 @@ Remote collections are removed before their registry entries. Aliased collection
 refused. A remote failure rolls back SQL changes; retry tolerates an already missing
 collection. This is retryable cleanup, not an atomic transaction across both systems.
 Unregistered collections require separate inspection and are never inferred/deleted.
+After build deletion commits, use `manage_search_index.py prune-artifacts` to preview
+unreferenced embedding directories, then repeat with `--apply`. Registered builds,
+including incomplete builds, are protected. Use a dedicated `SEARCH_ARTIFACT_DIR`
+for each database; backups must include both this directory and PostgreSQL metadata.
 
 ```bash
 .venv/bin/python scripts/manage_search_index.py vacuum

@@ -1,9 +1,11 @@
 """Explicit removal and index maintenance within the dedicated commerce DB."""
 
 import re
+import shutil
 from contextlib import contextmanager
 
 from app.catalog import LOCK_ID, CatalogError, _check_schema
+from app.embedding_artifacts import artifact_root
 from app.search_index import BUILD_LOCK
 
 
@@ -148,6 +150,32 @@ def remove_imports(db, *, import_ids=None, min_age_days=7, apply=False):
             "imports": delete,
             "product_rows": sum(item["products"] for item in delete),
             "preserved": preserved,
+        }
+
+
+def prune_artifacts(db, *, apply=False):
+    """Remove only artifact directories with no remaining build metadata."""
+    with maintenance_lock(db):
+        protected = {row[0] for row in db.execute("SELECT build_id FROM commerce.search_builds")}
+        root = artifact_root()
+        candidates = []
+        if root.exists():
+            for path in sorted(root.iterdir()):
+                if not re.fullmatch(r"[0-9a-f]{64}", path.name) or path.name in protected:
+                    continue
+                if path.is_symlink() or not path.is_dir():
+                    raise CatalogError("Unexpected embedding artifact path; inspect manually")
+                if any(item.is_symlink() for item in path.rglob("*")):
+                    raise CatalogError("Embedding artifact directories cannot contain symlinks")
+                candidates.append(path)
+        if apply:
+            for path in candidates:
+                shutil.rmtree(path)
+        return {
+            "status": "deleted" if apply else "planned",
+            "apply": apply,
+            "directories": [str(path) for path in candidates],
+            "protected_builds": sorted(protected),
         }
 
 

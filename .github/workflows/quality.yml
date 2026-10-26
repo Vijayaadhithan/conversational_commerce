@@ -17,7 +17,7 @@ jobs:
         python-version: ["3.11", "3.14"]
     services:
       postgres:
-        image: pgvector/pgvector:pg16
+        image: postgres:16
         env:
           POSTGRES_USER: commerce_test
           POSTGRES_PASSWORD: test_only_password

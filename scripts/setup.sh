@@ -8,7 +8,6 @@ with_reranker=0
 with_dev=0
 dry_run=0
 apt_updated=0
-build_dir=""
 pg_config_bin=""
 brew_prefix=""
 
@@ -16,7 +15,7 @@ usage() {
     cat <<'EOF'
 Usage: bash scripts/setup.sh [options]
 
-  --with-services  Install/reuse local PostgreSQL, pgvector, and Redis; start services
+  --with-services  Install/reuse local PostgreSQL and Redis; start services
   --with-reranker  Install local reranker Python libraries (no model weights)
   --dev            Install testing dependencies
   --dry-run        Show planned changes without installing or writing files
@@ -52,13 +51,6 @@ admin() {
         run sudo -- "$@"
     fi
 }
-cleanup() {
-    if [[ -n "$build_dir" && -d "$build_dir" ]]; then
-        rm -rf -- "$build_dir"
-    fi
-}
-trap cleanup EXIT
-
 for option in "$@"; do
     case "$option" in
         --with-services) with_services=1 ;;
@@ -201,47 +193,13 @@ discover_postgres() {
     fi
 }
 
-install_pgvector() {
-    local sharedir libdir headers
+configure_postgres() {
     if (( dry_run )) && [[ ! -x "$pg_config_bin" ]]; then
-        log "[dry-run] Build pgvector v0.8.7 against the newly installed PostgreSQL"
         return
     fi
     pg_major="$("$pg_config_bin" --version | sed -E 's/^PostgreSQL ([0-9]+).*/\1/')"
-    [[ "$pg_major" =~ ^[0-9]+$ ]] && (( pg_major >= 13 )) || die "pgvector requires PostgreSQL 13+."
     pg_bindir="$("$pg_config_bin" --bindir)"
     [[ -x "$pg_bindir/pg_ctl" ]] || die "Selected PG_CONFIG has no PostgreSQL server installation."
-    sharedir="$("$pg_config_bin" --sharedir)"
-    libdir="$("$pg_config_bin" --pkglibdir)"
-    if [[ -f "$sharedir/extension/vector.control" && ( -f "$libdir/vector.so" || -f "$libdir/vector.dylib" ) ]]; then
-        log "Reusing pgvector for PostgreSQL $pg_major"
-        return
-    fi
-    headers="$("$pg_config_bin" --includedir-server)"
-    if [[ "$platform" == Linux ]]; then
-        local packages=()
-        command -v git >/dev/null || packages+=(git)
-        command -v make >/dev/null || packages+=(make)
-        command -v cc >/dev/null || packages+=(build-essential)
-        [[ -f "$headers/postgres.h" ]] || packages+=("postgresql-server-dev-$pg_major")
-        if (( ${#packages[@]} )); then apt_install "${packages[@]}"; fi
-    elif (( ! dry_run )); then
-        command -v git >/dev/null && command -v make >/dev/null && xcrun --find clang >/dev/null 2>&1 || die "Install Xcode Command Line Tools first: xcode-select --install"
-    fi
-    log "Installing pgvector v0.8.7 for PostgreSQL $pg_major"
-    if (( dry_run )); then
-        log "[dry-run] Clone https://github.com/pgvector/pgvector.git at v0.8.7, build with PG_CONFIG=$pg_config_bin, and install extension files"
-        return
-    fi
-    build_dir="$(mktemp -d "${TMPDIR:-/tmp}/commerce-pgvector.XXXXXX")"
-    run git clone --depth 1 --branch v0.8.7 https://github.com/pgvector/pgvector.git "$build_dir/source"
-    run env "PG_CONFIG=$pg_config_bin" make -C "$build_dir/source" OPTFLAGS=
-    if [[ -w "$sharedir/extension" && -w "$libdir" ]]; then
-        run env "PG_CONFIG=$pg_config_bin" make -C "$build_dir/source" install
-    else
-        admin env "PG_CONFIG=$pg_config_bin" make -C "$build_dir/source" install
-    fi
-    [[ -f "$sharedir/extension/vector.control" && ( -f "$libdir/vector.so" || -f "$libdir/vector.dylib" ) ]] || die "pgvector installation did not produce extension files for the selected PostgreSQL."
 }
 
 start_and_check_services() {
@@ -291,7 +249,7 @@ start_and_check_services() {
 }
 
 if (( with_services )); then
-    log "Preparing local PostgreSQL, pgvector, and Redis"
+    log "Preparing local PostgreSQL and Redis"
     discover_postgres
     if [[ -z "$pg_config_bin" ]]; then
         if [[ "$platform" == Darwin ]]; then
@@ -306,10 +264,10 @@ if (( with_services )); then
     if ! command -v redis-server >/dev/null || ! command -v redis-cli >/dev/null; then
         if [[ "$platform" == Darwin ]]; then run brew install redis; else apt_install redis-server redis-tools; fi
     fi
-    install_pgvector
+    configure_postgres
     start_and_check_services
     if (( ! dry_run )); then
-        log "Extension files are available; enabling vector in a chosen database is a separate step."
+        log "PostgreSQL is available; initialize the dedicated catalog separately."
     fi
 fi
 

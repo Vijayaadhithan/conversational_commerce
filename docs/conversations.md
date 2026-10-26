@@ -282,6 +282,17 @@ language.
 
 ### Local check
 
+Configure the sibling frontend once from the backend checkout:
+
+```bash
+.venv/bin/python scripts/setup_local_frontend.py
+```
+
+This creates server-only bindings with a dedicated non-admin identity in ignored
+credential files and preserves complete existing bindings. Keep PostgreSQL,
+Docker/Qdrant, and the configured model services running. Use `127.0.0.1`
+consistently because `localhost` has separate browser cookies.
+
 Use two terminals, stopping an older instance yourself before restarting:
 
 ```bash
@@ -300,6 +311,16 @@ return to beauty: the shampoo preferences should still be there. Check a mixed
 request (`shampoo under $15 and shirt for men under $40`), comparison, more
 options, refresh, and two tabs with different sections. If a constraint yields
 no matching listing, the response should say so without broadening it.
+
+While both servers are running, check the browser-facing gateway and shopping flows:
+
+```bash
+.venv/bin/python scripts/check_frontend_live.py
+```
+
+The check uses real models and temporary test conversations; it removes those test
+conversations afterward. Live products retain historical prices and unknown stock
+or variant facts. Optional sample mode is separate and visibly labelled.
 
 ### Evaluation boundaries
 

@@ -7,3 +7,4 @@ jsonschema>=4,<5
 redis>=5,<8
 
 psutil>=5.9,<8
+duckdb==1.5.6

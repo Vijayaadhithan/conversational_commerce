@@ -8,8 +8,8 @@ from uuid import uuid4
 from psycopg.types.json import Jsonb
 
 from app.catalog import LOCK_ID, CatalogError, _check_schema
+from app.embedding_artifacts import STORAGE_VERSION, resolve_vectors, write_batch
 from app.embedding_text import contract, document_text
-from app.embeddings import vector_literal
 
 BUILD_LOCK = LOCK_ID + 1
 
@@ -20,6 +20,7 @@ def build_config(import_id, embedder):
         "model": embedder.settings.model,
         "model_digest": embedder.digest,
         "input_contract": contract(),
+        "embedding_storage": STORAGE_VERSION,
     }
 
 
@@ -28,33 +29,38 @@ def verify_build(db, build_id):
         "SELECT import_id, config, expected_count FROM commerce.search_builds WHERE build_id=%s",
         (build_id,),
     ).fetchone()
-    if not meta or meta[1]["input_contract"] != contract():
-        raise CatalogError("Search build is missing or has a different input contract")
+    if (
+        not meta
+        or meta[1]["input_contract"] != contract()
+        or meta[1].get("embedding_storage") != STORAGE_VERSION
+    ):
+        raise CatalogError("Search build is missing or has a different input/storage contract")
     count, clipped = 0, 0
     with db.cursor(name="verify_search_inputs") as cursor:
-        cursor.itersize = 100
         cursor.execute(
-            """SELECT p.document, p.source_line_sha256, d.source_line_sha256,
-            d.input_sha256, d.title, d.body, d.input_clipped, public.vector_norm(d.embedding)
+            """SELECT p.document,p.source_line_sha256,d.source_line_sha256,
+                d.input_sha256,d.title,d.body,d.input_clipped,d.product_id,d.embedding_batch
             FROM commerce.search_documents d JOIN commerce.catalog_products p
             ON (p.import_id,p.product_id)=(d.import_id,d.product_id)
             WHERE d.build_id=%s ORDER BY d.product_id""",
             (build_id,),
         )
-        for record, source_sha, stored_sha, input_sha, title, body, was_clipped, norm in cursor:
-            expected = document_text(record)
-            if (
-                source_sha,
-                expected["sha256"],
-                expected["title"],
-                expected["body"],
-                expected["clipped"],
-            ) != (stored_sha, input_sha, title, body, was_clipped) or not 0.999 <= norm <= 1.001:
-                raise CatalogError(
-                    "Search build differs from the current catalog or input contract"
-                )
-            count += 1
-            clipped += was_clipped
+        while rows := cursor.fetchmany(128):
+            resolve_vectors([(build_id, row[7], row[3], row[8]) for row in rows])
+            for record, source_sha, stored_sha, input_sha, title, body, was_clipped, _, _ in rows:
+                expected = document_text(record)
+                if (
+                    source_sha,
+                    expected["sha256"],
+                    expected["title"],
+                    expected["body"],
+                    expected["clipped"],
+                ) != (stored_sha, input_sha, title, body, was_clipped):
+                    raise CatalogError(
+                        "Search build differs from the current catalog or input contract"
+                    )
+                count += 1
+                clipped += was_clipped
     if count != meta[2]:
         raise CatalogError("Search build is incomplete")
     return {"products": count, "selected_text_clipped": clipped}
@@ -97,21 +103,22 @@ def _select_build(db, config, reembed_all, reembed_ids, resume_build):
 def _cached_vectors(db, inputs, config):
     if not inputs:
         return {}
-    return dict(
-        db.execute(
-            """SELECT DISTINCT ON (d.input_sha256) d.input_sha256,d.embedding::text
+    rows = db.execute(
+        """SELECT DISTINCT ON (d.input_sha256) d.build_id,d.product_id,d.input_sha256,d.embedding_batch
         FROM commerce.search_documents d JOIN commerce.search_builds b USING(build_id)
         WHERE d.input_sha256=ANY(%s) AND b.status='ready'
           AND b.config->>'model_digest'=%s AND b.config->'input_contract'=%s
-          AND public.vector_norm(d.embedding) BETWEEN 0.999 AND 1.001
+          AND b.config->>'embedding_storage'=%s
         ORDER BY d.input_sha256,b.completed_at DESC,b.build_id""",
-            (
-                [item["sha256"] for item in inputs],
-                config["model_digest"],
-                Jsonb(config["input_contract"]),
-            ),
-        ).fetchall()
-    )
+        (
+            [item["sha256"] for item in inputs],
+            config["model_digest"],
+            Jsonb(config["input_contract"]),
+            STORAGE_VERSION,
+        ),
+    ).fetchall()
+    vectors = resolve_vectors(rows)
+    return {sha: vectors[(build, key)] for build, key, sha, _ in rows}
 
 
 def build_index(
@@ -199,18 +206,26 @@ def build_index(
                 if refresh.get("all") or row[0] in forced_ids or item["sha256"] not in cache
             ]
             fresh = embedder.embed([inputs[index]["input"] for index in missing]) if missing else []
-            vectors = {
-                index: vector_literal(vector) for index, vector in zip(missing, fresh, strict=True)
-            }
+            vectors = {index: vector for index, vector in zip(missing, fresh, strict=True)}
+            batch = write_batch(
+                build_id,
+                [
+                    (
+                        row[0],
+                        item["sha256"],
+                        vectors[index] if index in vectors else cache[item["sha256"]],
+                    )
+                    for index, (row, item) in enumerate(zip(rows, inputs, strict=True))
+                ],
+            )
             with db.transaction():
                 with db.cursor().copy("""COPY commerce.search_documents
-                    (build_id,import_id,product_id,source_line_sha256,input_sha256,title,body,input_clipped,embedding,embedding_reused)
+                    (build_id,import_id,product_id,source_line_sha256,input_sha256,title,body,input_clipped,embedding_batch,embedding_reused)
                     FROM STDIN""") as copy:
                     for index, ((product_id, _record, source_sha), item) in enumerate(
                         zip(rows, inputs, strict=True)
                     ):
                         reused = index not in vectors
-                        vector = cache[item["sha256"]] if reused else vectors[index]
                         copy.write_row(
                             (
                                 build_id,
@@ -221,7 +236,7 @@ def build_index(
                                 item["title"],
                                 item["body"],
                                 item["clipped"],
-                                vector,
+                                batch,
                                 reused,
                             )
                         )

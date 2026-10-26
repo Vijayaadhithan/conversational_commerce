@@ -16,16 +16,23 @@ A local FastAPI backend for persistent conversations with Ollama, a local
 - Catalog inputs: All Beauty, Amazon Fashion, and Beauty & Personal Care.
 - [Listing enrichment and concern explanations](docs/catalog_enrichment.md): versioned
   metadata additions, individual concern evidence, and explicit unknown variant availability.
-- [Scaling, evaluation and performance](docs/scaling_and_performance.md): disk-backed
-  50,000-product sampling/enrichment, conversation evaluation, index benchmarks,
-  bounded Redis caching and optional model warm-up.
-- [Local Querix frontend and verified shopping journeys](reports/frontend_live_2026-10-23.md):
-  connect the sibling frontend, browse the active catalog, and run the local demo.
+- [Search and caching](docs/search.md): Qdrant retrieval, verification, and bounded Redis caching.
+- [Local Querix frontend](docs/conversations.md#local-check): connect the sibling
+  frontend and check scoped shopping journeys.
 
 `POST /products/search` retrieves products using keyword/vector search and the
 local reranker, with structured mandatory filters. Conversations created with
 `mode: "commerce"` invoke that pipeline after extracting and validating intent.
 `POST /rerank` scores documents supplied by the caller.
+
+## Storage
+
+The ETL repository uses DuckDB and publishes validated Parquet/JSONL. PostgreSQL
+holds the authoritative catalog. Backend embedding builds write float32 Parquet
+snapshots under `SEARCH_ARTIFACT_DIR` (default `data/search/embeddings`), then publish
+a verified Qdrant collection. Qdrant handles both dense and BM25 retrieval.
+Keep the Parquet snapshots alongside database backups to rebuild Qdrant without
+calling the embedding model again. Use a dedicated artifact directory per database.
 
 ## Setup
 
@@ -46,7 +53,7 @@ is required.
 Optional setup components:
 
 ```bash
-# Backend + PostgreSQL/pgvector/Redis + reranker libraries + testing libraries
+# Backend + PostgreSQL/Redis + reranker libraries + testing libraries
 bash scripts/setup.sh --with-services --with-reranker --dev
 
 # Preview the same setup without installing, writing files, or starting services
@@ -55,7 +62,7 @@ bash scripts/setup.sh --with-services --with-reranker --dev --dry-run
 
 | Option | Effect |
 | --- | --- |
-| `--with-services` | Install/reuse PostgreSQL, pgvector, and Redis; start unavailable services and check local ports 5432/6379 |
+| `--with-services` | Install/reuse PostgreSQL and Redis; start unavailable services and check local ports 5432/6379 |
 | `--with-reranker` | Install local reranker Python libraries |
 | `--dev` | Install test dependencies |
 | `--dry-run` | Print planned changes only |
@@ -68,13 +75,10 @@ may need Python installed separately. Use `PYTHON_BIN=/path/to/python3.12` to
 select a Python executable. An unusable existing `.venv` produces an error rather
 than being overwritten.
 
-Service setup reuses the selected PostgreSQL installation and builds pinned
-pgvector v0.8.7 against its `pg_config`. This supports existing PostgreSQL 16
-installations as well as newer versions without requiring a major-version
-upgrade. Git and compiler/development tools are needed for that build; Linux
-packages are installed when missing. On macOS, install Xcode Command Line Tools
-if requested. System installation may invoke `sudo`; run the script as your
-normal user. See the [upstream installation notes](https://github.com/pgvector/pgvector#installation-notes---linux-and-mac).
+Service setup reuses the selected PostgreSQL installation. PostgreSQL stores product
+records and generation metadata; embeddings are stored as checksummed Parquet batches
+and indexed into Qdrant. No PostgreSQL vector extension or compiler is required.
+System installation may invoke `sudo`; run the script as your normal user.
 
 If multiple PostgreSQL installations are found, choose one explicitly:
 
@@ -85,9 +89,8 @@ PG_CONFIG=/opt/homebrew/opt/postgresql@16/bin/pg_config \
 
 Existing ready services are reused. Custom PostgreSQL distributions need to be
 started using their own service manager. Setup checks default local ports;
-nondefault ports require manual configuration. It installs pgvector extension
-files, but creating a commerce database and enabling `vector` inside that
-database remain separate steps.
+nondefault ports require manual configuration. Creating the commerce database
+and applying its schema remain separate steps.
 
 The installer leaves **Ollama, model weights, and catalog downloads separate**.
 The model commands below are optional manual setup and are never invoked by
@@ -201,7 +204,7 @@ paths expect the ETL checkout beside this backend. Configure
 # Install the catalog driver and schema-validation dependencies
 .venv/bin/python -m pip install -r requirements.txt
 
-# If PostgreSQL/pgvector are missing, install matching service dependencies
+# If PostgreSQL are missing, install matching service dependencies
 bash scripts/setup.sh --with-services
 
 # Create the dedicated database if missing, then apply versioned migrations
@@ -250,7 +253,7 @@ Start Docker Desktop, then start Qdrant before indexing or serving searches:
 docker compose -f compose.qdrant.yml up -d
 ```
 
-The service setup script installs PostgreSQL/pgvector and Redis; Qdrant is managed
+The service setup script installs PostgreSQL and Redis; Qdrant is managed
 separately by this Compose file. Existing embeddings can be exported without model
 calls using `scripts/build_qdrant_index.py`; add `--verify-only` to verify an index.
 See [search setup and contracts](docs/search.md) for configuration and recovery.

@@ -1,7 +1,7 @@
 # Embedding lifecycle
 
 This extends the versioned catalog/import and search-generation design. Run
-`scripts/init_catalog.py` once after upgrading to apply migration 003. Catalog
+`scripts/init_catalog.py` to apply the catalog and Parquet-reference schema. Catalog
 snapshots remain authoritative: update the ETL output, import the completed
 manifest, then synchronize the search build.
 
@@ -29,7 +29,7 @@ contract, including dimensions and prompt/text-producer hash. Only retained read
 generations supply cached vectors. An alias for identical model weights may
 reuse vectors, but the new build records the configured model name. A B-tree
 lookup index supports cache matching. Reuse copies the vector into the new
-generation; it does not create a dependency on the old generation's rows.
+generation's Parquet batch; it does not depend on the old generation's files or rows.
 
 The keyword title/body and source references come from the **current** catalog
 record, never from the cached row. `embedding_reused` records whether a row's
@@ -38,7 +38,7 @@ vector was copied. Command results distinguish `embedded_this_run`,
 not necessarily distinct input strings.
 
 Incremental refers to model work. Each published generation still stores a
-complete snapshot of search rows and vectors. This uses extra disk while old
+complete snapshot of SQL metadata and Parquet vectors. This uses extra disk while old
 generations are retained; it is not in-place mutation of the serving index.
 The full source product is preserved even when the embedding/keyword text is
 bounded. See [search.md](search.md) for those text limits.
@@ -89,13 +89,13 @@ provenance/rollback. Vector retention is explicit and scoped to this database:
 .venv/bin/python scripts/manage_search_index.py prune --keep-ready 1
 
 # Execute the policy after reviewing the displayed IDs/counts
-.venv/bin/python scripts/manage_search_index.py prune --keep-ready 1 --apply
+.venv/bin/python scripts/manage_search_index.py prune --keep-ready 1 --remove-qdrant --apply
 
 # Keep no inactive ready generations; unfinished builds are still preserved
-.venv/bin/python scripts/manage_search_index.py prune --keep-ready 0 --apply
+.venv/bin/python scripts/manage_search_index.py prune --keep-ready 0 --remove-qdrant --apply
 
 # Also discard unfinished builds when intentionally abandoning their resume state
-.venv/bin/python scripts/manage_search_index.py prune --keep-ready 0 --include-incomplete --apply
+.venv/bin/python scripts/manage_search_index.py prune --keep-ready 0 --include-incomplete --remove-qdrant --apply
 
 # Preview deletion of explicitly selected inactive generations; repeat --build-id as needed
 .venv/bin/python scripts/manage_search_index.py delete --build-id BUILD_ID
@@ -109,16 +109,29 @@ Apply recomputes the policy under locks; inspect that invocation's returned plan
 as well if database state changed since the preview. The tools never delete
 catalog/source records, model weights, raw data, or another project's database.
 
-Deletion removes inactive search-document rows (vectors and generated keyword
-entries) and their build metadata in one transaction. It coordinates with builds,
+Deletion removes inactive search-document metadata and its build metadata in
+one SQL transaction. Parquet files are removed separately after that commit. It coordinates with builds,
 catalog imports, and migrations. Stop API readers before deleting Qdrant collections; a pinned PostgreSQL snapshot
 cannot preserve a deleted remote collection. See [retention](operations.md#retention-policy)
 for alias checks, explicit remote cleanup, and unreferenced catalog-import pruning.
 
+After deleting builds, preview and remove their unreferenced Parquet directories:
+
+```bash
+.venv/bin/python scripts/manage_search_index.py prune-artifacts
+.venv/bin/python scripts/manage_search_index.py prune-artifacts --apply
+```
+
+This protects every registered build, including unfinished builds. Failed SQL batches
+may leave unreferenced files inside a registered build; those remain until the entire
+build is retired. Deletion is retryable and runs under the build/import locks. Never
+share `SEARCH_ARTIFACT_DIR` across databases. Back up this directory with the matching
+SQL catalog and build metadata; Qdrant alone is not the embedding snapshot backup.
+
 ## Index maintenance
 
-Normal inserts/deletes maintain the keyword GIN and lookup/B-tree indexes through
-PostgreSQL. Qdrant owns online dense/BM25 indexes; this command maintains PostgreSQL rebuild storage.
+Normal inserts/deletes maintain metadata lookup/B-tree indexes through PostgreSQL.
+Qdrant owns online dense/BM25 indexes; this command maintains SQL catalog/build metadata.
 
 ```bash
 .venv/bin/python scripts/manage_search_index.py reindex

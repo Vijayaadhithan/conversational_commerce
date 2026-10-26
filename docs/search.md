@@ -9,7 +9,7 @@ embedding, while the standalone build runs in a separate process.
 ## Build and verify
 
 ```bash
-# Matching PostgreSQL + pgvector files; this does not download models
+# PostgreSQL and Redis; this does not download models
 bash scripts/setup.sh --with-services
 docker compose -f compose.qdrant.yml up -d
 .venv/bin/python scripts/init_catalog.py
@@ -26,7 +26,8 @@ instead of mixing vectors from different models. The current storage schema
 requires 768 dimensions and the text contract uses EmbeddingGemma prompts.
 
 Build identity hashes the catalog import ID, model name/digest, and input
-contract (including its producer-file SHA-256). Completed batches commit to a
+contract (including its producer-file SHA-256) and Parquet storage version.
+Completed batches are fsynced and atomically renamed before their metadata commits to a
 building generation. On failure they remain available for resume, while the
 previous active generation remains unchanged. Only a complete verified build
 is marked ready and published. Writer locks prevent simultaneous bulk builds.
@@ -40,8 +41,11 @@ See [embedding_lifecycle.md](embedding_lifecycle.md).
 Tables: `commerce.search_builds`, `commerce.search_documents`, and
 `commerce.search_active`. Product/build foreign keys preserve generation
 identity. Embeddings are normalized and validated for count, finite values,
-nonzero norm, and dimension. Database vectors use float32 `vector(768)`; no
-half-precision reduction is used. Qdrant defaults to exact dense search; ANN is opt-in.
+nonzero norm, and dimension. Parquet stores float32 arrays of 768 values; SQL stores
+input hashes and batch references only. `SEARCH_ARTIFACT_DIR` defaults to
+`data/search/embeddings`; use a dedicated directory per database. Verification checks
+each batch checksum and its product/input identity before using its vectors. Missing
+or corrupt files fail explicitly. Qdrant defaults to exact dense search; ANN is opt-in.
 
 Across catalog snapshots, selected-text hashes and matching model/input contracts
 allow reuse of vectors from retained ready generations. New or changed inputs
@@ -134,7 +138,7 @@ Collections are named from the index contract and full build ID. Readiness valid
 the registered collection, vector contract, and point count before any cache hit.
 There is no automatic or selectable PostgreSQL online fallback.
 
-The standalone exporter can rebuild Qdrant from retained PostgreSQL embeddings without
+The standalone exporter can rebuild Qdrant from retained Parquet embedding snapshots without
 model calls: `.venv/bin/python scripts/build_qdrant_index.py`. A damaged ready collection
 is not repaired in place; export to a new `QDRANT_COLLECTION_PREFIX`, verify it, and then
 restart the API with that prefix. Keep the previous verified generation for rollback.
@@ -149,6 +153,23 @@ provenance, and contiguous listing excerpts with matched terms and original
 field references. Excerpts show lexical overlap, not a medical explanation or
 independent confirmation of suitability. Products with no mandatory matches
 return an empty result; the backend does not relax constraints to fill a page.
+
+## Cache and warm-up
+
+`SEARCH_CACHE_REDIS_URL` enables an optional Redis result cache. Defaults are a
+300-second TTL, 128 entries, and a 256 KiB payload limit. Keys include the catalog
+and search generation, model identity, query, constraints, and ranking-code identity.
+Readiness checks run before cache hits. Malformed entries and Redis outages become
+misses; namespace limits do not change the server-wide Redis configuration.
+
+`SEARCH_WARMUP=1` probes embedding and reranking models before API startup finishes.
+It shifts their initial loading cost to startup and does not precompute queries or
+warm the chat planner. See [operations](operations.md) for readiness and monitoring.
+
+Conversation searches supply `product_goal` for listing-identity filtering before
+both retrieval branches. Direct search clients may supply it too; the value forms
+part of the cache key. These checks identify product types, not verified benefits
+or safety claims.
 
 ## Evaluation and remaining work
 
@@ -177,12 +198,3 @@ blades. Broad source-derived families are noisy. These observations are retained
 in the local smoke report and motivated the reranker integration. Product-type
 evaluation is still needed;
 passing structured-filter checks does not establish correct product suitability.
-
-Offline ANN comparison uses stored vectors and makes no model calls:
-
-```bash
-.venv/bin/python scripts/benchmark_qdrant.py --samples 24 --k 20 --min-recall 0.98
-```
-
-This compares Qdrant ANN against exact PostgreSQL neighbors within the same storefront.
-Its tie-adjusted recall gate measures vector-neighbor recovery, not shopper relevance.

@@ -1,10 +1,10 @@
 """Resumable export of existing vectors; immutable generations with verified publication."""
 
 import hashlib
-import json
 import math
 
 from app.catalog import CatalogError
+from app.embedding_artifacts import check_vector, resolve_vectors
 from app.embedding_text import DIMENSIONS
 from app.qdrant_client import CONTRACT_SHA, INDEX_CONTRACT, lexical_document, point_id
 from app.search_index import verify_build
@@ -47,7 +47,7 @@ def validate_collection(client, collection):
 def source_batches(db, build_id, *, after="", batch_size=128):
     while True:
         rows = db.execute(
-            """SELECT d.product_id,d.embedding::text,d.title,d.body,d.source_line_sha256,
+            """SELECT d.product_id,d.embedding_batch,d.title,d.body,d.source_line_sha256,
             d.input_sha256,p.domain,p.family FROM commerce.search_documents d
             JOIN commerce.catalog_products p ON (p.import_id,p.product_id)=(d.import_id,d.product_id)
             WHERE d.build_id=%s AND d.product_id>%s ORDER BY d.product_id LIMIT %s""",
@@ -55,7 +55,8 @@ def source_batches(db, build_id, *, after="", batch_size=128):
         ).fetchall()
         if not rows:
             return
-        yield rows
+        vectors = resolve_vectors([(build_id, row[0], row[5], row[1]) for row in rows])
+        yield [(row[0], vectors[(build_id, row[0])], *row[2:]) for row in rows]
         after = rows[-1][0]
 
 
@@ -65,13 +66,7 @@ def export_point(row, build_id, import_id):
     if not storefront or not category_allowed({"domain": domain, "family": family}, storefront):
         raise CatalogError("Product has no valid storefront assignment")
     text = title + "\n" + body
-    vector = json.loads(embedding)
-    if (
-        len(vector) != DIMENSIONS
-        or any(type(n) not in (float, int) or not math.isfinite(n) for n in vector)
-        or not 0.999 <= sum(n * n for n in vector) ** 0.5 <= 1.001
-    ):
-        raise CatalogError("Stored embedding is invalid; verify the PostgreSQL search build")
+    vector = check_vector(embedding)
     return {
         "id": point_id(key),
         "vector": {"dense": vector, "lexical": lexical_document(text)},
@@ -123,7 +118,9 @@ def verify_qdrant_index(db, client, build_id):
                     raise ValueError
             count += len(expected)
         except (KeyError, ValueError, TypeError):
-            raise CatalogError("Qdrant contents differ from the PostgreSQL search build") from None
+            raise CatalogError(
+                "Qdrant contents differ from the Parquet embedding snapshot"
+            ) from None
     if count != meta[1] or client.count(collection) != count:
         raise CatalogError("Qdrant index is incomplete or contains unexpected products")
     return {"collection": collection, "products": count, "build_id": build_id}

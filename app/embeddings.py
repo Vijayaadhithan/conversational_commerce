@@ -32,10 +32,6 @@ def validate_vectors(vectors, count):
     return result
 
 
-def vector_literal(vector):
-    return "[" + ",".join(format(value, ".9g") for value in vector) + "]"
-
-
 @dataclass(frozen=True)
 class EmbeddingSettings:
     url: str = "http://127.0.0.1:11434"

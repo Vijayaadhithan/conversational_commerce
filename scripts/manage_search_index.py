@@ -13,7 +13,7 @@ from dotenv import load_dotenv
 
 from app.catalog import ROOT, CatalogError, connect_database
 from app.qdrant_client import QdrantClient, QdrantSettings
-from app.search_maintenance import maintain_indexes, remove_builds, remove_imports
+from app.search_maintenance import maintain_indexes, prune_artifacts, remove_builds, remove_imports
 
 
 def main():
@@ -54,11 +54,16 @@ def main():
     catalogs.add_argument("--import-id", action="append")
     catalogs.add_argument("--min-age-days", type=int, default=7)
     catalogs.add_argument("--apply", action="store_true")
+    artifacts = commands.add_parser(
+        "prune-artifacts",
+        help="Preview/remove Parquet directories whose build metadata was deleted",
+    )
+    artifacts.add_argument("--apply", action="store_true")
     commands.add_parser(
         "reindex", help="Rebuild search/catalog indexes concurrently and refresh planner statistics"
     )
     commands.add_parser(
-        "vacuum", help="Reclaim deleted-vector storage for reuse without VACUUM FULL"
+        "vacuum", help="Reclaim deleted metadata/catalog storage for reuse without VACUUM FULL"
     )
     args = parser.parse_args()
     try:
@@ -86,6 +91,8 @@ def main():
                 result = remove_imports(
                     db, import_ids=args.import_id, min_age_days=args.min_age_days, apply=args.apply
                 )
+            elif args.command == "prune-artifacts":
+                result = prune_artifacts(db, apply=args.apply)
             else:
                 result = maintain_indexes(db, args.command)
         print(json.dumps(result, indent=2))
