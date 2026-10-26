@@ -14,6 +14,7 @@ from app import catalog
 def isolate_optional_serving_features(monkeypatch):
     monkeypatch.setenv("SEARCH_WARMUP", "0")
     monkeypatch.setenv("SEARCH_CACHE_REDIS_URL", "")
+    monkeypatch.delenv("SEARCH_BACKEND", raising=False)
 
 
 @pytest.fixture(autouse=True)
@@ -44,10 +45,27 @@ def scratch_database():
 
 
 @pytest.fixture
-def pg(scratch_database):
+def pg(scratch_database, monkeypatch):
+    from app.qdrant_client import QdrantClient, QdrantSettings
+
+    url = os.getenv("QDRANT_TEST_URL")
+    if not url:
+        pytest.skip("Set QDRANT_TEST_URL for catalog/search integration tests")
+    prefix = "test_" + uuid4().hex[:16]
+    monkeypatch.setenv("QDRANT_URL", url)
+    monkeypatch.setenv("QDRANT_COLLECTION_PREFIX", prefix)
+    monkeypatch.setenv("QDRANT_API_KEY", "")
+    monkeypatch.setenv("QDRANT_EXACT", "1")
+    qdrant_settings = QdrantSettings.from_env()
     # Only reset the randomly named database created by scratch_database above.
     with catalog.connect_database(scratch_database) as db:
         db.execute("DROP SCHEMA IF EXISTS commerce CASCADE")
         db.commit()
         catalog.apply_migrations(db)
-        yield db
+        try:
+            yield db
+        finally:
+            with QdrantClient(qdrant_settings) as client:
+                for item in client.request("GET", "/collections")["collections"]:
+                    if item["name"].startswith(prefix + "_"):
+                        client.request("DELETE", "/collections/" + item["name"], missing_ok=True)

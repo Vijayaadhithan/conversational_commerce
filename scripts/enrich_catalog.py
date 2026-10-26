@@ -25,7 +25,9 @@ def main():
         ),
     )
     parser.add_argument("--raw-dir", default="data/public_sources/raw")
-    parser.add_argument("--output-dir", default="data/enriched")
+    parser.add_argument(
+        "--output-dir", default=os.getenv("CATALOG_ENRICHMENT_OUTPUT_DIR", "data/enriched_duckdb")
+    )
     args = parser.parse_args()
     try:
         started = time.perf_counter()

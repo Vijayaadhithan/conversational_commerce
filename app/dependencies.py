@@ -85,6 +85,27 @@ async def probe_dependencies(state, model):
     async def postgres():
         return await asyncio.to_thread(postgres_sync)
 
+    def qdrant_sync():
+        from dataclasses import replace
+
+        from app.product_search import pin_search_build
+        from app.qdrant_client import QdrantClient
+        from app.qdrant_index import pin_qdrant_index
+
+        with psycopg.connect(
+            state.product_search.database_url,
+            connect_timeout=3,
+            options="-c statement_timeout=3000",
+        ) as db:
+            db.execute("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY")
+            build = pin_search_build(db)
+            with QdrantClient(replace(state.product_search.qdrant_settings, timeout=3)) as client:
+                collection = pin_qdrant_index(db, build, client)
+            return {"build_id": build["build_id"], "collection": collection}
+
+    async def qdrant():
+        return await asyncio.to_thread(qdrant_sync)
+
     async def redis():
         client = state.product_search.cache.client
         if client is None:
@@ -123,7 +144,8 @@ async def probe_dependencies(state, model):
             "check": "files_and_runtime_presence",
         }
 
-    names = ("sqlite", "models", "postgres", "redis", "reranker")
-    results = await asyncio.gather(*(check(f) for f in (sqlite, models, postgres, redis, reranker)))
+    names = ["sqlite", "models", "postgres", "redis", "reranker", "qdrant"]
+    probes = [sqlite, models, postgres, redis, reranker, qdrant]
+    results = await asyncio.gather(*(check(f) for f in probes))
     state.metrics.dependencies = dict(zip(names, results))
     return state.metrics.dependencies

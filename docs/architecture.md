@@ -44,18 +44,27 @@ do not bypass authentication, evidence validation, or mandatory search filters.
 
 ## Retrieval and storage
 
-PostgreSQL stores catalog snapshots and 768-dimensional pgvector embeddings.
-Catalog imports retain source provenance, unknown attributes, and historical USD
-prices. Search generations publish atomically after complete validation.
-Incremental builds reuse compatible vectors; inactive generations support rollback.
-See [catalog storage](catalog.md) and [embedding lifecycle](embedding_lifecycle.md).
+The separate ETL repository uses DuckDB to normalize and validate source archives,
+then publishes versioned Parquet and JSONL. PostgreSQL stores authoritative product
+snapshots, hard-filter projections, and generation metadata. PostgreSQL vectors remain
+as the durable embedding cache for Qdrant export, verification, and rebuilds; pgvector
+is still required. Conversation SQLite is independent live state.
 
-Retrieval combines English full-text search and exact cosine distance using RRF.
-Both paths apply identical mandatory SQL filters. The selected reranker scores
-eligible candidates only. Redis optionally caches bounded, versioned results.
-Cache identity includes the search generation, request constraints, reranker
-configuration, and relevant code. See [search](search.md) and
-[reranking](product_reranking.md).
+Qdrant is the only online candidate-retrieval engine: native BM25 and dense cosine
+search return candidates, which the backend fuses with RRF. Mandatory SQL eligibility
+and storefront rules restrict both branches before retrieval. Product facts are
+hydrated from the same pinned PostgreSQL snapshot. Shared listing evidence and
+reranking preserve the response contract. See [search](search.md).
+
+The builder finishes and verifies the Qdrant collection before publishing catalog
+and search pointers. Queries require that exact ready collection, including before
+serving cached results. Qdrant errors fail explicitly; PostgreSQL is not an online
+fallback. The offline ANN comparison tool retains exact PostgreSQL neighbors as a
+reference. Redis caches are bounded and include generation, collection, retrieval
+mode, model identity, request constraints, and ranking-code identity.
+
+See [catalog storage](catalog.md), [embedding lifecycle](embedding_lifecycle.md),
+[operations and retention](operations.md), and [reranking](product_reranking.md).
 
 ## Boundaries
 

@@ -156,3 +156,19 @@ and remove it in fixture cleanup. They cover precise decimals, null claims,
 repeated imports, active-snapshot replacement, rollback after insertion,
 source-file mutation, database drift, migration checksums, and writer locks.
 They do not reset the development catalog database.
+
+## Retained-ID DuckDB handoff
+
+The current demo source is `data/duckdb_demo`, enriched into `data/enriched_duckdb`.
+To verify the retained 50,000 IDs without writing another snapshot, run from the ETL repo:
+
+```bash
+.venv/bin/python scripts/select_retained_subset.py --check-only \
+  --reference-manifest ../conversational_commerce/data/evaluation/retained_demo_ids.manifest.json
+```
+
+To publish a separately versioned handoff, replace `--check-only` with an explicit
+`--output-dir PATH`, then validate/import it using the normal staged workflow. The
+selector rejects missing IDs and changed document hashes; it never silently replaces
+the demo with a newly balanced sample. Preserve the compact reference manifest and its
+compressed fingerprint file. Source archives and the active Parquet/JSONL are retained.

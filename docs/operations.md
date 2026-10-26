@@ -171,3 +171,62 @@ These short runs measure this machine and workload, not production SLOs. Small
 sample p95 values are often the maximum. Include failed requests and overload
 counts when interpreting throughput. The JSON, server log and Prometheus snapshot
 are under the supplied ignored `data/` output path.
+
+## Retention policy
+
+- Preserve every active generation and its input artifacts.
+- Preserve one previous verified serving generation, including its catalog, vectors,
+  Qdrant collection, and enriched snapshot, through the demo acceptance/rollback window.
+- Preserve unfinished builds by default. Inspect ownership and stop writers before
+  selecting an abandoned staging directory for deletion.
+- Keep newly staged catalog imports for at least seven days unless explicitly selected.
+  An import referenced by any search build is never eligible for catalog pruning.
+- After each verified publication, review a dry run. There is no background deletion job.
+  ETL artifacts need an explicit path allowlist and backend-reference check; age alone
+  cannot establish that an output is unused.
+- Preserve raw sources, active JSONL and Parquet, credentials, conversation state, and
+  required model files. Current rebuild/verification code still uses PostgreSQL vectors.
+
+## Database maintenance
+
+From the backend repository, preview removal while retaining the active build and
+the newest inactive ready build:
+
+```bash
+.venv/bin/python scripts/manage_search_index.py prune --keep-ready 1
+.venv/bin/python scripts/manage_search_index.py prune-catalog --min-age-days 7
+```
+
+Inspect the IDs and preserved reasons before repeating either command with `--apply`.
+Run build cleanup first, then preview catalog cleanup again: removing builds can make
+additional imports eligible. Catalog pruning also supports repeated `--import-id ID`
+for a reviewed explicit selection; IDs override the age grace period, never references.
+
+If selected builds have registered Qdrant collections, applying without
+`--remove-qdrant` is refused. Before using that option, stop API readers and wait for
+in-flight requests to finish; advisory maintenance locks exclude writers, not readers.
+Remote collections are removed before their registry entries. Aliased collections are
+refused. A remote failure rolls back SQL changes; retry tolerates an already missing
+collection. This is retryable cleanup, not an atomic transaction across both systems.
+Unregistered collections require separate inspection and are never inferred/deleted.
+
+```bash
+.venv/bin/python scripts/manage_search_index.py vacuum
+```
+
+Regular vacuum makes deleted space reusable; it does not generally return all space
+to the operating system. Do not schedule `VACUUM FULL` automatically: it requires
+exclusive locks and extra temporary disk space. Measure remaining bloat first.
+
+
+Cleanup audit manifests/results remain under `data/operations/cleanup_2026-10-26/`.
+Completed one-off cleanup programs and narrative reports have been removed. The reusable
+maintenance commands above are the supported entry points; no background deletion job runs.
+
+## Follow-up work carried forward
+
+The previous cleanup report identified business-scope/off-topic enforcement, malformed
+planner recovery, evidence-constrained generated summaries, full destination-session
+handoff evaluation, dependency locking, and backup/restore exercises. This source cleanup
+does not claim those product/production improvements are complete. Storefront filtering
+and mechanical test success alone do not establish these guarantees.

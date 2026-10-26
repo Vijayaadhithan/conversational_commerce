@@ -19,7 +19,7 @@ from app.search_index import build_index
 
 def response():
     return {
-        "method": "postgres_fts+exact_cosine+rrf",
+        "method": "qdrant_bm25+exact_cosine+rrf",
         "results": [
             {"product_id": "a", "ranking": {"rrf_score": 0.02}},
             {"product_id": "b", "ranking": {"rrf_score": 0.01}},

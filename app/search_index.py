@@ -234,6 +234,13 @@ def build_index(
                 flush=True,
             )
         embedder.verify_identity(config["model_digest"])
+        # Finish the derived index before publishing either PostgreSQL pointer.
+        # Failures leave the previous complete generation serving.
+        from app.qdrant_client import QdrantClient, QdrantSettings
+        from app.qdrant_index import sync_qdrant_index
+
+        with QdrantClient(QdrantSettings.from_env()) as qdrant:
+            sync_qdrant_index(db, qdrant, build_id, progress)
         with db.transaction():
             db.execute("SET LOCAL lock_timeout='5s'")
             db.execute("SELECT pg_advisory_xact_lock(%s)", (LOCK_ID,))

@@ -99,7 +99,7 @@ provenance/rollback. Vector retention is explicit and scoped to this database:
 
 # Preview deletion of explicitly selected inactive generations; repeat --build-id as needed
 .venv/bin/python scripts/manage_search_index.py delete --build-id BUILD_ID
-.venv/bin/python scripts/manage_search_index.py delete --build-id BUILD_ID --apply
+.venv/bin/python scripts/manage_search_index.py delete --build-id BUILD_ID --remove-qdrant --apply
 ```
 
 Both removal commands default to dry run. Plans list exact build IDs, vector row
@@ -111,13 +111,14 @@ catalog/source records, model weights, raw data, or another project's database.
 
 Deletion removes inactive search-document rows (vectors and generated keyword
 entries) and their build metadata in one transaction. It coordinates with builds,
-catalog imports, and migrations. A reader that pinned an older generation before
-publication can finish using PostgreSQL's existing snapshot while cleanup commits.
+catalog imports, and migrations. Stop API readers before deleting Qdrant collections; a pinned PostgreSQL snapshot
+cannot preserve a deleted remote collection. See [retention](operations.md#retention-policy)
+for alias checks, explicit remote cleanup, and unreferenced catalog-import pruning.
 
 ## Index maintenance
 
 Normal inserts/deletes maintain the keyword GIN and lookup/B-tree indexes through
-PostgreSQL. Exact vector search has no ANN index to rebuild in this baseline.
+PostgreSQL. Qdrant owns online dense/BM25 indexes; this command maintains PostgreSQL rebuild storage.
 
 ```bash
 .venv/bin/python scripts/manage_search_index.py reindex

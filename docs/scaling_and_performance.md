@@ -16,19 +16,21 @@ The first measured expansion targets 50,000 products. It retains the original
 listings, balancing additions across source/domain/family groups. It is a development
 sample, not a random sample of shopper demand or a full catalog deployment.
 
+The old expansion outputs were retired after the DuckDB cutover. For the current
+retained-ID demo, use the verified handoff (see [catalog handoff](catalog.md)):
+
 ```sh
-.venv/bin/python scripts/expand_catalog.py --size 50000
-.venv/bin/python scripts/enrich_catalog.py --etl-output-dir data/scaled --output-dir data/enriched_50k
-.venv/bin/python scripts/import_catalog.py --etl-output-dir data/enriched_50k --stage
+.venv/bin/python scripts/enrich_catalog.py --etl-output-dir data/duckdb_demo --output-dir data/enriched_duckdb
+.venv/bin/python scripts/import_catalog.py --etl-output-dir data/enriched_duckdb --stage
 .venv/bin/python scripts/build_search_index.py --catalog-import-id IMPORT_ID
-.venv/bin/python scripts/verify_catalog.py --etl-output-dir data/enriched_50k
+.venv/bin/python scripts/verify_catalog.py --etl-output-dir data/enriched_duckdb
 .venv/bin/python scripts/verify_search_index.py
 ```
 
-Sampling verifies the existing normalized archive before selection. SQLite stores
-candidate payloads and sorting on disk with a 16 MiB page cache. Enrichment also uses
-a disk table and streams selected source observations, rather than materializing the
-subset in Python. Import preflight checks uniqueness using a disk index with a 2 MiB
+Retained-ID selection now belongs to the DuckDB ETL. Its selector checks the source
+Parquet checksum, selected IDs, eligibility, and exact document hashes before publication.
+Enrichment uses a bounded scratch table and streams selected source observations.
+Import preflight checks uniqueness using a disk index with a 2 MiB
 cache; PostgreSQL COPY and independent verification remain streamed. Embeddings use
 bounded batches (32 by default), reuse matching input hashes, and resume incomplete
 generations. Catalog and search pointers publish together; failures retain the old
@@ -44,7 +46,7 @@ No larger-scale memory guarantee is inferred from a 50,000-product measurement.
 .venv/bin/python scripts/evaluate_conversations.py --output data/evaluation/conversations_50k.json
 .venv/bin/python scripts/summarize_evaluation.py --capture data/evaluation/conversations_50k.json --review evals/review_50k.json --output data/evaluation/summary_50k.json
 .venv/bin/python scripts/benchmark_retrieval.py --disable-cache --output data/evaluation/latency_50k.json
-.venv/bin/python scripts/benchmark_indexes.py
+.venv/bin/python scripts/benchmark_qdrant.py
 .venv/bin/python scripts/benchmark_retrieval.py --rerank --warmup --cache-url redis://127.0.0.1:6379/0 --output data/evaluation/cache_50k.json
 ```
 
@@ -56,13 +58,10 @@ success, product relevance and structured constraint compliance are separate met
 The benchmark's first request is process-cold; OS, PostgreSQL and Ollama caches are
 not flushed. Sequential local timing is not concurrent production load testing.
 
-The HNSW experiment uses a disposable temporary copy of the active vectors and
-filters. It measures candidate recall against exact top-50 neighbors, query plans,
-index size and construction time. It never creates an ANN index on the serving table.
-Measured candidate recall is not shopper relevance. Production continues exact
-filtered retrieval until an ANN configuration passes both recall and latency gates.
-See the [pgvector documentation](https://github.com/pgvector/pgvector#filtering) for
-post-filtering and iterative-scan behavior.
+The Qdrant ANN benchmark compares scoped stored-document-vector probes with exact
+PostgreSQL neighbors. It does not create a PostgreSQL ANN index or call models.
+Measured neighbor recall is not shopper relevance; exact Qdrant retrieval remains the
+default until filtered ANN recall, latency, and query relevance are accepted.
 
 ## Redis cache and warm-up
 

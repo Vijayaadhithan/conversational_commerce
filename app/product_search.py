@@ -1,4 +1,4 @@
-"""Exact filtered vector retrieval + PostgreSQL full text, fused by rank."""
+"""Scoped hybrid retrieval with PostgreSQL hydration and shared ranking/evidence."""
 
 import os
 import re
@@ -6,11 +6,13 @@ import time
 
 from app.catalog import CatalogError, connect_database
 from app.embedding_text import contract
-from app.embeddings import EmbeddingSettings, create_embedder, query_vector, vector_literal
+from app.embeddings import EmbeddingSettings, create_embedder, query_vector
 from app.listing_explanations import concern_evidence
 from app.listing_quality import listing_quality, prioritize_listing_evidence
 from app.product_reranking import rerank_candidates as apply_reranking
 from app.product_reranking import rerank_document
+from app.qdrant_client import QdrantClient, QdrantSettings
+from app.qdrant_index import pin_qdrant_index
 from app.reranker import create_reranker
 from app.search_cache import SearchCache
 from app.search_filters import filter_sql, product_goal_sql
@@ -19,6 +21,7 @@ from app.search_models import AttributeValue as AttributeValue
 from app.search_models import ProductFilters as ProductFilters
 from app.search_models import ProductID as ProductID
 from app.search_models import ProductSearchRequest as ProductSearchRequest
+from app.search_normalization import normalize_search
 from app.storefronts import category_allowed
 
 
@@ -106,8 +109,28 @@ def listing_evidence(record, query):
 
 
 def search_catalog(
-    db, request, embedder, pinned=None, *, candidate_limit=None, candidate_texts=None
+    db,
+    request,
+    embedder,
+    pinned=None,
+    *,
+    candidate_limit=None,
+    candidate_texts=None,
+    qdrant=None,
+    collection=None,
 ):
+    if qdrant is None:
+        with QdrantClient(QdrantSettings.from_env()) as client:
+            return search_catalog(
+                db,
+                request,
+                embedder,
+                pinned,
+                candidate_limit=candidate_limit,
+                candidate_texts=candidate_texts,
+                qdrant=client,
+                collection=collection,
+            )
     pinned = pinned or pin_search_build(db)
     config = pinned["config"]
     if embedder.settings.model != config["model"]:
@@ -121,9 +144,17 @@ def search_catalog(
     eligible_sql = (
         "SELECT p.product_id FROM commerce.catalog_products p WHERE p.import_id=%s" + suffix
     )
-    eligible_count = db.execute(
-        "SELECT count(*) FROM (" + eligible_sql + ") eligible", [pinned["import_id"], *params]
-    ).fetchone()[0]
+    collection = collection or pin_qdrant_index(db, pinned, qdrant)
+    eligible_ids = [
+        row[0]
+        for row in db.execute(
+            eligible_sql + " ORDER BY p.product_id LIMIT %s",
+            [pinned["import_id"], *params, qdrant.settings.max_eligible + 1],
+        ).fetchall()
+    ]
+    if len(eligible_ids) > qdrant.settings.max_eligible:
+        raise CatalogError("Qdrant eligibility limit exceeded; narrow the search filters")
+    eligible_count = len(eligible_ids)
     base = {
         "query": request.query,
         "run_id": pinned["run_id"],
@@ -132,7 +163,9 @@ def search_catalog(
         "model_digest": config["model_digest"],
         "filters_applied": request.filters.model_dump(mode="json", exclude_none=True),
         "eligible_products": eligible_count,
-        "method": "postgres_fts+exact_cosine+rrf",
+        "method": (
+            "qdrant_bm25+" + ("exact_cosine" if qdrant.settings.exact else "hnsw_cosine") + "+rrf"
+        ),
         "constraints_source": "structured_filters",
         "product_goal": request.product_goal,
         "price_context": "historical USD",
@@ -141,40 +174,16 @@ def search_catalog(
     if not eligible_count:
         return base
     embedder.verify_identity(config["model_digest"])
-    vector = query_vector(embedder, request.query)
-    # Materialize only IDs, not full records/vectors; both candidate branches obey the same filters.
-    rows = db.execute(
-        """WITH eligible AS MATERIALIZED ("""
-        + eligible_sql
-        + """),
-        keyword AS (
-            SELECT d.product_id,ts_rank_cd(d.lexical,plainto_tsquery('english',%s))::float8 AS score
-            FROM commerce.search_documents d JOIN eligible e USING(product_id)
-            WHERE d.build_id=%s AND d.lexical @@ plainto_tsquery('english',%s)
-            ORDER BY score DESC,d.product_id LIMIT 50),
-        semantic AS (
-            SELECT d.product_id,(d.embedding <=> %s::public.vector) AS score
-            FROM commerce.search_documents d JOIN eligible e USING(product_id)
-            WHERE d.build_id=%s ORDER BY score,d.product_id LIMIT 50)
-        SELECT 'keyword',product_id,score FROM keyword UNION ALL SELECT 'vector',product_id,score FROM semantic""",
-        [
-            pinned["import_id"],
-            *params,
-            request.query,
-            pinned["build_id"],
-            request.query,
-            vector_literal(vector),
-            pinned["build_id"],
-        ],
-    ).fetchall()
-    keyword = sorted(
-        [(key, score) for kind, key, score in rows if kind == "keyword"],
-        key=lambda item: (-item[1], item[0]),
+    retrieval_query = normalize_search(request.query)
+    vector = query_vector(embedder, retrieval_query)
+    keyword, semantic = qdrant.branches(
+        collection,
+        pinned,
+        request.model_copy(update={"query": retrieval_query}),
+        vector,
+        eligible_ids,
     )
-    semantic = sorted(
-        [(key, score) for kind, key, score in rows if kind == "vector"],
-        key=lambda item: (item[1], item[0]),
-    )
+    base["retrieval_collection"] = collection
     fused = reciprocal_rank_fusion(keyword, semantic)[: candidate_limit or request.limit]
     records = dict(
         db.execute(
@@ -227,6 +236,7 @@ class ProductSearch:
     def __init__(
         self, database_url=None, settings=None, reranker=None, rerank_candidates=None, cache=None
     ):
+        self.qdrant_settings = QdrantSettings.from_env()
         self.database_url = database_url or os.getenv(
             "CATALOG_DATABASE_URL", "postgresql:///conversational_commerce"
         )
@@ -244,9 +254,13 @@ class ProductSearch:
     def search(self, request):
         started = time.perf_counter()
         texts = {} if request.rerank else None
-        with connect_database(self.database_url) as db:
+        with (
+            connect_database(self.database_url) as db,
+            QdrantClient(self.qdrant_settings) as qdrant,
+        ):
             db.execute("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY")
             pinned = pin_search_build(db)
+            collection = pin_qdrant_index(db, pinned, qdrant)
             with create_embedder(self.settings) as embedder:
                 if self.settings.model != pinned["config"]["model"]:
                     raise CatalogError(
@@ -254,6 +268,9 @@ class ProductSearch:
                     )
                 embedder.verify_identity(pinned["config"]["model_digest"])
                 runtime = {
+                    "search_backend": "qdrant",
+                    "qdrant_collection": collection,
+                    "qdrant_exact": self.qdrant_settings.exact,
                     "rerank_provider": os.getenv("RERANK_PROVIDER", "local"),
                     "rerank_model": os.getenv("VOYAGE_RERANK_MODEL", "rerank-2.5"),
                     "candidates": self.rerank_candidates,
@@ -295,12 +312,20 @@ class ProductSearch:
                     if request.rerank or request.product_goal or request.concerns
                     else request.limit,
                     candidate_texts=texts,
+                    qdrant=qdrant,
+                    collection=collection,
                 )
         # All product data was hydrated from one pinned snapshot; release PostgreSQL
         # before potentially slow cold model loading/scoring.
         retrieval_seconds = time.perf_counter() - retrieved
         if request.rerank:
-            result = apply_reranking(result, texts, request, self.reranker, defer_limit=True)
+            result = apply_reranking(
+                result,
+                texts,
+                request.model_copy(update={"query": normalize_search(request.query)}),
+                self.reranker,
+                defer_limit=True,
+            )
         else:
             result["reranking"] = {
                 "requested": False,
@@ -325,7 +350,10 @@ class ProductSearch:
     def warmup(self):
         started = time.perf_counter()
         with connect_database(self.database_url) as db, create_embedder(self.settings) as embedder:
+            db.execute("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY")
             pinned = pin_search_build(db)
+            with QdrantClient(self.qdrant_settings) as client:
+                pin_qdrant_index(db, pinned, client)
             if self.settings.model != pinned["config"]["model"]:
                 raise CatalogError(
                     "Configured embedding model differs from the search build; rebuild first"

@@ -2,15 +2,19 @@
 
 Run enrichment after the original ETL subset is complete. It keeps the same product
 IDs, order, prices, broad families and selected observations. It adds source-backed
-attributes to a separate immutable snapshot; it does not expand the 20,000-row sample.
+attributes to a separate immutable snapshot; it does not expand the selected sample.
 The original normalized exports and raw archives are untouched.
+
+The current local demo uses `data/duckdb_demo` as its retained-ID source and
+`data/enriched_duckdb` as its output. `CATALOG_ENRICHMENT_OUTPUT_DIR` can override
+the default enrichment destination.
 
 ```sh
 .venv/bin/python scripts/enrich_catalog.py
-.venv/bin/python scripts/import_catalog.py --etl-output-dir data/enriched --stage
+.venv/bin/python scripts/import_catalog.py --etl-output-dir data/enriched_duckdb --stage
 # Use the import_id printed by the preceding command:
 .venv/bin/python scripts/build_search_index.py --catalog-import-id IMPORT_ID
-.venv/bin/python scripts/verify_catalog.py --etl-output-dir data/enriched
+.venv/bin/python scripts/verify_catalog.py --etl-output-dir data/enriched_duckdb
 .venv/bin/python scripts/verify_search_index.py
 ```
 
@@ -20,7 +24,7 @@ pointers in one transaction. A failed build retains completed batches for resume
 use both `--catalog-import-id IMPORT_ID` and `--resume-build BUILD_ID`. A concurrent
 catalog change prevents publication. Existing snapshots remain available for rollback.
 
-Set `CATALOG_ETL_OUTPUT_DIR=data/enriched` for subsequent default import/verification.
+Set `CATALOG_ETL_OUTPUT_DIR=data/enriched_duckdb` for subsequent default import/verification.
 `CATALOG_ENRICHMENT_SOURCE_DIR` independently identifies the original ETL output
 (default `../conversational_commerce_etl/data/processed`). Source changes require
 another enrichment run, staged import and index build.
@@ -110,10 +114,10 @@ No available-size or color-option list is treated as a selected variant.
 Rebuild and publish the existing 50,000 products using the staged workflow:
 
 ```sh
-.venv/bin/python scripts/enrich_catalog.py --etl-output-dir data/scaled --output-dir data/enriched_quality
-.venv/bin/python scripts/import_catalog.py --etl-output-dir data/enriched_quality --stage
+.venv/bin/python scripts/enrich_catalog.py --etl-output-dir data/duckdb_demo --output-dir data/enriched_duckdb
+.venv/bin/python scripts/import_catalog.py --etl-output-dir data/enriched_duckdb --stage
 .venv/bin/python scripts/build_search_index.py --catalog-import-id IMPORT_ID
-.venv/bin/python scripts/verify_catalog.py --etl-output-dir data/enriched_quality
+.venv/bin/python scripts/verify_catalog.py --etl-output-dir data/enriched_duckdb
 .venv/bin/python scripts/verify_search_index.py
 .venv/bin/python scripts/evaluate_listing_quality.py
 ```

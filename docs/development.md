@@ -9,12 +9,13 @@ Long SQL, regular expressions, and prompt strings retain their exact contents.
 
 CI checks formatting, imports, undefined names, unused imports/locals/loop bindings,
 and redundant lint suppressions, plus tests on Python
-3.11 and 3.14. PostgreSQL/pgvector and Redis run as isolated test services.
+3.11 and 3.14. PostgreSQL/pgvector, Qdrant, and Redis run as isolated test services.
 Hosted inference tests use mock transports and require no provider credentials.
 
 For local integration tests, set `CATALOG_TEST_ADMIN_URL` and
-`CATALOG_TEST_REDIS_URL`. PostgreSQL tests create and drop a randomly named scratch
-database; Redis tests use unique key prefixes. Without these settings, integration
+`CATALOG_TEST_REDIS_URL` and `QDRANT_TEST_URL`. Catalog/search integration tests
+require PostgreSQL and Qdrant. PostgreSQL tests create and drop a randomly named scratch
+database; Qdrant uses random test collection prefixes and Redis uses unique key prefixes. Without these settings, integration
 tests are skipped. Use test services, never production credentials.
 
 ## Code organization

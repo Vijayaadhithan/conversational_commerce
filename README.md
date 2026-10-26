@@ -5,7 +5,7 @@ For Google AI Studio, GroqCloud, OpenRouter, and Voyage API options, see
 
 
 A local FastAPI backend for persistent conversations with Ollama, a local
-1.54B-parameter reranker, and a versioned PostgreSQL fashion/beauty catalog.
+1.54B-parameter reranker, a versioned PostgreSQL fashion/beauty catalog, and Qdrant hybrid retrieval.
 
 - Chat model: `ministral-3:8b` through Ollama.
 - Conversation memory: SQLite transcripts, recent turns, and rolling summaries.
@@ -239,6 +239,22 @@ boundaries, and test commands. Build product embeddings as described below.
 
 ## Product embeddings and search
 
+The separate ETL uses DuckDB and publishes Parquet plus compatibility JSONL.
+PostgreSQL remains authoritative for products, hard filters, generation metadata,
+and reusable embeddings. Qdrant is the only online retrieval engine. Conversation
+SQLite remains live state. `SEARCH_BACKEND=postgres` is retired; remove that setting.
+
+Start Docker Desktop, then start Qdrant before indexing or serving searches:
+
+```bash
+docker compose -f compose.qdrant.yml up -d
+```
+
+The service setup script installs PostgreSQL/pgvector and Redis; Qdrant is managed
+separately by this Compose file. Existing embeddings can be exported without model
+calls using `scripts/build_qdrant_index.py`; add `--verify-only` to verify an index.
+See [search setup and contracts](docs/search.md) for configuration and recovery.
+
 The existing local `embeddinggemma:latest` model produces 768-dimensional
 embeddings. This model must already be installed; setup and embedding scripts do
 not download weights. Adjust `EMBEDDING_MODEL`, `EMBEDDING_BATCH_SIZE`, and
@@ -262,9 +278,12 @@ and refresh catalog/keyword metadata. Removed products are absent from the next
 active generation, including support for an empty catalog.
 
 A complete, verified build is published atomically. Model digest, catalog snapshot, and input
-contract prevent mixed generations. At this 20,000-product scale, semantic search
-uses exact cosine distance; PostgreSQL full-text search provides keyword matches,
-and reciprocal rank fusion combines the two candidate rankings.
+contract prevent mixed generations. Qdrant provides dense cosine and native BM25
+candidates; reciprocal rank fusion combines their rankings. Both branches receive
+the same mandatory eligible IDs computed by PostgreSQL. `QDRANT_EXACT=1` remains
+the default until ANN recall and query relevance are accepted. Every new build
+verifies Qdrant before publishing catalog/search pointers; there is no PostgreSQL
+online fallback.
 
 The existing local reranker scores the best 20 eligible RRF candidates before
 selecting the requested results. Reranking is enabled by default and uses the

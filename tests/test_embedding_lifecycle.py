@@ -9,8 +9,14 @@ from test_search import FakeEmbedder
 from app import search_index
 from app.catalog import CatalogError, connect_database, import_catalog, validated_source
 from app.product_search import ProductSearchRequest, pin_search_build, search_catalog
+from app.qdrant_client import QdrantClient, QdrantSettings
 from app.search_index import BUILD_LOCK, build_index, verify_build
-from app.search_maintenance import maintain_indexes, remove_builds
+from app.search_maintenance import maintain_indexes, remove_builds, remove_imports
+
+
+def retire(db, **kwargs):
+    with QdrantClient(QdrantSettings.from_env()) as client:
+        return remove_builds(db, qdrant=client, **kwargs)
 
 
 def QUIET(*args, **kwargs):
@@ -146,7 +152,7 @@ def test_empty_snapshot_removes_every_product_and_old_vectors_can_be_pruned(
         preview = remove_builds(db, keep_ready=0)
         assert preview["vector_rows"] == 3
         assert db.execute("SELECT count(*) FROM commerce.search_documents").fetchone() == (3,)
-        removed = remove_builds(db, keep_ready=0, apply=True)
+        removed = retire(db, keep_ready=0, apply=True)
         assert removed["vector_rows"] == 3
         assert db.execute("SELECT count(*) FROM commerce.search_documents").fetchone() == (0,)
         assert db.execute("SELECT build_id FROM commerce.search_active").fetchone() == (
@@ -176,12 +182,12 @@ def test_retention_delete_protection_and_incomplete_opt_in(pg, scratch_database,
         with pytest.raises(CatalogError):
             remove_builds(db, build_ids=[rollback["build_id"], active["build_id"]], apply=True)
         assert db.execute("SELECT count(*) FROM commerce.search_builds").fetchone() == (4,)
-        remove_builds(db, build_ids=[rollback["build_id"]], apply=True)
+        retire(db, build_ids=[rollback["build_id"]], apply=True)
         assert db.execute(
             "SELECT count(*) FROM commerce.search_documents WHERE build_id=%s",
             (rollback["build_id"],),
         ).fetchone() == (0,)
-        result = remove_builds(db, keep_ready=0, include_incomplete=True, apply=True)
+        result = retire(db, keep_ready=0, include_incomplete=True, apply=True)
         assert len(result["builds"]) == 2
         assert db.execute("SELECT build_id FROM commerce.search_builds").fetchall() == [
             (active["build_id"],)
@@ -195,7 +201,7 @@ def test_reindex_vacuum_and_busy_builder_protection(pg, scratch_database, tmp_pa
         with connect_database(scratch_database, autocommit=True) as busy:
             busy.execute("SELECT pg_advisory_lock(%s)", (BUILD_LOCK,))
             with pytest.raises(CatalogError, match="running"):
-                remove_builds(db, keep_ready=0, apply=True)
+                retire(db, keep_ready=0, apply=True)
         rebuilt = maintain_indexes(db, "reindex")
         assert rebuilt["indexes"] and all(item["valid"] for item in rebuilt["indexes"])
         assert maintain_indexes(db, "vacuum")["status"] == "complete"
@@ -203,15 +209,93 @@ def test_reindex_vacuum_and_busy_builder_protection(pg, scratch_database, tmp_pa
             assert verify_build(db, build["build_id"])["products"] == 3
 
 
-def test_reader_snapshot_survives_publication_and_pruning(pg, scratch_database, tmp_path):
+def test_reader_snapshot_survives_publication_before_offline_pruning(
+    pg, scratch_database, tmp_path
+):
     publish(pg, tmp_path, records())
     with connect_database(scratch_database, autocommit=True) as db:
         old = build_index(db, FakeEmbedder(), QUIET)
         pg.execute("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY")
         pinned = pin_search_build(pg)
         build_index(db, FakeEmbedder(), QUIET, reembed_all=True)
-        remove_builds(db, build_ids=[old["build_id"]], apply=True)
         response = search_catalog(
             pg, ProductSearchRequest(query="moisturizer"), FakeEmbedder(), pinned
         )
         assert len(response["results"]) == 3 and response["build_id"] == old["build_id"]
+        pg.rollback()  # Remote retirement requires readers to finish first.
+        retire(db, build_ids=[old["build_id"]], apply=True)
+
+
+def test_catalog_cleanup_protects_active_rollback_and_staged_imports(
+    pg, scratch_database, tmp_path
+):
+    publish(pg, tmp_path, records(1))
+    with connect_database(scratch_database, autocommit=True) as db:
+        old = build_index(db, FakeEmbedder(), QUIET)
+        old_import = db.execute(
+            "SELECT import_id FROM commerce.search_builds WHERE build_id=%s", (old["build_id"],)
+        ).fetchone()[0]
+        publish(pg, tmp_path, records(2))
+        build_index(db, FakeEmbedder(), QUIET)
+        assert remove_imports(db)["imports"] == []
+        with pytest.raises(CatalogError, match="search-referenced"):
+            remove_imports(db, import_ids=[old_import], apply=True)
+        retire(db, build_ids=[old["build_id"]], apply=True)
+        assert remove_imports(db)["imports"] == []  # Recent orphan may be staged for a build.
+        plan = remove_imports(db, import_ids=[old_import])
+        assert plan["product_rows"] == 1
+        assert db.execute("SELECT count(*) FROM commerce.catalog_imports").fetchone() == (2,)
+        active = db.execute("SELECT import_id FROM commerce.catalog_active").fetchone()[0]
+        with pytest.raises(CatalogError, match="active"):
+            remove_imports(db, import_ids=[old_import, active], apply=True)
+        result = remove_imports(db, import_ids=[old_import], apply=True)
+        assert result["product_rows"] == 1
+        assert db.execute("SELECT count(*) FROM commerce.catalog_products").fetchone() == (2,)
+
+
+def test_qdrant_cleanup_requires_opt_in_checks_aliases_and_recovers_from_failure(
+    pg, scratch_database, tmp_path
+):
+    publish(pg, tmp_path, records(1))
+    with connect_database(scratch_database, autocommit=True) as db:
+        old = build_index(db, FakeEmbedder(), QUIET)
+        build_index(db, FakeEmbedder(), QUIET, reembed_all=True)
+        db.execute("DELETE FROM commerce.qdrant_indexes WHERE build_id=%s", (old["build_id"],))
+        name = "commerce_test_" + old["build_id"]
+        db.execute(
+            "INSERT INTO commerce.qdrant_indexes(collection_name,build_id,contract_sha) "
+            "VALUES (%s,%s,%s)",
+            (name, old["build_id"], "a" * 64),
+        )
+        assert remove_builds(db, keep_ready=0)["qdrant_collections"] == [name]
+        with pytest.raises(CatalogError, match="explicit remote"):
+            remove_builds(db, keep_ready=0, apply=True)
+
+        class Remote:
+            aliased = True
+            fail = False
+            deleted = []
+
+            def request(self, method, path, *, missing_ok=False):
+                if method == "GET":
+                    return {"aliases": [{"collection_name": name}] if self.aliased else []}
+                assert missing_ok and path == f"/collections/{name}"
+                if self.fail:
+                    raise CatalogError("Injected remote failure")
+                self.deleted.append(name)
+                return None  # Collection already absent after an interrupted attempt.
+
+        remote = Remote()
+        with pytest.raises(CatalogError, match="aliased"):
+            remove_builds(db, keep_ready=0, apply=True, qdrant=remote)
+        assert not remote.deleted
+        remote.aliased = False
+        remote.fail = True
+        with pytest.raises(CatalogError, match="Injected"):
+            remove_builds(db, keep_ready=0, apply=True, qdrant=remote)
+        assert db.execute("SELECT count(*) FROM commerce.qdrant_indexes").fetchone() == (2,)
+        remote.fail = False
+        remove_builds(db, keep_ready=0, apply=True, qdrant=remote)
+        assert remote.deleted == [name]
+        assert db.execute("SELECT count(*) FROM commerce.qdrant_indexes").fetchone() == (1,)
+        assert db.execute("SELECT count(*) FROM commerce.search_builds").fetchone() == (1,)

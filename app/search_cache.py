@@ -32,6 +32,8 @@ def code_signature():
     root = Path(__file__).parent
     for name in (
         "product_search.py",
+        "qdrant_client.py",
+        "qdrant_index.py",
         "search_models.py",
         "search_filters.py",
         "storefronts.py",

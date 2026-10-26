@@ -1,6 +1,6 @@
-# Product embedding and retrieval baseline
+# Product embeddings and Qdrant retrieval
 
-Product search reads the active PostgreSQL catalog. It does not modify the ETL
+Product search retrieves candidates from Qdrant and reads facts from the active PostgreSQL catalog. It does not modify the ETL
 data, conversation transcripts, or preference state. No model download is part
 of setup or index generation. Run bulk generation when chat/reranking is idle;
 the API shares its in-process generation lock across chat, reranking, and query
@@ -11,9 +11,11 @@ embedding, while the standalone build runs in a separate process.
 ```bash
 # Matching PostgreSQL + pgvector files; this does not download models
 bash scripts/setup.sh --with-services
+docker compose -f compose.qdrant.yml up -d
 .venv/bin/python scripts/init_catalog.py
 .venv/bin/python scripts/build_search_index.py
 .venv/bin/python scripts/verify_search_index.py
+.venv/bin/python scripts/build_qdrant_index.py --verify-only
 ```
 
 Settings are in `.env`: `EMBEDDING_MODEL=embeddinggemma:latest`,
@@ -39,7 +41,7 @@ Tables: `commerce.search_builds`, `commerce.search_documents`, and
 `commerce.search_active`. Product/build foreign keys preserve generation
 identity. Embeddings are normalized and validated for count, finite values,
 nonzero norm, and dimension. Database vectors use float32 `vector(768)`; no
-half-precision reduction or approximate index is used in this baseline.
+half-precision reduction is used. Qdrant defaults to exact dense search; ANN is opt-in.
 
 Across catalog snapshots, selected-text hashes and matching model/input contracts
 allow reuse of vectors from retained ready generations. New or changed inputs
@@ -112,20 +114,32 @@ parser. A budget or mandatory attribute mentioned only in query text is not
 enforced automatically. The response exposes `filters_applied` and
 `constraints_source: structured_filters` for downstream conversation planning.
 
-Both retrieval paths use identical eligible IDs before their top-50 limits:
+Both Qdrant branches use identical eligible IDs before their top-50 limits:
 
-1. PostgreSQL English full-text search (`plainto_tsquery`, AND semantics) with
-   title-weighted `ts_rank_cd`. This is PostgreSQL text ranking, not BM25.
-2. Exact cosine search over eligible pgvector embeddings. There is no ANN index
-   or post-ANN filtering that could lose restrictive-filter candidates here.
+1. Qdrant native `qdrant/bm25`, English tokenization and IDF.
+2. Dense cosine retrieval with `QDRANT_EXACT=1`; set it to `0` only after evaluating ANN.
 3. Reciprocal rank fusion with constant 60 and product-ID tie breaks.
-4. Hydration from the same pinned catalog snapshot.
-5. By default, local cross-encoder reranking of the best 20 RRF candidates before
-   applying the requested result limit. `rerank:false` returns the RRF baseline.
+4. Hydration from the same pinned PostgreSQL catalog snapshot.
+5. Configured reranking of eligible candidates, followed by listing-evidence ordering.
 
-See [pgvector exact search and indexing](https://github.com/pgvector/pgvector#indexing).
-Exact search is a baseline for 20,000 records; larger catalogs need measured
-latency and filtered-recall checks before adding approximate indexes. The RRF
+Qdrant is required for online search and index publication. Remove the retired
+`SEARCH_BACKEND` setting; a legacy `postgres` value is rejected with an explicit error.
+`QDRANT_URL`, optional `QDRANT_API_KEY`, and `QDRANT_COLLECTION_PREFIX` configure the
+service. The Compose file pins the server, binds it to loopback, and retains a named
+storage volume. Stop it with `docker compose -f compose.qdrant.yml down`, without volumes.
+
+PostgreSQL computes exact eligibility first. `QDRANT_MAX_ELIGIBLE` bounds this set at
+100,000 by default; over-limit requests fail rather than silently truncating results.
+Collections are named from the index contract and full build ID. Readiness validates
+the registered collection, vector contract, and point count before any cache hit.
+There is no automatic or selectable PostgreSQL online fallback.
+
+The standalone exporter can rebuild Qdrant from retained PostgreSQL embeddings without
+model calls: `.venv/bin/python scripts/build_qdrant_index.py`. A damaged ready collection
+is not repaired in place; export to a new `QDRANT_COLLECTION_PREFIX`, verify it, and then
+restart the API with that prefix. Keep the previous verified generation for rollback.
+
+The RRF
 candidate pool is bounded and does not guarantee that every relevant product
 appears in the final ranking. Similarity/RRF scores are not calibrated relevance
 or suitability probabilities, and semantic search can return weak matches.
@@ -139,14 +153,14 @@ return an empty result; the backend does not relax constraints to fill a page.
 ## Evaluation and remaining work
 
 ```bash
-CATALOG_TEST_ADMIN_URL=postgresql:///postgres .venv/bin/python -m pytest -q
+CATALOG_TEST_ADMIN_URL=postgresql:///postgres QDRANT_TEST_URL=http://127.0.0.1:6333 .venv/bin/python -m pytest -q
 .venv/bin/python scripts/check_search.py
 .venv/bin/python scripts/check_product_reranking.py
 ```
 
 Tests use fake vectors to exercise protocol validation, source-contract bounds,
 resume, publication, snapshot isolation, hard filters, null claims, rank fusion,
-API validation, and query parameterization against a temporary PostgreSQL DB.
+API validation, and query parameterization against a temporary PostgreSQL DB and isolated Qdrant collections.
 The baseline live smoke script explicitly disables reranking and uses the real
 embedding model/catalog, writing a local report to
 `data/search/smoke_report.json`. Its category/price/attribute checks verify
@@ -154,9 +168,8 @@ constraints and execution. They are not human relevance judgments or qrels and
 must not be reported as recommendation accuracy, Recall, or NDCG.
 
 The existing reranker is connected; see [product_reranking.md](product_reranking.md).
-Maintaining conversational requirements, grounded user-facing explanations, and
-human-judged relevance evaluation remain subsequent work. Redis caching can
-follow measured latency and correctness.
+Conversation state, listing evidence, and bounded Redis caching are implemented.
+Human-judged relevance and complete-journey evaluation remain separate from mechanical checks.
 
 The original baseline smoke run exposed relevance limitations: a shoelace listing
 ranked above a running shoe, and a scraper-blade listing appeared for razor
@@ -164,3 +177,12 @@ blades. Broad source-derived families are noisy. These observations are retained
 in the local smoke report and motivated the reranker integration. Product-type
 evaluation is still needed;
 passing structured-filter checks does not establish correct product suitability.
+
+Offline ANN comparison uses stored vectors and makes no model calls:
+
+```bash
+.venv/bin/python scripts/benchmark_qdrant.py --samples 24 --k 20 --min-recall 0.98
+```
+
+This compares Qdrant ANN against exact PostgreSQL neighbors within the same storefront.
+Its tie-adjusted recall gate measures vector-neighbor recovery, not shopper relevance.
