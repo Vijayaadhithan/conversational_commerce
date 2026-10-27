@@ -61,6 +61,7 @@ class TaskRequest(BaseModel):
 
 class IntentPlan(BaseModel):
     model_config = ConfigDict(extra="forbid")
+    scope: Literal["shopping", "smalltalk", "off_topic", "unclear"] | None = None
     requested_storefront: StorefrontID | None = None
     intent: Literal[
         "search",

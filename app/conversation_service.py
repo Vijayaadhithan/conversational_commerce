@@ -2,6 +2,7 @@
 
 from collections.abc import Callable
 
+from fastapi import HTTPException
 from starlette.datastructures import State
 
 from app.api_models import ChatRequest
@@ -28,10 +29,15 @@ class ConversationService:
         user_id: str,
         identity,
         progress: Callable[[str], None] | None = None,
+        emit=None,
     ) -> dict:
         record = self.state.store.check_owner(key, user_id)
         if record["mode"] == "commerce":
-            return await self.commerce.process_message(record, body.message, identity, progress)
+            return await self.commerce.process_message(
+                record, body.message, identity, progress, emit
+            )
+        if self.settings.commerce_only:
+            raise HTTPException(409, "Start a new shopping conversation; general chat is disabled")
         history = self.state.store.messages(key, record["summarized_through"], limit=1000)
         messages, summary, boundary = await self.chat.prepare_context(record, history, body.message)
         answer, result = await self.chat.complete(messages)

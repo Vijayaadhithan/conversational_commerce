@@ -206,7 +206,10 @@ def test_real_http_state_isolation_restart_replay_and_legacy(tmp_path):
             ).json()["id"]
             for scope in STOREFRONTS
         }
-        assert client.post("/conversations", json={"storefront_id": "beauty"}).status_code == 422
+        assert (
+            client.post("/conversations", json={"storefront_id": "beauty"}).json()["mode"]
+            == "commerce"
+        )
         assert (
             client.post(
                 "/conversations", json={"mode": "commerce", "storefront_id": "other"}

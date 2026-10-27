@@ -28,7 +28,10 @@ The model proposes evidence-backed intent. Deterministic validation checks liter
 quotes, constraints, prices, and task scope before applying changes. Separate
 modules handle task selection, preference updates, discovery, and grounded replies.
 Each product task retains its own constraints and recommendation snapshots.
-Invalid proposals clarify without applying rejected changes. See
+Malformed intent and invalid proposals share one bounded repair attempt, then clarify
+without applying rejected changes. Business-scope classification shares the planner
+call. Optional summaries select only supplied evidence IDs and stream validated
+highlights; `done` is sent only after atomic persistence. See
 [conversation contracts](conversations.md).
 
 ## Inference providers

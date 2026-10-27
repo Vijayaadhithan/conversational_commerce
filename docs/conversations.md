@@ -1,8 +1,16 @@
 # Conversational product recommendations
 
-Create a conversation with `mode: "commerce"`. The existing default `chat` mode
-continues to provide general local conversation. Both use the configured Ollama
-chat model; this feature does not download or replace models.
+`COMMERCE_ONLY=1` is the default: omitted mode creates a shopping conversation,
+explicit `chat` creation is rejected, and existing general-chat sessions remain
+readable but cannot accept new messages. Set `COMMERCE_ONLY=0` to enable general
+chat and its previous default. An explicit storefront always selects commerce.
+The configured chat provider handles intent; no model download is required.
+
+Scope classification shares the intent call. Unrelated requests receive a shopping
+redirection without changing saved requirements or searching. Nonsense asks for
+clarification; greetings remain allowed. Clear single-section purchase commands use deterministic handoffs with the verbatim
+request; ambiguous requests still use the planner. These checks are tested behavior, not a guarantee of perfect model
+classification for every possible phrase.
 
 ```bash
 # First terminal
@@ -97,8 +105,11 @@ model preference proposals receive one correction attempt with validation
 feedback. A second invalid preference proposal produces a normal clarification
 reply, with none of the rejected preference changes applied. The user message
 and clarification are saved together so the conversation can continue.
-Model connection, malformed JSON, catalog, and reranker failures are not retried
-by this correction path. Usage counts include both completed extraction calls.
+Malformed or incomplete intent JSON also receives one repair attempt, sharing the
+same two-attempt budget as preference validation. Exhausted recovery saves a helpful
+clarification without applying rejected preferences. Model transport, authentication,
+rate-limit, catalog and reranker failures are not treated as intent repairs. Usage
+includes extraction attempts and summary inference when counts are available.
 Unchanged restatements are discarded while retaining their original sources.
 A small product-name lexicon can recover an explicitly stated goal omitted by
 the model; it never infers a product type from a concern alone.
@@ -188,8 +199,24 @@ Stream events are `status` (actual queue/planning/search progress), `delta`
 sanitized `error` event with status and retry delay; clients must wait for `done`
 before considering a turn complete. Heartbeat comments keep idle streams open.
 
-The structured intent model does not generate a free-form answer token by token.
-Reply text and products are emitted after validation and atomic persistence.
+`COMMERCE_SUMMARY_ENABLED=1` adds at most one evidence-selection call after retrieval.
+The model chooses up to three supplied fact IDs relevant to the latest query. The
+backend renders their listing-grounded sentences; raw model prose or arbitrary IDs
+are never displayed. `commerce.summary` records selected product evidence and whether
+generation succeeded or used a template fallback. This is a concise evidence-based
+summary, not unconstrained generated advice.
+
+On SSE requests, validated product cards arrive in a `commerce` event with
+`provisional: true`. Each complete, allowlisted model selection produces a `delta`
+as the upstream model streams, before generation completes. The original reply then
+supplies remaining details and cautions. A failed or timed-out summary preserves only
+already validated highlights and falls back to the original reply. Summary inference
+has a 30-second total deadline and a small output budget.
+
+These early events are provisional until atomic persistence succeeds and `done`
+arrives. Final commerce metadata replaces the provisional cards. If persistence fails,
+clients must treat the stream as incomplete and retry the same key. Concatenated
+`delta` text matches the persisted reply; replay does not repeat inference.
 Disconnecting stops delivery while admitted work finishes and saves normally;
 repeating the same request key recovers that response without a duplicate turn.
 
@@ -346,3 +373,15 @@ for hosted models. Each captured turn separates mechanical section/destination
 checks from the required human review of product relevance and clarification
 quality. The 252-case live evaluation has **not** been run as part of this change;
 servers and model runs were left under user control.
+
+Focused live checks for scope, typos, four-storefront handoffs, independent budgets,
+streaming/replay and real reranking are available without a benchmark:
+
+```bash
+.venv/bin/python scripts/check_shopping_journeys.py
+# Rerun a specific failed group: scope, handoff, multiple, or stream
+.venv/bin/python scripts/check_shopping_journeys.py --case stream
+```
+
+The script uses isolated conversations and writes results under `data/search/`.
+It checks execution, state, scope and filters; it does not assign human relevance scores.

@@ -228,10 +228,10 @@ Cleanup audit manifests/results remain under `data/operations/cleanup_2026-10-26
 Completed one-off cleanup programs and narrative reports have been removed. The reusable
 maintenance commands above are the supported entry points; no background deletion job runs.
 
-## Follow-up work carried forward
+## Deferred operations work
 
-The previous cleanup report identified business-scope/off-topic enforcement, malformed
-planner recovery, evidence-constrained generated summaries, full destination-session
-handoff evaluation, dependency locking, and backup/restore exercises. This source cleanup
-does not claim those product/production improvements are complete. Storefront filtering
-and mechanical test success alone do not establish these guarantees.
+Dependency locking, coordinated backup/restore exercises, and automated conversation
+retention remain deferred. The shopping policy, bounded intent recovery and grounded
+summary stream are described in [conversations](conversations.md). Focused live journey
+checks do not replace a broad human-reviewed relevance evaluation or production capacity
+measurements.

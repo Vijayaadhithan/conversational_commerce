@@ -110,6 +110,11 @@ ollama serve
 
 ## Run the backend
 
+`COMMERCE_ONLY=1` and `COMMERCE_SUMMARY_ENABLED=1` default to shopping-only sessions
+with model-selected listing highlights. Both accept `0` to disable. General chat
+requires `COMMERCE_ONLY=0` and can be selected with `scripts/chat.py --general-chat`.
+
+
 First provision a user token and set `COMMERCE_API_TOKEN_FILE` in `.env`; see
 [API operations](docs/operations.md) for the commands, legacy conversation
 ownership, retry keys, limits, monitoring and real load testing. Authentication
@@ -360,9 +365,11 @@ handling remains a subsequent integration step. See
 | POST | `/rerank` | Rank up to 50 supplied documents |
 | POST | `/products/search` | Search the active catalog using relevance text and mandatory structured filters |
 
-Messages accept up to 4,000 UTF-8 bytes. Responses are returned after generation,
-without token streaming. If `done_reason` is `length`, the output limit was
-reached; increase `OLLAMA_MAX_TOKENS` or ask the model to continue.
+Messages accept up to 4,000 UTF-8 bytes. JSON requests return the completed response.
+Commerce clients can request `Accept: text/event-stream` for progress, product cards,
+and evidence-grounded highlights during summary generation. Wait for `done` before
+considering the turn saved. Malformed intent receives one repair, then a clarification.
+See [conversation contracts](docs/conversations.md) for fallback and replay behavior.
 
 Full conversation transcripts persist across restarts. Older turns are
 summarized to keep model input bounded; summaries are lossy. Failed inference

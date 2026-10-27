@@ -222,12 +222,16 @@ def test_untrusted_extraction_cannot_invent_or_remove_preferences(tmp_path, bad_
         '{"intent":"search","evidence":"moisturizer","unknown":true}',
     ],
 )
-def test_malformed_plan_is_not_committed(tmp_path, output):
+def test_malformed_plan_recovers_to_clarification_without_preferences(tmp_path, output):
     _, app, _ = harness(tmp_path, {"moisturizer": output})
     with TestClient(app) as client:
         session = new(client)
-        assert send(client, session, "moisturizer").status_code == 502
-        assert client.get(f"/conversations/{session}/preferences").json()["state_version"] == 0
+        result = send(client, session, "moisturizer")
+        assert result.status_code == 200
+        assert result.json()["commerce"]["validation_recovered"]
+        assert result.json()["commerce"]["intent_attempts"] == 2
+        saved = client.get(f"/conversations/{session}/preferences").json()
+        assert saved["state_version"] == 1 and saved["preferences"]["tasks"] == []
 
 
 def test_empty_results_keep_filters_and_previous_reference_snapshot(tmp_path):

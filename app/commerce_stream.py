@@ -12,6 +12,19 @@ def event(name, value):
     return f"event: {name}\ndata: {json.dumps(value, ensure_ascii=False)}\n\n"
 
 
+class ProgressQueue(asyncio.Queue):
+    """Track produced deltas even while a consumer has dequeued but not rendered one."""
+
+    def __init__(self):
+        super().__init__()
+        self.delta_text = ""
+
+    def put_nowait(self, item):
+        super().put_nowait(item)
+        if item[0] == "delta":
+            self.delta_text += item[1]["text"]
+
+
 async def stream_turn(work, progress):
     async def run():
         try:
@@ -19,8 +32,11 @@ async def stream_turn(work, progress):
             # Flush thread-safe progress callbacks before the terminal events,
             # including when cached or mocked work completes without suspending.
             await asyncio.sleep(0)
-            # Only committed, validated output is exposed, never partial model JSON.
-            for line in result["reply"].splitlines(keepends=True):
+            # Evidence highlights may already be visible; done remains the durable commit.
+            prefix = getattr(progress, "delta_text", "")
+            if not result["reply"].startswith(prefix):
+                raise RuntimeError("Streamed reply differs from committed reply")
+            for line in result["reply"][len(prefix) :].splitlines(keepends=True):
                 progress.put_nowait(("delta", {"text": line}))
             if result.get("commerce"):
                 progress.put_nowait(("commerce", result["commerce"]))

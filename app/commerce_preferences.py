@@ -65,6 +65,10 @@ def apply_changes(task, plan, message):
             if key.startswith("attribute.")
             else fields.get(key)
         )
+        # A repair may emit null for a rejected, never-applied optional attribute.
+        # Ignoring that no-op cannot remove any saved requirement.
+        if key.startswith("attribute.") and value is None and current is None:
+            continue
         # Restating an existing fact is not a new preference or new evidence.
         # Discard these no-ops rather than attributing old facts to the latest message.
         denied = (isinstance(value, str) and negated(value, message)) or (
@@ -72,6 +76,14 @@ def apply_changes(task, plan, message):
             and value is True
             and negated("fragrance free", message)
         )
+        if (
+            key == "attribute.style"
+            and isinstance(value, str)
+            and normalized(value) in {"silver", "gold"}
+        ):
+            raise IntentError(
+                "Silver/gold alone is not a style. Preserve the literal phrase in query/need; use color or material filters only when explicitly specified"
+            )
         if key == "attribute.size" and isinstance(value, str):
             system = re.search(r"\b(US|UK|EU)\b", message)
             if system and system.group().casefold() not in normalized(value).split():

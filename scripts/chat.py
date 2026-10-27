@@ -14,8 +14,14 @@ def main():
     parser = argparse.ArgumentParser(description="Talk to your local conversational API")
     parser.add_argument("--url", default="http://127.0.0.1:8000")
     parser.add_argument("--session", help="Resume a saved conversation ID")
-    parser.add_argument(
+    modes = parser.add_mutually_exclusive_group()
+    modes.add_argument(
         "--commerce", action="store_true", help="Create a product recommendation conversation"
+    )
+    modes.add_argument(
+        "--general-chat",
+        action="store_true",
+        help="General chat; requires COMMERCE_ONLY=0 on the server",
     )
     args = parser.parse_args()
 
@@ -45,9 +51,15 @@ def main():
     try:
         session = (
             args.session
-            or request("POST", "/conversations", {"mode": "commerce" if args.commerce else "chat"})[
-                "id"
-            ]
+            or request(
+                "POST",
+                "/conversations",
+                {"mode": "commerce"}
+                if args.commerce
+                else {"mode": "chat"}
+                if args.general_chat
+                else {},
+            )["id"]
         )
         mode = request("GET", f"/conversations/{session}")["mode"]
         print(

@@ -48,7 +48,11 @@ budgets may require a larger `LLM_MAX_TOKENS`; truncated output is rejected.
 the selected model's capacity. In Ollama mode it also configures `num_ctx`.
 Blank `LLM_*` limits inherit their corresponding existing `OLLAMA_*` values.
 Restart the API after configuration changes. There is no automatic fallback
-between providers and no automatic retry of billed inference requests.
+between providers. Invalid shopping intent gets at most one repair call; transport,
+authentication and rate-limit errors do not trigger that repair. Optional commerce
+summaries add one bounded call through the same configured provider. Ollama uses
+NDJSON streaming; hosted adapters consume compatible SSE. Provider failure falls
+back to the deterministic product reply without switching providers.
 
 ## Embedding migration
 

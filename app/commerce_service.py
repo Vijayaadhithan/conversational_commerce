@@ -13,10 +13,12 @@ from starlette.datastructures import State
 from app.catalog import CatalogError
 from app.chat_service import ChatService
 from app.commerce_discovery import intent_clarification
-from app.commerce_errors import IntentError
+from app.commerce_errors import IntentError, InvalidShoppingIntent
 from app.commerce_intent import direct_plan
 from app.commerce_models import IntentPlan, preference_view, shopping_state_for
+from app.commerce_policy import scope_reply
 from app.commerce_storefront import TurnHandler, handle_storefront_turn
+from app.commerce_summary import add_summary
 from app.config import Settings
 from app.inference_usage import aggregate_usage
 
@@ -33,19 +35,22 @@ class CommerceTurnService:
         self.handle_turn = turn_handler
 
     async def process_message(
-        self, record: dict, message: str, identity, progress: Callable[[str], None] | None = None
+        self,
+        record: dict,
+        message: str,
+        identity,
+        progress: Callable[[str], None] | None = None,
+        emit=None,
     ) -> dict:
         key = record["id"]
         state = shopping_state_for(record)
-        repair_reason, inference = "", []
+        repair_reason, inference, result = "", [], {}
         attempts = 1 if direct_plan(message) else 2
         for attempt in range(attempts):
             if progress:
                 progress(
                     "Understanding your request…" if not attempt else "Checking your preferences…"
                 )
-            plan, result = await self.chat.shopping_plan(state, message, repair_reason)
-            inference.append(result)
 
             def search(request):
                 if progress:
@@ -53,6 +58,18 @@ class CommerceTurnService:
                 return self.state.product_search.search(request)
 
             try:
+                plan, result = await self.chat.shopping_plan(state, message, repair_reason)
+                inference.append(result)
+                scoped = scope_reply(state, plan, message)
+                if scoped:
+                    state, commerce = scoped
+                    plan = IntentPlan(
+                        intent="clarify",
+                        scope=plan.scope,
+                        evidence=message[:500],
+                        recommendation_requested=False,
+                    )
+                    break
                 next_state, commerce = await asyncio.to_thread(
                     handle_storefront_turn,
                     state.model_dump(mode="json"),
@@ -61,10 +78,13 @@ class CommerceTurnService:
                     search,
                     self.handle_turn,
                 )
-            except (IntentError, ValidationError, InvalidOperation) as exc:
+            except (InvalidShoppingIntent, IntentError, ValidationError, InvalidOperation) as exc:
+                if isinstance(exc, InvalidShoppingIntent):
+                    result = exc.result
+                    inference.append(result)
                 repair_reason = (
                     str(exc)
-                    if isinstance(exc, IntentError)
+                    if isinstance(exc, (IntentError, InvalidShoppingIntent))
                     else "Preference schema or price validation failed"
                 )
                 logger.warning(
@@ -91,6 +111,14 @@ class CommerceTurnService:
             state_version=record["state_version"] + 1,
             intent_attempts=len(inference),
         )
+        if self.settings.commerce_summary and (commerce.get("products") or commerce.get("groups")):
+            if progress:
+                progress("Preparing highlights from the product listings…")
+            if emit:
+                emit("commerce", {**commerce, "provisional": True})
+            summary_usage = await add_summary(self.chat, message, commerce, emit)
+            if summary_usage is not None:
+                inference.append(summary_usage)
         response = {
             "conversation_id": key,
             "reply": commerce["reply"],

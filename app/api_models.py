@@ -9,12 +9,12 @@ from app.storefronts import StorefrontID
 
 class NewConversation(BaseModel):
     title: str = Field(default="New conversation", min_length=1, max_length=120)
-    mode: Literal["chat", "commerce"] = "chat"
+    mode: Literal["chat", "commerce"] | None = None
     storefront_id: StorefrontID | None = None
 
     @model_validator(mode="after")
     def commerce_storefront(self):
-        if self.storefront_id and self.mode != "commerce":
+        if self.storefront_id and self.mode == "chat":
             raise ValueError("A storefront requires commerce mode")
         return self
 

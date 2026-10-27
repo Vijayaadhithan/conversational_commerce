@@ -9,20 +9,25 @@ from fastapi.responses import StreamingResponse
 
 from app.api_models import ChatRequest, NewConversation
 from app.commerce_models import preference_view, shopping_state_for
-from app.commerce_stream import stream_turn
+from app.commerce_stream import ProgressQueue, stream_turn
 from app.operations import finish_on_disconnect
 
 
 def register_routes(app, access, service):
     @app.post("/conversations", status_code=201)
     async def new_conversation(body: NewConversation, request: Request):
+        mode = body.mode or (
+            "commerce" if service.settings.commerce_only or body.storefront_id else "chat"
+        )
+        if service.settings.commerce_only and mode != "commerce":
+            raise HTTPException(422, "This deployment supports shopping conversations only")
         identity, replay = access.claim(request, "create", body)
         if replay is not None:
             return replay
         try:
             return app.state.store.create(
                 body.title,
-                body.mode,
+                mode,
                 access.owner(request),
                 identity,
                 storefront_id=body.storefront_id,
@@ -73,7 +78,7 @@ def register_routes(app, access, service):
         streaming = "text/event-stream" in request.headers.get("accept", "")
         if replay is not None and not streaming:
             return replay
-        progress = asyncio.Queue()
+        progress = ProgressQueue()
 
         async def work():
             if replay is not None:
@@ -83,6 +88,9 @@ def register_routes(app, access, service):
             def report(text):
                 loop.call_soon_threadsafe(progress.put_nowait, ("status", {"text": text}))
 
+            def emit(name, data):
+                loop.call_soon_threadsafe(progress.put_nowait, (name, data))
+
             try:
                 access.model_rate(request)
                 async with app.state.admission.workload(), app.state.admission.conversation(key):
@@ -91,7 +99,7 @@ def register_routes(app, access, service):
                         body,
                         access.owner(request),
                         identity,
-                        **({"progress": report} if streaming else {}),
+                        **({"progress": report, "emit": emit} if streaming else {}),
                     )
             finally:
                 app.state.store.release_request(identity)

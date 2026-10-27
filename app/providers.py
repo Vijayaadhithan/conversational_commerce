@@ -105,19 +105,15 @@ async def hosted_chat(client, settings, payload):
         result = response.json()
         choice = result["choices"][0]
         content = choice["message"]["content"]
-        if (
-            choice.get("finish_reason") != "stop"
-            or not isinstance(content, str)
-            or not content.strip()
-        ):
-            raise ValueError("Incomplete model output")
+        if not isinstance(content, str):
+            raise ValueError("Invalid model output")
         usage = result.get("usage") or {}
         if not isinstance(usage, dict):
             raise ValueError("Invalid usage")
         return {
             "message": {"content": content},
-            "done": True,
-            "done_reason": "stop",
+            "done": choice.get("finish_reason") == "stop" and bool(content.strip()),
+            "done_reason": choice.get("finish_reason"),
             "prompt_eval_count": usage.get("prompt_tokens"),
             "eval_count": usage.get("completion_tokens"),
         }

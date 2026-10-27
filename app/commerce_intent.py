@@ -3,7 +3,13 @@
 import re
 
 from app.commerce_models import FAMILIES, Change, IntentPlan
-from app.commerce_text import matching_families, normalized, number_text, product_mentions
+from app.commerce_text import (
+    evidence_ok,
+    matching_families,
+    normalized,
+    number_text,
+    product_mentions,
+)
 
 
 def fill_explicit_goal(plan, message):
@@ -114,3 +120,33 @@ def direct_plan(message):
         if action
         else None
     )
+
+
+def preserve_literal_metal_goal(plan, message):
+    """Keep 'silver necklace' literal, using existing title/selected-color eligibility."""
+    for changes, clause in [
+        (plan.changes, message),
+        *[(item.changes, item.evidence) for item in plan.requests],
+    ]:
+        phrases = []
+        for start, end, _, _ in product_mentions(clause):
+            prefix = re.search(r"\b(silver|gold)\s+$", clause[:start], re.I)
+            if prefix:
+                phrases.append((prefix.group(1).casefold(), clause[prefix.start() : end]))
+        if len(phrases) != 1:
+            continue
+        metal, phrase = phrases[0]
+        misplaced = [
+            change
+            for change in changes
+            if change.field == "attribute.style"
+            and isinstance(change.value, str)
+            and normalized(change.value) == metal
+            and evidence_ok(change.evidence, clause)
+        ]
+        if not misplaced:
+            continue
+        changes[:] = [
+            change for change in changes if change not in misplaced and change.field != "query"
+        ]
+        changes.append(Change(field="query", value=phrase, evidence=phrase))

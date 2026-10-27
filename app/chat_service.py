@@ -7,10 +7,13 @@ from fastapi import HTTPException
 from starlette.datastructures import State
 
 from app.catalog import strict_json
-from app.commerce_intent import direct_plan
+from app.commerce_errors import InvalidShoppingIntent
+from app.commerce_intent import direct_plan, preserve_literal_metal_goal
 from app.commerce_models import IntentPlan
+from app.commerce_policy import handoff_plan
 from app.commerce_prompts import (
     PLANNER_PROMPT,
+    SCOPE_PROMPT,
     STOREFRONT_PROMPT,
     planner_context,
     planner_examples,
@@ -18,6 +21,18 @@ from app.commerce_prompts import (
 from app.config import Settings
 from app.providers import hosted_chat
 from app.text_budget import byte_size, chunks, clip
+
+
+def compact_schema(value):
+    if isinstance(value, dict):
+        return {
+            key: compact_schema(item)
+            for key, item in value.items()
+            if key not in {"title", "description", "default"}
+        }
+    if isinstance(value, list):
+        return [compact_schema(item) for item in value]
+    return value
 
 
 class ChatService:
@@ -87,13 +102,17 @@ class ChatService:
         return content, result
 
     async def shopping_plan(self, state, user, repair_reason=""):
-        deterministic = direct_plan(user)
+        deterministic = direct_plan(user) or handoff_plan(state, user)
         if deterministic:
-            return deterministic, {}
+            return deterministic.model_copy(
+                update={"scope": "smalltalk" if deterministic.intent == "smalltalk" else "shopping"}
+            ), {}
         messages = [
             {
                 "role": "system",
-                "content": PLANNER_PROMPT + (STOREFRONT_PROMPT if state.storefront_id else ""),
+                "content": PLANNER_PROMPT
+                + SCOPE_PROMPT
+                + (STOREFRONT_PROMPT if state.storefront_id else ""),
             },
             {"role": "user", "content": planner_context(state, user)},
         ]
@@ -102,18 +121,20 @@ class ChatService:
                 -1,
                 {
                     "role": "system",
-                    "content": "Correct the previous invalid extraction. Validation feedback: "
+                    "content": "Validation feedback: "
                     + repair_reason
-                    + ". Keep the user's spelling. Use only literal quotes from this message. Several needs can coexist. "
-                    "A facial concern is need, not a named product query. Generic 'product' is not a product type. "
-                    "Omit inferred product types, unstated attributes, and unchanged preferences. "
-                    "A request for suggestions from saved conditions has requests=[]; never put your own product suggestions in requests. "
-                    "One named product with several concerns also has requests=[] and separate top-level need changes. "
-                    "Remove saved constraints only when the latest message explicitly asks for it.",
+                    + ". Previous proposal was not applied: omit invalid fields, never clear them with null. "
+                    "Never invent products or preferences. One product with several concerns is one task; "
+                    "requests requires separate explicit product clauses. Browsing saved concerns uses changes=[] and requests=[].",
                 },
             )
-        schema = IntentPlan.model_json_schema()
-        schema["required"] = ["intent", "evidence", "changes", "recommendation_requested"]
+        schema = compact_schema(IntentPlan.model_json_schema())
+        schema["title"] = "IntentPlan"
+        schema["properties"]["scope"] = {
+            "type": "string",
+            "enum": ["shopping", "smalltalk", "off_topic", "unclear"],
+        }
+        schema["required"] = ["intent", "evidence", "changes", "recommendation_requested", "scope"]
         schema["properties"]["recommendation_requested"] = {
             "type": "boolean",
             "description": "Does the user want product recommendations now, in this conversation context?",
@@ -150,11 +171,13 @@ class ChatService:
             if result.get("done") is not True or result.get("done_reason") == "length":
                 raise ValueError("Incomplete extraction")
             content = result["message"]["content"]
-            return IntentPlan.model_validate(strict_json(content)), result
+            plan = IntentPlan.model_validate(strict_json(content))
+            if self.settings.commerce_only and plan.scope is None:
+                raise ValueError("Missing shopping scope")
+            preserve_literal_metal_goal(plan, user)
+            return plan, result
         except (ValueError, TypeError, KeyError) as exc:
-            raise HTTPException(
-                502, "Model returned invalid shopping intent; turn was not saved"
-            ) from exc
+            raise InvalidShoppingIntent(result) from exc
 
     def prompt(self, summary, history, user):
         messages = [{"role": "system", "content": self.settings.system_prompt}]

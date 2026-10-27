@@ -12,8 +12,17 @@ ROOT = Path(__file__).resolve().parent.parent
 load_dotenv(ROOT / ".env")
 
 
+def flag(name, default="1"):
+    value = os.getenv(name, default)
+    if value not in {"0", "1"}:
+        raise ValueError(f"{name} must be 0 or 1")
+    return value == "1"
+
+
 @dataclass(frozen=True)
 class Settings:
+    commerce_only: bool = field(default_factory=lambda: flag("COMMERCE_ONLY"))
+    commerce_summary: bool = field(default_factory=lambda: flag("COMMERCE_SUMMARY_ENABLED"))
     ollama_url: str = os.getenv("OLLAMA_BASE_URL", "http://127.0.0.1:11434").rstrip("/")
     model: str = field(default_factory=llm_model)
     provider: str = field(default_factory=lambda: os.getenv("LLM_PROVIDER", "ollama"))
