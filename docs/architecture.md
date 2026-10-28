@@ -28,6 +28,10 @@ The model proposes evidence-backed intent. Deterministic validation checks liter
 quotes, constraints, prices, and task scope before applying changes. Separate
 modules handle task selection, preference updates, discovery, and grounded replies.
 Each product task retains its own constraints and recommendation snapshots.
+The planner can use three recent dialogue turns as bounded, untrusted context;
+state and current-message evidence always take priority. Resets exclude earlier
+dialogue. Clarification questions use missing preferences, and compact replies
+keep complete evidence in product metadata and detailed inspections.
 Malformed intent and invalid proposals share one bounded repair attempt, then clarify
 without applying rejected changes. Business-scope classification shares the planner
 call. Optional summaries select only supplied evidence IDs and stream validated

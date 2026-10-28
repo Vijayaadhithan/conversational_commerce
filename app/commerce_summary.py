@@ -5,6 +5,7 @@ import re
 from contextlib import aclosing
 
 from app.catalog import strict_json
+from app.commerce_replies import concise_reasons
 from app.summary_stream import SummaryStreamError, selection_stream
 from app.text_budget import byte_size
 
@@ -30,7 +31,7 @@ def evidence_facts(commerce):
             title = row["title"]
             if len(title) > 300:
                 continue
-            reasons = row.get("why_recommended", [])[:2]
+            reasons = concise_reasons(row)[:3]
             for reason in reasons:
                 if not reason or len(reason) > 700:
                     continue
@@ -39,6 +40,7 @@ def evidence_facts(commerce):
                     "product_id": row["product_id"],
                     "task_id": group.get("task_id"),
                     "title": title,
+                    "reason": reason,
                     "text": f"Option {row.get('display_position', position)}"
                     + (f" in task {group['task_id']}" if group.get("task_id") else "")
                     + f": {reason}",
@@ -122,7 +124,11 @@ async def add_summary(chat, message, commerce, emit=None):
         # use the original complete reply for everything else, without a reset event.
         status = "partial_fallback" if chunks else "fallback"
     if chunks:
-        commerce["reply"] = "".join(chunks) + "\n" + commerce["reply"]
+        # The selected facts are already in the streamed prefix. Keep product
+        # numbers, prices, cautions and provenance, but do not repeat those lines.
+        repeated = {"   " + facts[key]["reason"] for key in selection.selected}
+        tail = "\n".join(line for line in commerce["reply"].splitlines() if line not in repeated)
+        commerce["reply"] = "".join(chunks) + "\n" + tail
     commerce["summary"] = {
         "status": status if chunks else "fallback",
         "evidence": [facts[key] for key in selection.selected],

@@ -13,7 +13,7 @@ from tempfile import TemporaryDirectory
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from evaluation_client import evaluation_client
 
-from app.commerce_prompts import PLANNER_PROMPT, STOREFRONT_PROMPT
+from app.commerce_prompts import DIALOGUE_PROMPT, PLANNER_PROMPT, SCOPE_PROMPT, STOREFRONT_PROMPT
 from app.config import ROOT, Settings
 from app.storefront_evaluation import check_storefront_response
 
@@ -40,7 +40,7 @@ def main():
         "repetitions": args.repetitions,
         "chat_model": Settings().model,
         "planner_prompt_sha256": hashlib.sha256(
-            (PLANNER_PROMPT + STOREFRONT_PROMPT).encode()
+            (PLANNER_PROMPT + SCOPE_PROMPT + STOREFRONT_PROMPT + DIALOGUE_PROMPT).encode()
         ).hexdigest(),
         "code_sha256": {
             name: hashlib.sha256((ROOT / "app" / name).read_bytes()).hexdigest()

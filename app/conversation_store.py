@@ -124,6 +124,22 @@ class Store(SecurityStore):
             messages.append(item)
         return messages
 
+    def shopping_dialogue(self, conversation_id):
+        """Read three recent turns, stopping at a committed shopping reset."""
+        with self.connect() as db:
+            rows = db.execute(
+                """SELECT m.role,m.content,json_extract(c.metadata,'$.intent.intent') AS intent
+                   FROM messages m LEFT JOIN commerce_turns c ON c.message_id=m.id
+                   WHERE m.conversation_id=? ORDER BY m.id DESC LIMIT 6""",
+                (conversation_id,),
+            ).fetchall()
+        recent = []
+        for row in rows:
+            if row["intent"] == "reset":
+                break
+            recent.append({"role": row["role"], "content": row["content"]})
+        return list(reversed(recent))
+
     def commit_commerce_turn(
         self, conversation_id, user, state, metadata, expected_version, identity=None, response=None
     ):

@@ -44,6 +44,7 @@ class CommerceTurnService:
     ) -> dict:
         key = record["id"]
         state = shopping_state_for(record)
+        dialogue = self.state.store.shopping_dialogue(key)
         repair_reason, inference, result = "", [], {}
         attempts = 1 if direct_plan(message) else 2
         for attempt in range(attempts):
@@ -58,7 +59,9 @@ class CommerceTurnService:
                 return self.state.product_search.search(request)
 
             try:
-                plan, result = await self.chat.shopping_plan(state, message, repair_reason)
+                plan, result = await self.chat.shopping_plan(
+                    state, message, repair_reason, dialogue=dialogue
+                )
                 inference.append(result)
                 scoped = scope_reply(state, plan, message)
                 if scoped:

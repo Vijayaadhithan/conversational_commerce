@@ -3,7 +3,12 @@
 import re
 from decimal import Decimal
 
-from app.commerce_discovery import question, skin_discovery
+from app.commerce_discovery import (
+    no_results_reply,
+    preference_question,
+    question,
+    skin_discovery,
+)
 from app.commerce_errors import IntentError
 from app.commerce_replies import card_reply, explain_products, task_concerns
 from app.commerce_text import (
@@ -50,7 +55,10 @@ def recommend_or_inspect(state, plan, message, old_pending, search):
             )
             return state, {
                 "action": plan.intent,
-                "reply": note + card_reply(selected, compare=plan.intent == "compare"),
+                "reply": note
+                + card_reply(
+                    selected, compare=plan.intent == "compare", compact=plan.intent == "compare"
+                ),
                 "products": selected,
                 "search": task.last_search,
             }
@@ -64,7 +72,7 @@ def recommend_or_inspect(state, plan, message, old_pending, search):
     if task.query and plan.recommendation_requested is False:
         return state, question(
             state,
-            f"I've kept your shopping context for {task.query}. What would you like to clarify about your preferences?",
+            f"I've saved your preferences for {task.query}. {preference_question(task)}",
             "general",
         )
     if not task.query:
@@ -89,7 +97,7 @@ def recommend_or_inspect(state, plan, message, old_pending, search):
     ):
         return state, question(
             state,
-            "Who are these for (for example adult men, adult women, or children)? Please mention any required size and sizing system too; only explicit listing claims can be matched.",
+            "Who are these for (for example adult men, adult women, or children)?",
             "recipient",
         )
     filters = task.filters.model_copy(deep=True)
@@ -187,15 +195,12 @@ def recommend_or_inspect(state, plan, message, old_pending, search):
         task.shown = products
         task.last_search = search_metadata
     if not products:
-        reply = f"I found no {task.query} listings matching all your saved requirements (budget maximum: {'$' + str(task.filters.max_price) + ' USD' if task.filters.max_price is not None else 'not set'}). I kept those requirements unchanged. You can explicitly change a budget, brand, or attribute to try again."
+        reply = no_results_reply(task, more=plan.intent == "more")
     else:
-        reply = (
-            f"For your request: {task.query}"
-            + (f"; concern: {task.need}" if task.need else "")
-            + ".\n"
-            + card_reply(products)
+        reply = f"Here are {len(products)} options for {task.query}:\n" + card_reply(
+            products, compact=True
         )
-        reply += "\nThese are historical listing claims, not verified outcomes or current stock. Tell me what to change, ask for more options, or refer to a product number."
+        reply += "\nPrices are historical USD; suitability and stock are unverified. Pick a number to explore, or tell me what to change."
     return state, {
         "action": "recommend",
         "reply": reply,

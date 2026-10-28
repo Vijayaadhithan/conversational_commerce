@@ -84,12 +84,17 @@ including ordered recommendation snapshots and seen IDs.
 
 ## Processing and persistence
 
-The local model first proposes structured intent using Ollama's JSON Schema
-format. The prompt receives saved task summaries, active constraints, recent
+The configured model first proposes structured intent using the intent schema.
+The prompt receives saved task summaries, active constraints, recent
 product titles, a pending clarification, and the latest user message. It does
 not use a lossy transcript summary as authoritative preference storage.
-Optional examples use only the space remaining after the full state, current
-message, schema, and any validation feedback have been included.
+Up to three recent completed dialogue turns provide conversational context,
+with each message capped at 1,200 UTF-8 bytes and truncation marked explicitly.
+Dialogue stops at the latest committed reset and is scoped to the owned conversation.
+It is untrusted context, never evidence for new preferences; saved state remains
+authoritative. Complete turn pairs are included newest first as space permits,
+then presented chronologically. The full state, current message, schema and
+validation feedback take priority; optional examples use the remaining space.
 The same model call also sets `intent.recommendation_requested`: a semantic
 decision about whether the user wants products now, using the message, saved
 concerns, and pending clarification. Requests such as `give me soem products
@@ -123,6 +128,13 @@ when continued. Scalar filters such as budget and brand still reject
 conflicting duplicate changes. Removing one named concern preserves the others;
 an ambiguous removal asks for clarification rather than clearing all concerns.
 
+Clarifications ask one question at a time, using missing saved preferences:
+skin context first, then an optional USD budget, then an offer to browse. Known
+skin context and budgets are not requested again. Apparel and footwear ask for
+missing recipient context separately. With results already shown, a deferred
+search asks what should change. An empty search offers changes to the actual
+saved constraints without guessing which one caused the empty result or relaxing it.
+
 Facial/skin concerns can prompt for optional skin context and USD budget. A skin-profile
 answer or a positive recommendation-intent decision can start broad `skin_care`
 discovery. Its source is marked `concern_guided_discovery`, not a user-selected
@@ -150,6 +162,11 @@ from retrieved records, historical prices, explicit attributes, and cited
 listing excerpts. It does not generate additional product facts with the LLM.
 An explanation identifies relevant evidence; it does not prove that a product
 will resolve a concern.
+
+Recommendation and comparison text shows at most one short evidence statement
+per product. Contradictory concern evidence and listing cautions take priority.
+Complete `why_recommended`, `concern_evidence`, and listing provenance remain in
+product metadata and detailed inspection replies.
 
 Simple commands and numbered details/comparisons skip model inference.
 Comparisons use the last successful recommendation list for that task, with
@@ -201,9 +218,10 @@ before considering a turn complete. Heartbeat comments keep idle streams open.
 
 `COMMERCE_SUMMARY_ENABLED=1` adds at most one evidence-selection call after retrieval.
 The model chooses up to three supplied fact IDs relevant to the latest query. The
-backend renders their listing-grounded sentences; raw model prose or arbitrary IDs
+backend renders their concise listing-grounded sentences; raw model prose or arbitrary IDs
 are never displayed. `commerce.summary` records selected product evidence and whether
-generation succeeded or used a template fallback. This is a concise evidence-based
+generation succeeded or used a template fallback. Selected highlights are removed
+from the following product text to avoid repeating the same evidence. This is a concise evidence-based
 summary, not unconstrained generated advice.
 
 On SSE requests, validated product cards arrive in a `commerce` event with
@@ -250,6 +268,16 @@ typo conversation, four natural browsing requests from the same saved context,
 two non-browsing turns, and restart with real local models and catalog data.
 It writes `data/search/recommendation_intent_report.json` using temporary
 conversation storage, without modifying existing sessions.
+
+For human review of dialogue continuity, adaptive questions, concise evidence,
+resets and empty-result recovery, capture `evals/conversations_dynamic.json`:
+
+```bash
+.venv/bin/python scripts/evaluate_conversations.py --cases evals/conversations_dynamic.json --output data/search/dynamic_conversations.json
+```
+
+This runs the configured models and catalog against temporary conversation storage.
+The cases are review scenarios, not a passed benchmark or an accuracy score.
 
 ## Four isolated storefronts
 

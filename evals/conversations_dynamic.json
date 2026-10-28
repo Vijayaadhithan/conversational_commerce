@@ -1,0 +1,53 @@
+[
+  {
+    "id": "known_preferences",
+    "goal": "Ask one useful question at a time; do not ask again for saved skin context or budget; browse when requested",
+    "turns": [
+      "I have dry skin and my budget is under $25. Don't show products yet",
+      "Okay, show me options with those preferences",
+      "I don't like these",
+      "I want fragrance-free options instead"
+    ]
+  },
+  {
+    "id": "ambiguous_reference",
+    "goal": "Clarify ambiguous product references without guessing; preserve product numbering and concise grounded comparisons",
+    "turns": [
+      "Recommend moisturizer for dry skin under $30",
+      "Tell me about that one",
+      "The second one",
+      "Compare the first two"
+    ]
+  },
+  {
+    "id": "cleared_preference",
+    "goal": "Recent dialogue must not revive a cleared brand; reset must exclude previous task context",
+    "turns": [
+      "Recommend Dove shampoo under $20",
+      "Any brand is fine",
+      "More options",
+      "Start over",
+      "Recommend a moisturizer"
+    ]
+  },
+  {
+    "id": "empty_search_recovery",
+    "goal": "Offer a change to a saved constraint after empty results; keep old product references and never silently relax filters",
+    "turns": [
+      "Recommend a moisturizer under $30",
+      "Under $0.01 instead",
+      "Tell me about the first option you showed earlier",
+      "Change the budget to $20"
+    ]
+  },
+  {
+    "id": "task_context",
+    "goal": "Preserve separate product budgets and identify a scoped follow-up without copying another task's preferences",
+    "turns": [
+      "Recommend shampoo under $15 and moisturizer under $25",
+      "Back to the shampoo",
+      "Under $10 instead",
+      "Back to the moisturizer"
+    ]
+  }
+]

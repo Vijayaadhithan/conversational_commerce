@@ -68,13 +68,49 @@ def skin_discovery(state, task, message, old_pending, plan):
                 "basis": task.need,
             }
         return None
-    missing = (
-        "What is your budget in USD?"
-        if re.search(SKIN_PROFILE, task.need, re.I)
-        else "What is your skin type (oily, dry, combination, sensitive, or unsure), and your budget in USD?"
-    )
+    if not re.search(SKIN_PROFILE, task.need, re.I):
+        missing = "What is your skin type (oily, dry, combination, sensitive, or unsure)?"
+    elif task.filters.max_price is None:
+        missing = "Do you have a maximum budget in USD, or would you prefer to browse without one?"
+    else:
+        missing = "Would you like to browse skin-care options with these preferences?"
     return question(
         state,
-        f"I've saved your concerns: {task.need}. {missing} Or ask me for products now, and I can browse related skin-care listings.",
+        f"I've saved your concerns: {task.need}. {missing}"
+        + (" You can also ask to browse now." if task.filters.max_price is None else ""),
         "skin_profile",
     )
+
+
+def preference_question(task):
+    """Ask about one useful missing preference without turning it into a requirement."""
+    if task.shown:
+        return "What would you like to change about these options?"
+    if task.filters.family in {"apparel", "footwear"} and not any(
+        name in task.filters.attributes for name in ("department", "age_range")
+    ):
+        return "Who are these for (for example adult men, adult women, or children)?"
+    if task.filters.max_price is None:
+        return "Do you have a maximum budget in USD, or would you prefer to browse without one?"
+    return "Would you like to see matching products, or change a preference first?"
+
+
+def no_results_reply(task, more=False):
+    """Offer an explicit next step using the actual constraints; never relax them."""
+    prefix = f"I found no {'unseen ' if more else ''}{task.query} listings matching all your saved requirements. "
+    if more:
+        return (
+            prefix + "Your requirements are unchanged. Would you like to revisit a previous option?"
+        )
+    choices = []
+    if task.filters.max_price is not None or task.filters.min_price is not None:
+        choices.append("budget")
+    if task.filters.brand or task.filters.exclude_brands:
+        choices.append("brand")
+    choices.extend(name.replace("_", " ") for name in task.filters.attributes)
+    followup = (
+        "Which requirement would you like to change: " + ", ".join(choices[:3]) + "?"
+        if choices
+        else "Would you like to try a different product type or description?"
+    )
+    return prefix + "Your requirements are unchanged. " + followup

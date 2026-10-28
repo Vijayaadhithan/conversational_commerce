@@ -6,13 +6,53 @@ from decimal import Decimal
 from app.listing_explanations import concern_evidence, concern_reasons
 
 
-def card_reply(products, compare=False):
+def concise_reasons(row):
+    """Render short listing evidence without dropping its uncertainty or negation."""
+    reasons = []
+    if row.get("listing_quality", {}).get("cautions"):
+        reasons.append("This listing has cautions; check its detailed evidence before choosing.")
+    labels = {
+        "positive": "Related listing wording",
+        "mixed": "Conflicting listing wording",
+        "negated": "Listing warns against this requirement",
+        "weak": "Only weak listing evidence",
+    }
+    concerns = sorted(
+        row.get("concern_evidence", []),
+        key=lambda item: item.get("support") not in {"mixed", "negated"},
+    )
+    for item in concerns:
+        # Do not truncate a long concern into a different requirement.
+        if len(item["concern"]) > 120:
+            reasons.append(
+                "See the detailed evidence for your saved concern; suitability is unverified."
+            )
+            continue
+        if item["status"] == "needs_clarification":
+            label = "Preference needs clarification"
+        else:
+            label = labels.get(item.get("support"), "No matching listing evidence")
+        reasons.append(f"{label}: ‘{item['concern']}’. Suitability is unverified.")
+    # Exact short attribute facts are preferable to repetitive budget statements.
+    original = row.get("why_recommended", [])
+    reasons.extend(
+        reason
+        for reason in original
+        if reason.startswith("The listing explicitly states ") and len(reason) <= 220
+    )
+    if not reasons:
+        reasons.extend(reason for reason in original if len(reason) <= 220)
+    return list(dict.fromkeys(reasons))
+
+
+def card_reply(products, compare=False, compact=False):
     lines = []
     for index, row in enumerate(products, 1):
         lines.append(
             f"{row.get('display_position', index)}. {row['title']} — ${row['price']['amount']} USD (historical)."
         )
-        for reason in row.get("why_recommended", []):
+        reasons = concise_reasons(row)[:1] if compact else row.get("why_recommended", [])
+        for reason in reasons:
             lines.append("   " + reason)
     if compare and len(products) > 1:
         cheapest = min(products, key=lambda row: Decimal(row["price"]["amount"]))

@@ -12,6 +12,7 @@ from app.commerce_intent import direct_plan, preserve_literal_metal_goal
 from app.commerce_models import IntentPlan
 from app.commerce_policy import handoff_plan
 from app.commerce_prompts import (
+    DIALOGUE_PROMPT,
     PLANNER_PROMPT,
     SCOPE_PROMPT,
     STOREFRONT_PROMPT,
@@ -101,7 +102,7 @@ class ChatService:
             raise HTTPException(502, "Model returned no completed answer; turn was not saved")
         return content, result
 
-    async def shopping_plan(self, state, user, repair_reason=""):
+    async def shopping_plan(self, state, user, repair_reason="", *, dialogue=()):
         deterministic = direct_plan(user) or handoff_plan(state, user)
         if deterministic:
             return deterministic.model_copy(
@@ -144,8 +145,29 @@ class ChatService:
                 413,
                 "Shopping state and message exceed the model context; use a new conversation or increase LLM_CONTEXT_SIZE",
             )
-        # Examples are optional guidance. Reserve the full authoritative state,
-        # user message, schema and repair feedback before adding any examples.
+        # Recent dialogue is optional, untrusted context. Reserve authoritative
+        # state, current input, schema and repair feedback first; prefer complete
+        # recent turn pairs over examples, without making long histories cause 413s.
+        recent, base_messages = [], messages
+        for index in range(len(dialogue) - 2, max(-1, len(dialogue) - 7), -2):
+            pair = dialogue[index : index + 2]
+            if [item["role"] for item in pair] != ["user", "assistant"]:
+                break
+            bounded = []
+            for item in pair:
+                content = clip(item["content"], 1200)
+                bounded.append(
+                    dict(role=item["role"], content=content, truncated=content != item["content"])
+                )
+            proposed = base_messages[:-1] + [
+                {"role": "system", "content": DIALOGUE_PROMPT},
+                {"role": "user", "content": planner_context(state, user, bounded + recent)},
+            ]
+            if byte_size(proposed) + byte_size(schema) > self.settings.prompt_budget:
+                break
+            recent = bounded + recent
+            messages = proposed
+        # Examples use only the remaining budget after recent dialogue.
         examples = planner_examples()
         for index in range(len(examples) - 2, -1, -2):
             proposed = messages[:-1] + examples[index : index + 2] + messages[-1:]
