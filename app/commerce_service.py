@@ -12,6 +12,7 @@ from starlette.datastructures import State
 
 from app.catalog import CatalogError
 from app.chat_service import ChatService
+from app.commerce_answer import natural_answer
 from app.commerce_discovery import intent_clarification
 from app.commerce_errors import IntentError, InvalidShoppingIntent
 from app.commerce_intent import direct_plan
@@ -114,7 +115,16 @@ class CommerceTurnService:
             state_version=record["state_version"] + 1,
             intent_attempts=len(inference),
         )
-        if self.settings.commerce_summary and (commerce.get("products") or commerce.get("groups")):
+        if self.settings.commerce_natural:
+            if progress:
+                progress("Preparing your answer…")
+            if emit and (commerce.get("products") or commerce.get("groups")):
+                emit("commerce", {**commerce, "provisional": True})
+            inference.extend(await natural_answer(self.chat, state, message, commerce, dialogue))
+            commerce["preferences"] = preference_view(state)
+        elif self.settings.commerce_summary and (
+            commerce.get("products") or commerce.get("groups")
+        ):
             if progress:
                 progress("Preparing highlights from the product listings…")
             if emit:

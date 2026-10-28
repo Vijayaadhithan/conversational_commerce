@@ -68,7 +68,9 @@ def skin_discovery(state, task, message, old_pending, plan):
                 "basis": task.need,
             }
         return None
-    if not re.search(SKIN_PROFILE, task.need, re.I):
+    if not re.search(SKIN_PROFILE, task.need, re.I) and not task.filters.attributes.get(
+        "skin_type"
+    ):
         missing = "What is your skin type (oily, dry, combination, sensitive, or unsure)?"
     elif task.filters.max_price is None:
         missing = "Do you have a maximum budget in USD, or would you prefer to browse without one?"

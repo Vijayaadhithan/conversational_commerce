@@ -78,6 +78,8 @@ class IntentPlan(BaseModel):
         "reset",
         "preferences",
         "smalltalk",
+        "answer",
+        "feedback",
     ]
     evidence: str = Field(min_length=1, max_length=500)
     recommendation_requested: StrictBool | None = Field(
@@ -88,6 +90,8 @@ class IntentPlan(BaseModel):
     requests: list[TaskRequest] = Field(default_factory=list, max_length=5)
     positions: list[int] = Field(default_factory=list, max_length=5)
     task_id: int | None = Field(default=None, ge=1, le=5)
+    feedback: Literal["like", "dislike"] | None = None
+    cheaper_than_reference: StrictBool = False
     question_kind: Literal[
         "product_type", "skin_profile", "recipient", "reference", "multiple", "general"
     ] = "product_type"
@@ -97,6 +101,13 @@ class Concern(BaseModel):
     model_config = ConfigDict(extra="forbid")
     value: str = Field(min_length=1, max_length=1000)
     evidence: str = Field(min_length=1, max_length=4000)
+
+
+class ProductFeedback(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    sentiment: Literal["like", "dislike"]
+    evidence: str = Field(min_length=1, max_length=4000)
+    product_ids: list[str] = Field(min_length=1, max_length=5)
 
 
 class ShoppingTask(BaseModel):
@@ -114,6 +125,8 @@ class ShoppingTask(BaseModel):
     last_search: dict = Field(default_factory=dict)
     pending_question: str = ""
     pending_kind: str = ""
+    focused_positions: list[int] = Field(default_factory=list, max_length=5)
+    feedback: list[ProductFeedback] = Field(default_factory=list, max_length=20)
 
 
 class ShoppingState(BaseModel):

@@ -14,6 +14,7 @@ from app import catalog
 def isolate_optional_serving_features(monkeypatch):
     monkeypatch.setenv("COMMERCE_ONLY", "0")
     monkeypatch.setenv("COMMERCE_SUMMARY_ENABLED", "0")
+    monkeypatch.setenv("COMMERCE_NATURAL_REPLIES", "0")
     monkeypatch.setenv("SEARCH_WARMUP", "0")
     monkeypatch.setenv("SEARCH_CACHE_REDIS_URL", "")
     monkeypatch.delenv("SEARCH_BACKEND", raising=False)

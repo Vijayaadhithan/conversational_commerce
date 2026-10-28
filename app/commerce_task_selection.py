@@ -26,6 +26,10 @@ from app.commerce_text import (
 def normalize_plan(state, plan, message):
     if not evidence_ok(plan.evidence, message):
         raise IntentError("Intent lacks current-message evidence")
+    if plan.intent == "answer":
+        # Product questions inspect evidence; concern recovery must not turn
+        # "does it help with dry skin?" into a new preference or search.
+        return None
     if wants_recommendations(plan) and plan.intent in {"clarify", "smalltalk"}:
         plan.intent = "refine" if state.active() else "search"
     preserve_literal_preferences(plan, message)
@@ -89,7 +93,16 @@ def normalize_plan(state, plan, message):
         goals
         and not returning
         and plan.intent
-        not in {"reset", "smalltalk", "preferences", "details", "compare", "similar"}
+        not in {
+            "reset",
+            "smalltalk",
+            "preferences",
+            "details",
+            "compare",
+            "similar",
+            "answer",
+            "feedback",
+        }
     ):
         families = matching_families(goals[0].value)
         if len(families) > 1:
@@ -116,7 +129,13 @@ def normalize_plan(state, plan, message):
 
 
 def select_task(state, plan, message):
-    if plan.intent in {"details", "compare"} and plan.changes:
+    if plan.feedback and plan.intent == "new_task":
+        return state, question(
+            state,
+            "Which previously shown product should I save that reaction for before starting a new task?",
+            "task_selection",
+        )
+    if plan.intent in {"details", "compare", "answer"} and plan.changes:
         return state, question(
             state,
             "Would you like to inspect the previously shown products, or search with changed requirements first?",

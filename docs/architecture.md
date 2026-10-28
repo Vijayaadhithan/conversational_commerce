@@ -32,10 +32,16 @@ The planner can use three recent dialogue turns as bounded, untrusted context;
 state and current-message evidence always take priority. Resets exclude earlier
 dialogue. Clarification questions use missing preferences, and compact replies
 keep complete evidence in product metadata and detailed inspections.
+Tasks also retain literal product feedback and the last inspected positions.
+The planner can answer questions about displayed evidence without another search,
+and validated rejections exclude those products in future searches for that task.
 Malformed intent and invalid proposals share one bounded repair attempt, then clarify
 without applying rejected changes. Business-scope classification shares the planner
-call. Optional summaries select only supplied evidence IDs and stream validated
-highlights; `done` is sent only after atomic persistence. See
+call. Natural replies use bounded evidence-cited generation and a separate semantic
+review, with code-rendered identities/prices and deterministic fallback. Generation
+cannot mutate filters or call tools; review is model-based and needs real-model
+evaluation. The legacy evidence-selection summary remains available when natural
+mode is disabled. `done` is sent only after atomic persistence. See
 [conversation contracts](conversations.md).
 
 ## Inference providers

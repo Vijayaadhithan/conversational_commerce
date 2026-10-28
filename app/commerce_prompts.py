@@ -31,20 +31,19 @@ If the user dislikes results without explaining why, ask what they would like ch
 
 PLANNER_PROMPT = """You extract shopping intent for a continuous fashion/beauty conversation. Return only the IntentPlan JSON.
 The saved state is authoritative. Extract ONLY changes explicitly supported by the LATEST MESSAGE, never restate old fields.
-Always decide recommendation_requested as true or false by MEANING, using the latest message, saved concerns, and pending question.
-True means the user wants product suggestions now: 'give me soem products with the above conditions', 'what would you pick for me?',
-'anything matching that?', 'go ahead' after an offer to browse, and natural requests with typos all count. No special phrase is required.
-Use intent=search or refine for those requests. Reference the saved conditions without copying them into new changes.
-When browsing from saved concerns without naming new product types, return changes=[] and requests=[].
-requests describes product types the USER explicitly named in this message, never products you think they should buy.
-Updating concrete budget/brand/color/size requirements for an existing product requests refreshed recommendations unless explicitly deferred.
-For example 'shampoo under $10 instead' means refine the saved shampoo task AND recommendation_requested=true.
-Naming a product/task in answer to a task-selection question also resumes recommendations for that task.
-False means the user is only providing context, asking about a preference, or deferring/refusing products (including messages that
-mention 'show options' in a question or quotation). For example 'I have dry skin' and 'do not suggest products yet' are false.
-Answering a pending skin-profile question can continue discovery; a new concern or vague preference alone can first need clarification.
-Missing optional skin type, budget, or a specific cream/serum choice must not block a request to browse an already-known skin concern.
-This decision never authorizes removing saved filters or treating vague preferences as verified product properties.
+Decide recommendation_requested by meaning: product requests, 'what would you pick?', typo-containing requests,
+'go ahead' after a browsing offer, concrete filter refinements, and answers to task-selection questions count.
+Use search/refine without restating saved constraints; browsing saved concerns uses changes=[] and requests=[].
+Set false for context only, discussion, quoted commands, deferrals or refusals. 'I have dry skin' alone is false.
+Optional skin type/budget/product subtype must not block an explicit request to browse a known concern.
+For questions about shown products ('why this one?', 'does it contain fragrance?'), use answer, recommendation_requested=false,
+changes=[]; missing facts remain unknown. Use details/compare for inspection; never search just to answer about an existing option.
+Use feedback with feedback=like/dislike for explicit reactions to displayed options. Save reasons verbatim, never infer a hard filter.
+If the user also requests alternatives use refine/more/similar with feedback set. Keep feedback scoped to the named product/task.
+Use similar with cheaper_than_reference=true for 'same style but cheaper'; backend validates the reference and price relation.
+focused_positions identifies the last inspected products; an ambiguous singular reference requires clarification.
+An unresolved question is in pending_question; answer it using state/dialogue without copying another task's constraints.
+requests contains only product types explicitly named by the user, never inferred purchases.
 Every change needs an exact short quote from the latest message as evidence. Null means an explicitly requested removal;
 omitted fields remain unchanged. Never clear a budget/brand/attribute just to find matches. Never invent product IDs or prices.
 Use query for the product type/goal, need for an explicitly mentioned concern (e.g. dry skin), recipient for who it is for.
@@ -54,8 +53,7 @@ Always save an explicitly stated concern as a need change, even when asking for 
 question_kind=skin_profile for facial/skin concerns, otherwise product_type, never multiple. Multiple means the user explicitly
 requested two different product types, not several concerns. Several need changes are allowed in one turn and accumulate.
 Keep the user's spelling in need values and evidence, including typos; never silently rewrite 'pimble' to 'pimples'.
-For skin concerns, ask about skin type/budget rather than repeatedly demanding a named product type. The application can
-search broad skin-care listings after a skin-profile answer or recommendation_requested=true. Never invent a serum/cream.
+For skin concerns, optional skin type/budget can precede broad skin-care discovery. Never invent a serum/cream.
 Skin type supplied as personal context is a need; attribute.skin_type is a mandatory filter only when explicitly required.
 Use search for a first product request, refine for budget/color/brand/need changes. Keep the old goal for 'under $20 instead'.
 Use new_task when the user starts a different product/category; switch_task with a known task_id to return to a saved task.
@@ -67,8 +65,7 @@ need='hair fall', need='dandruf', max_price='30', recommendation_requested=true,
 Hair fall and dandruff are concerns for that shampoo, not separate product requests or mandatory efficacy claims.
 Leave top-level changes empty when using requests. Include every clause, in order, without overlapping evidence.
 For example 'shampoo under $15 and moisturizer under $25' has two requests with separate queries and budgets.
-Two products in the same family (cleanser and moisturizer) also need separate requests. Never transfer a requirement
-between products. If a shared budget/recipient/attribute has ambiguous scope, use clarify/question_kind=multiple.
+Same-family products also need separate requests. Shared budget/recipient/attribute ambiguity uses clarify/question_kind=multiple.
 Domain and family are application-owned mappings: omit these changes when a named product supplies the category.
 Known families are supplied in the context. On follow-ups, name the saved product in query only when actually stated.
 Vague preferences such as 'less chemical', 'gentler', or 'not too strong' are literal need text, never inferred
@@ -84,7 +81,7 @@ Record unsupported requirements (current stock/delivery, verified allergy or med
 value equal to the relevant user quote. Do not claim that listing metadata verifies those requirements.
 Every explicitly stated requirement must be saved in a supported field or marked unsupported; never quietly discard one.
 Use more for additional unseen options, cheaper for cheaper than shown, different_brand for another brand.
-Use details/compare/similar with 1-based positions in the most recent displayed product list. Ask reference clarification if ambiguous.
+Use details/compare/answer/similar with 1-based positions in the displayed list. Never invent references; clarify ambiguity.
 Use reset ONLY when explicitly asked to start over, preferences to explain saved requirements, smalltalk for greetings/thanks.
 If asked to remove a constraint use a null change with the explicit removal quote. Do not emit inherited or inferred changes.
 """
@@ -102,6 +99,12 @@ def planner_context(state: "ShoppingState", message: str, dialogue=()) -> str:
                     {"position": i + 1, "title": row["title"][:160], "brand": row.get("brand")}
                     for i, row in enumerate(task.shown)
                 ],
+                **({"focused_positions": task.focused_positions} if task.focused_positions else {}),
+                **(
+                    {"feedback": [item.model_dump() for item in task.feedback[-3:]]}
+                    if task.feedback
+                    else {}
+                ),
             )
         tasks.append(item)
     return json.dumps(
@@ -144,6 +147,12 @@ def planner_examples() -> list[dict[str, str]]:
         pending_kind="preference_detail",
         pending_question="Which ingredient do you want to avoid? You can also browse related listings.",
     )
+    inspecting = state.model_copy(deep=True)
+    inspecting.active().shown = [
+        {"title": "Example moisturizer", "brand": None},
+        {"title": "Another moisturizer", "brand": None},
+    ]
+    inspecting.active().focused_positions = [2]
     examples = [
         (
             ShoppingState(),
@@ -252,6 +261,42 @@ def planner_examples() -> list[dict[str, str]]:
             },
         ),
     ]
+    examples.extend(
+        [
+            (
+                inspecting,
+                "Why that one?",
+                {
+                    "intent": "answer",
+                    "evidence": "Why that one?",
+                    "changes": [],
+                    "recommendation_requested": False,
+                },
+            ),
+            (
+                inspecting,
+                "I don't like these, too floral",
+                {
+                    "intent": "feedback",
+                    "evidence": "I don't like these, too floral",
+                    "changes": [],
+                    "feedback": "dislike",
+                    "recommendation_requested": False,
+                },
+            ),
+            (
+                inspecting,
+                "same style but cheaper",
+                {
+                    "intent": "similar",
+                    "evidence": "same style but cheaper",
+                    "changes": [],
+                    "cheaper_than_reference": True,
+                    "recommendation_requested": True,
+                },
+            ),
+        ]
+    )
     messages = []
     for saved, message, answer in examples:
         answer.setdefault("scope", "shopping")

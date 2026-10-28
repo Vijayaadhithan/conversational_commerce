@@ -46,6 +46,8 @@ def route_request(
         "reset",
         "preferences",
         "smalltalk",
+        "answer",
+        "feedback",
     }:
         return None
     if plan.recommendation_requested is False and plan.requested_storefront is None:

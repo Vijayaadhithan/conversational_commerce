@@ -68,7 +68,7 @@ The message response retains `reply`, `message_id`, model, and usage fields. Its
 | Field | Meaning |
 | --- | --- |
 | `intent` | Validated action and evidence-backed preference changes |
-| `action` | Clarification, recommendation, comparison, details, preferences, or small talk |
+| `action` | Clarification, recommendation, comparison, details, answer, preferences, or small talk |
 | `preferences` | Active task, each task's goal/concern/recipient, filters, change sources, pending question, seen count |
 | `state_version` | Monotonic version committed with the completed turn |
 | `intent_attempts` | One extraction attempt, or two when a rejected proposal was corrected and revalidated |
@@ -76,6 +76,7 @@ The message response retains `reply`, `message_id`, model, and usage fields. Its
 | `search` | Pinned catalog/build, actual applied filters, retrieval/reranker metadata, or null when no retrieval ran |
 | `groups` | Present for `action: multi`: each task's reply, products, action, query, task ID, and search metadata |
 | `validation_recovered` | True when rejected proposals resulted in clarification with saved requirements unchanged |
+| `answer_generation` | Natural reply status (`generated`, `fallback`, or `not_applicable`) and cited evidence when generated |
 
 Assistant messages returned by the paginated history endpoint contain the same
 `commerce` metadata, so clients can restore product cards and comparisons after
@@ -114,7 +115,7 @@ Malformed or incomplete intent JSON also receives one repair attempt, sharing th
 same two-attempt budget as preference validation. Exhausted recovery saves a helpful
 clarification without applying rejected preferences. Model transport, authentication,
 rate-limit, catalog and reranker failures are not treated as intent repairs. Usage
-includes extraction attempts and summary inference when counts are available.
+includes extraction attempts, answer generation/review, and legacy summary inference when counts are available.
 Unchanged restatements are discarded while retaining their original sources.
 A small product-name lexicon can recover an explicitly stated goal omitted by
 the model; it never infers a product type from a concern alone.
@@ -157,18 +158,18 @@ filters, shown products, and history. The top-level product list contains task I
 for grouped replies, and clients should display each group's own numbered list.
 
 Discovery uses the existing pipeline: mandatory PostgreSQL filters, keyword
-and vector retrieval, RRF, then the local reranker. The final text is assembled
-from retrieved records, historical prices, explicit attributes, and cited
-listing excerpts. It does not generate additional product facts with the LLM.
+and vector retrieval, RRF, then the configured reranker. The response writer uses
+retrieved records, historical prices, explicit attributes, and cited listing
+excerpts; product identities, prices and mandatory filters remain code-owned.
 An explanation identifies relevant evidence; it does not prove that a product
 will resolve a concern.
 
-Recommendation and comparison text shows at most one short evidence statement
+Fallback recommendation and comparison text shows at most one short evidence statement
 per product. Contradictory concern evidence and listing cautions take priority.
 Complete `why_recommended`, `concern_evidence`, and listing provenance remain in
 product metadata and detailed inspection replies.
 
-Simple commands and numbered details/comparisons skip model inference.
+Simple commands and numbered details/comparisons skip intent inference.
 Comparisons use the last successful recommendation list for that task, with
 the original display positions and search provenance. An empty search does not
 erase those previous references or relax filters. Those older snapshots are
@@ -177,12 +178,52 @@ for inspection, not a new claim that they match newly changed requirements.
 preserves any stricter existing maximum. `Another brand` excludes known brands
 in the displayed list; unknown brands do not satisfy that exclusion.
 
+The planner can select `answer` for questions about displayed products without
+searching or changing preferences. An inspected product becomes the task's focused
+reference: “why that one?” and “same style but cheaper” can refer to a single
+focused option. Multiple possible references ask for clarification. Similarity
+uses the referenced title as relevance text; it does not establish an exact style
+match. Its optional cheaper modifier subtracts one cent from that product's
+historical price and preserves any stricter saved maximum.
+
+Explicit likes/dislikes retain the user's literal message and validated displayed
+product IDs in the task's `feedback`; they do not create inferred ingredient,
+material or other hard filters. Disliked products are excluded from later searches
+in that task; an explicit like can reverse the rejection. Reasons answering the
+pending feedback question stay attached to those products. Each task retains up
+to 20 reactions; reset clears them. `focused_positions` and feedback persist
+across restarts, and older sessions default these fields to empty lists.
+
+## Natural replies
+
+`COMMERCE_NATURAL_REPLIES=1` is the default. After the validated action, the configured
+chat model writes up to four short sentences citing supplied evidence IDs. Code
+checks the schema, citations, numeric tokens, single-question clarifications and
+obvious unsupported outcome/availability claims. A separate model call reviews
+factual support, whether the reply answers the request, and whether it preserves
+the validated action and required question. Both calls share a 30-second deadline
+and bounded context/output budgets; neither can execute tools or change filters.
+
+Accepted prose is followed by code-rendered product identities, historical prices,
+and relevant cautions. The saved pending question is updated to match a successfully
+rewritten clarification. Unsupported-requirement removal, validation recovery and
+other sensitive clarification flows keep their original wording. Invalid output,
+failed review, insufficient context or provider errors preserve the deterministic
+reply without discarding the valid shopping turn. Natural mode replaces the old
+summary call rather than adding all three calls.
+
+This adds up to two inference calls per eligible turn. The semantic review is
+model-based, not a proof of factual accuracy; evaluate groundedness and latency
+with the chosen model. Natural prose is withheld until review succeeds. Set
+`COMMERCE_NATURAL_REPLIES=0` to use the prior reply/summary path.
+
 SQLite stores transcripts, structured state, and per-turn product metadata in
 one transaction after successful extraction and search. Startup applies an
 additive migration to older chat databases. Optimistic version checks reject
 stale writes with 409; per-conversation locks serialize state mutations and bounded
 admission controls model work. Continue using one server worker. Failed
-catalog/model/reranker calls do not save a half-turn. Reuse the original
+catalog/intent-model/reranker calls do not save a half-turn. Optional answer-writing
+failures use the grounded fallback. Reuse the original
 `Idempotency-Key` after an ambiguous network failure; completed retries return
 the saved response. Bearer tokens scope access to the conversation owner.
 See [API operations](operations.md) for the full retry and authentication contract.
@@ -203,8 +244,9 @@ See [API operations](operations.md) for the full retry and authentication contra
   amounts are never converted or silently interpreted as USD. Continuing
   without an unsupported requirement requires an explicit removal or a clear
   affirmative response to the removal question.
-- Replies are grounded templates with source fields; richer natural language
-  answer generation, cart/checkout and live retailer feeds remain subsequent work.
+- Natural replies are limited by supplied catalog evidence and model quality.
+  General shopping knowledge without catalog evidence, cart/checkout and live
+  retailer feeds remain separate work.
 
 ## Streamed browser responses
 
@@ -216,7 +258,11 @@ Stream events are `status` (actual queue/planning/search progress), `delta`
 sanitized `error` event with status and retry delay; clients must wait for `done`
 before considering a turn complete. Heartbeat comments keep idle streams open.
 
-`COMMERCE_SUMMARY_ENABLED=1` adds at most one evidence-selection call after retrieval.
+In natural mode, provisional cards can arrive while the answer is prepared, but
+text deltas are emitted only after review and atomic persistence. Retry and history
+return exactly that final reply, without repeating inference.
+
+With natural mode disabled, `COMMERCE_SUMMARY_ENABLED=1` adds at most one evidence-selection call after retrieval.
 The model chooses up to three supplied fact IDs relevant to the latest query. The
 backend renders their concise listing-grounded sentences; raw model prose or arbitrary IDs
 are never displayed. `commerce.summary` records selected product evidence and whether
@@ -224,7 +270,7 @@ generation succeeded or used a template fallback. Selected highlights are remove
 from the following product text to avoid repeating the same evidence. This is a concise evidence-based
 summary, not unconstrained generated advice.
 
-On SSE requests, validated product cards arrive in a `commerce` event with
+On legacy summary SSE requests, validated product cards arrive in a `commerce` event with
 `provisional: true`. Each complete, allowlisted model selection produces a `delta`
 as the upstream model streams, before generation completes. The original reply then
 supplies remaining details and cautions. A failed or timed-out summary preserves only
@@ -278,6 +324,10 @@ resets and empty-result recovery, capture `evals/conversations_dynamic.json`:
 
 This runs the configured models and catalog against temporary conversation storage.
 The cases are review scenarios, not a passed benchmark or an accuracy score.
+Captures include median/p95 latency, action counts, answer generation/fallback
+counts, validation recoveries, and exact repeated clarifications. These mechanical
+measures do not establish relevance, paraphrased repetition or task completion;
+review the complete captured journeys for those outcomes.
 
 ## Four isolated storefronts
 

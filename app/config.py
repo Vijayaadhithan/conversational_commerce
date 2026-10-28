@@ -23,6 +23,7 @@ def flag(name, default="1"):
 class Settings:
     commerce_only: bool = field(default_factory=lambda: flag("COMMERCE_ONLY"))
     commerce_summary: bool = field(default_factory=lambda: flag("COMMERCE_SUMMARY_ENABLED"))
+    commerce_natural: bool = field(default_factory=lambda: flag("COMMERCE_NATURAL_REPLIES"))
     ollama_url: str = os.getenv("OLLAMA_BASE_URL", "http://127.0.0.1:11434").rstrip("/")
     model: str = field(default_factory=llm_model)
     provider: str = field(default_factory=lambda: os.getenv("LLM_PROVIDER", "ollama"))

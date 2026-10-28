@@ -10,28 +10,29 @@ from app.commerce_discovery import (
     skin_discovery,
 )
 from app.commerce_errors import IntentError
+from app.commerce_feedback import rejected_ids, resolved_positions
 from app.commerce_replies import card_reply, explain_products, task_concerns
 from app.commerce_text import (
     negated,
     normalized,
-    reference_positions,
 )
 from app.search_models import ProductFilters, ProductSearchRequest
 
 
 def recommend_or_inspect(state, plan, message, old_pending, search):
     task = state.active()
-    if plan.intent in {"details", "compare", "similar"}:
-        positions = reference_positions(message, len(task.shown))
-        if not positions and len(task.shown) == 1:
-            positions = [1]
-        literal_ids = re.findall(r"amazon:[A-Z0-9]{10}", message)
-        if literal_ids:
-            positions = [
-                index + 1
-                for index, row in enumerate(task.shown)
-                if row["product_id"] in literal_ids
-            ]
+    if plan.intent in {"details", "compare", "similar", "answer"}:
+        positions = resolved_positions(task, message)
+        if (
+            plan.intent == "answer"
+            and not positions
+            and not re.search(
+                r"\b(?:it|this|that|one|first|second|third|fourth|fifth|sixth|seventh|eighth|ninth|tenth|last|option\s+\d+|product\s+\d+)\b|amazon:",
+                message,
+                re.I,
+            )
+        ):
+            positions = list(range(1, len(task.shown) + 1))
         if (
             not positions
             or any(not 1 <= position <= len(task.shown) for position in positions)
@@ -43,6 +44,7 @@ def recommend_or_inspect(state, plan, message, old_pending, search):
                 "reference",
             )
         selected = [task.shown[position - 1] for position in positions]
+        task.focused_positions = positions
         if plan.intent != "similar":
             previous = ProductFilters.model_validate(task.last_search.get("filters_applied", {}))
             changed = previous.model_dump(
@@ -61,6 +63,7 @@ def recommend_or_inspect(state, plan, message, old_pending, search):
                 ),
                 "products": selected,
                 "search": task.last_search,
+                "snapshot_changed": changed,
             }
         if len(selected) != 1:
             return state, question(
@@ -69,7 +72,7 @@ def recommend_or_inspect(state, plan, message, old_pending, search):
         query = selected[0]["title"]
     else:
         query = " ".join(part for part in (task.query, task.need) if part)
-    if task.query and plan.recommendation_requested is False:
+    if task.query and plan.recommendation_requested is False and plan.intent != "similar":
         return state, question(
             state,
             f"I've saved your preferences for {task.query}. {preference_question(task)}",
@@ -101,7 +104,12 @@ def recommend_or_inspect(state, plan, message, old_pending, search):
             "recipient",
         )
     filters = task.filters.model_copy(deep=True)
-    if plan.intent == "cheaper":
+    filters.exclude_product_ids = list(
+        dict.fromkeys([*filters.exclude_product_ids, *rejected_ids(task)])
+    )
+    if plan.cheaper_than_reference and plan.intent != "similar":
+        raise IntentError("A relative price modifier requires a similar-product request")
+    if plan.intent == "cheaper" or plan.cheaper_than_reference:
         if not task.shown:
             return state, question(
                 state,
@@ -110,7 +118,8 @@ def recommend_or_inspect(state, plan, message, old_pending, search):
             )
         if not re.search(r"cheap|less expensive|lower (?:price|cost)", normalized(message)):
             raise IntentError("Relative budget change lacks evidence")
-        reference = min(task.shown, key=lambda row: Decimal(row["price"]["amount"]))
+        reference_rows = selected if plan.cheaper_than_reference else task.shown
+        reference = min(reference_rows, key=lambda row: Decimal(row["price"]["amount"]))
         maximum = Decimal(reference["price"]["amount"]) - Decimal("0.01")
         if filters.max_price is not None:
             maximum = min(maximum, filters.max_price)
@@ -193,6 +202,7 @@ def recommend_or_inspect(state, plan, message, old_pending, search):
     search_metadata = {key: value for key, value in response.items() if key != "results"}
     if products:
         task.shown = products
+        task.focused_positions = []
         task.last_search = search_metadata
     if not products:
         reply = no_results_reply(task, more=plan.intent == "more")

@@ -1,5 +1,6 @@
 """Ordered validation and state transitions for a single shopping task."""
 
+from app.commerce_feedback import record_feedback
 from app.commerce_models import ShoppingState
 from app.commerce_recommendations import recommend_or_inspect
 from app.commerce_task_selection import normalize_plan, select_task
@@ -17,7 +18,12 @@ def _handle_single_turn(saved, plan, message, search):
     result = select_task(state, plan, message)
     if result is not None:
         return result
+    if plan.intent == "answer":
+        return recommend_or_inspect(state, plan, message, old_pending, search)
     result = update_task(state, plan, message, old_pending)
     if result is not None:
         return result
+    result = record_feedback(state, plan, message, old_pending)
+    if result is not None:
+        return state, result
     return recommend_or_inspect(state, plan, message, old_pending, search)

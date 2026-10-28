@@ -3,6 +3,44 @@ from pathlib import Path
 
 import pytest
 
+from app.conversation_evaluation import dialogue_metrics
+
+
+def test_dialogue_capture_metrics_are_not_task_success_or_relevance():
+    clarification = {
+        "http_status": 200,
+        "seconds": 2,
+        "response": {
+            "commerce": {
+                "action": "clarify",
+                "reply": "Which option?",
+                "answer_generation": {"status": "fallback"},
+            }
+        },
+    }
+    metrics = dialogue_metrics(
+        [
+            {
+                "observations": [
+                    clarification,
+                    clarification,
+                    {
+                        "http_status": 503,
+                        "seconds": 8,
+                        "response": {"detail": "unavailable"},
+                    },
+                ]
+            }
+        ]
+    )
+    assert metrics["turns"] == 3 and metrics["http_errors"] == 1
+    assert metrics["exact_repeated_clarifications"] == 1
+    assert metrics["answer_generation_counts"]["fallback"] == 2
+    assert metrics["latency_seconds"] == {"median": 2, "p95": 8}
+    assert "not_relevance_or_task_success" in metrics["measurement_type"]
+    assert dialogue_metrics([])["latency_seconds"]["p95"] is None
+
+
 spec = importlib.util.spec_from_file_location(
     "summarize_evaluation", Path(__file__).resolve().parents[1] / "scripts/summarize_evaluation.py"
 )

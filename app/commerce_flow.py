@@ -27,11 +27,23 @@ def handle_turn(saved, plan, message, search):
             "evidence_limit",
         )
     try:
-        requests = multi_requests(plan, message)
+        if plan.intent in {"answer", "feedback", "details", "compare"}:
+            if plan.requests:
+                raise IntentError("Inspection and feedback cannot create product tasks")
+            requests = []
+        else:
+            requests = multi_requests(plan, message)
     except PreferenceConflict as exc:
         state.turns += 1
         return state, question(state, str(exc), "multiple")
     if requests:
+        if plan.feedback or plan.cheaper_than_reference:
+            state.turns += 1
+            return state, question(
+                state,
+                "Which saved product should that reaction or relative price apply to? Please handle it before adding multiple products.",
+                "task_selection",
+            )
         targets = []
         for request in requests:
             matches = [task for task in state.tasks if task_matches(task, request.evidence)]

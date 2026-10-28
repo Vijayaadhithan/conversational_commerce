@@ -15,6 +15,7 @@ from evaluation_client import evaluation_client
 
 from app.commerce_prompts import DIALOGUE_PROMPT, PLANNER_PROMPT, SCOPE_PROMPT, STOREFRONT_PROMPT
 from app.config import ROOT, Settings
+from app.conversation_evaluation import dialogue_metrics
 from app.storefront_evaluation import check_storefront_response
 
 
@@ -39,6 +40,7 @@ def main():
         "human_reviewed": False,
         "repetitions": args.repetitions,
         "chat_model": Settings().model,
+        "natural_replies": Settings().commerce_natural,
         "planner_prompt_sha256": hashlib.sha256(
             (PLANNER_PROMPT + SCOPE_PROMPT + STOREFRONT_PROMPT + DIALOGUE_PROMPT).encode()
         ).hexdigest(),
@@ -48,6 +50,11 @@ def main():
                 "commerce.py",
                 "commerce_models.py",
                 "commerce_prompts.py",
+                "commerce_answer.py",
+                "commerce_answer_context.py",
+                "commerce_feedback.py",
+                "commerce_service.py",
+                "commerce_recommendations.py",
                 "commerce_taxonomy.py",
                 "commerce_storefront.py",
                 "storefronts.py",
@@ -96,6 +103,7 @@ def main():
                     )
                     print(f"{case['id']}: HTTP {response.status_code}: {message}", flush=True)
                 report["cases"].append(observed)
+                report["mechanical_metrics"] = dialogue_metrics(report["cases"])
                 output.write_text(json.dumps(report, indent=2))
     print(f"Saved {len(cases)} conversations to {output}")
 

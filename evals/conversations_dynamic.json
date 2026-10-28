@@ -49,5 +49,39 @@
       "Under $10 instead",
       "Back to the moisturizer"
     ]
+  },
+  {
+    "id": "focused_answer_and_similarity",
+    "goal": "Answer from the inspected product without retrieval; then find similar cheaper options using its actual historical price and saved constraints",
+    "turns": [
+      "Recommend moisturizer for dry skin under $30",
+      "Details about the second",
+      "Why that one?",
+      "Does it contain fragrance?",
+      "Same style but cheaper"
+    ]
+  },
+  {
+    "id": "rejection_memory",
+    "goal": "Save literal feedback reasons, exclude rejected products without inventing attribute filters, and keep other task preferences separate",
+    "turns": [
+      "Recommend shampoo under $20",
+      "I don't like these",
+      "Too floral",
+      "Show me other options",
+      "Actually I like the first one",
+      "Why would you suggest it?"
+    ]
+  },
+  {
+    "id": "grounded_unknowns",
+    "goal": "Natural answers must not invent product suitability, current availability or missing ingredients; protected unsupported requirements remain explicit",
+    "turns": [
+      "Recommend a moisturizer under $25",
+      "Details about the first",
+      "What ingredients does it contain?",
+      "Will it definitely cure my dry skin?",
+      "Can you guarantee it is safe for my allergies?"
+    ]
   }
 ]
