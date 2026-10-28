@@ -24,7 +24,15 @@ def main():
     parser.add_argument("--output", required=True)
     parser.add_argument("--cases", type=Path, default=ROOT / "evals/conversations.json")
     parser.add_argument("--repetitions", type=int, default=1, choices=range(1, 6))
+    parser.add_argument(
+        "--fast-path",
+        choices=["on", "off"],
+        help="Override fast routing for paired captures; otherwise use .env",
+    )
     args = parser.parse_args()
+    settings = Settings()
+    if args.fast_path:
+        settings = replace(settings, commerce_fast_path=args.fast_path == "on")
     output = Path(args.output)
     output.parent.mkdir(parents=True, exist_ok=True)
     cases = json.loads(args.cases.read_text())
@@ -39,8 +47,10 @@ def main():
         "review_type": "unreviewed synthetic conversations",
         "human_reviewed": False,
         "repetitions": args.repetitions,
-        "chat_model": Settings().model,
-        "natural_replies": Settings().commerce_natural,
+        "chat_model": settings.model,
+        "chat_provider": settings.provider,
+        "natural_replies": settings.commerce_natural,
+        "fast_path": settings.commerce_fast_path,
         "planner_prompt_sha256": hashlib.sha256(
             (PLANNER_PROMPT + SCOPE_PROMPT + STOREFRONT_PROMPT + DIALOGUE_PROMPT).encode()
         ).hexdigest(),
@@ -54,6 +64,7 @@ def main():
                 "commerce_answer_context.py",
                 "commerce_feedback.py",
                 "commerce_service.py",
+                "commerce_performance.py",
                 "commerce_recommendations.py",
                 "commerce_taxonomy.py",
                 "commerce_storefront.py",
@@ -68,7 +79,7 @@ def main():
     }
     with TemporaryDirectory(prefix="commerce-evaluation-") as tmp:
         with evaluation_client(
-            replace(Settings(), database=str(Path(tmp) / "conversations.sqlite3"))
+            replace(settings, database=str(Path(tmp) / "conversations.sqlite3"))
         ) as client:
             for case in cases:
                 body = {"mode": "commerce"}

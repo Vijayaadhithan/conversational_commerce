@@ -76,7 +76,9 @@ The message response retains `reply`, `message_id`, model, and usage fields. Its
 | `search` | Pinned catalog/build, actual applied filters, retrieval/reranker metadata, or null when no retrieval ran |
 | `groups` | Present for `action: multi`: each task's reply, products, action, query, task ID, and search metadata |
 | `validation_recovered` | True when rejected proposals resulted in clarification with saved requirements unchanged |
-| `answer_generation` | Natural reply status (`generated`, `fallback`, or `not_applicable`) and cited evidence when generated |
+| `answer_generation` | Reply status (`generated`, `fallback`, `not_applicable`, or `skipped`) and cited evidence when generated |
+| `response_route` | `fast` code-rendered response, `reviewed` natural-reply policy, or `legacy` mode |
+| `timings` | Current-turn stage durations, executed search count, search-stage totals and time until validated products are ready |
 
 Assistant messages returned by the paginated history endpoint contain the same
 `commerce` metadata, so clients can restore product cards and comparisons after
@@ -196,6 +198,15 @@ across restarts, and older sessions default these fields to empty lists.
 
 ## Natural replies
 
+`COMMERCE_FAST_PATH=1` is the default. Exact commands already recognized by code
+(greetings, preferences, numbered inspection/comparison, more/cheaper options and
+explicit “make it $10” budget updates) use the grounded renderer when the validated
+result supports it. They skip both answer-writing calls, with
+`answer_generation.status=skipped` and `reason=fast_path`. Search and mandatory
+filters still run when the action requires them. Open-ended questions and mixed
+requests keep the reviewed natural-reply policy; generated prose never bypasses
+review. Set `COMMERCE_FAST_PATH=0` for comparison with the previous behavior.
+
 `COMMERCE_NATURAL_REPLIES=1` is the default. After the validated action, the configured
 chat model writes up to four short sentences citing supplied evidence IDs. Code
 checks the schema, citations, numeric tokens, single-question clarifications and
@@ -211,6 +222,12 @@ other sensitive clarification flows keep their original wording. Invalid output,
 failed review, insufficient context or provider errors preserve the deterministic
 reply without discarding the valid shopping turn. Natural mode replaces the old
 summary call rather than adding all three calls.
+
+The answer schema restricts `evidence_ids` to keys in the supplied facts map.
+Fallbacks include a `failure_stage` (context, request, completion, schema,
+evidence validation or review verdict) without exposing raw provider output.
+The compact live comparison cases are in `evals/conversations_performance.json`;
+HTTP success alone does not establish answer quality.
 
 This adds up to two inference calls per eligible turn. The semantic review is
 model-based, not a proof of factual accuracy; evaluate groundedness and latency
@@ -290,6 +307,20 @@ Its Stop waiting control closes delivery and leaves response recovery available.
 
 ## Validation
 
+Completed turns expose `timings.stages_seconds` for context loading, intent
+(including repairs), actual search calls, answer generation/review, and legacy
+summary work when used. `search_stages_seconds` totals SQL eligibility, query
+embedding, Qdrant branches, hydration, reranking, setup/cache checks and final
+processing across searches executed in this turn. Inspections do not count saved
+search timings as fresh work; cache hits report zero embedding/reranking work.
+
+`products_ready_seconds` is server processing time until validated cards are ready,
+not browser delivery or time to first token. `before_commit_seconds` excludes
+queue admission, final database commit and network delivery. Nested search-stage
+times must not be added to their containing `search_seconds`. Commit duration is
+recorded in the operations metric `commerce_turn_commit_seconds_total`, outside
+the immutable replay payload. Retries return the original turn's measurements.
+
 ```bash
 CATALOG_TEST_ADMIN_URL=postgresql:///postgres .venv/bin/python -m pytest -q
 .venv/bin/python scripts/check_commerce.py
@@ -324,6 +355,26 @@ resets and empty-result recovery, capture `evals/conversations_dynamic.json`:
 
 This runs the configured models and catalog against temporary conversation storage.
 The cases are review scenarios, not a passed benchmark or an accuracy score.
+To compare fast routing, repeat that capture with `--fast-path off` and
+`--fast-path on`, using different output files and the same model, catalog and
+case set. Record model/cache warmup conditions; routing counts and per-stage
+median/p95 values include sample counts. No speedup is implied before live runs.
+
+Create a capture-specific review file without pre-filled quality scores:
+
+```bash
+.venv/bin/python scripts/prepare_conversation_review.py --capture data/search/dynamic_conversations.json --output data/search/dynamic_review.json
+```
+
+Fill the reviewer identity, human/AI attribution, every outcome/product grade and
+notes after reading the complete journeys. Then summarize:
+
+```bash
+.venv/bin/python scripts/summarize_evaluation.py --capture data/search/dynamic_conversations.json --review data/search/dynamic_review.json --output data/search/dynamic_review_summary.json
+```
+
+The template command refuses to overwrite an existing review. The summarizer
+rejects unfilled attribution or grades; generated templates are not reviews.
 Captures include median/p95 latency, action counts, answer generation/fallback
 counts, validation recoveries, and exact repeated clarifications. These mechanical
 measures do not establish relevance, paraphrased repetition or task completion;

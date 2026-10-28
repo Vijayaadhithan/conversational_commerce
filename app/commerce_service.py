@@ -17,6 +17,7 @@ from app.commerce_discovery import intent_clarification
 from app.commerce_errors import IntentError, InvalidShoppingIntent
 from app.commerce_intent import direct_plan
 from app.commerce_models import IntentPlan, preference_view, shopping_state_for
+from app.commerce_performance import StageTimer, accumulate_search_stages, response_route
 from app.commerce_policy import scope_reply
 from app.commerce_storefront import TurnHandler, handle_storefront_turn
 from app.commerce_summary import add_summary
@@ -43,9 +44,12 @@ class CommerceTurnService:
         progress: Callable[[str], None] | None = None,
         emit=None,
     ) -> dict:
-        key = record["id"]
-        state = shopping_state_for(record)
-        dialogue = self.state.store.shopping_dialogue(key)
+        timings = StageTimer()
+        search_stages, search_calls = {}, 0
+        with timings.measure("context_seconds"):
+            key = record["id"]
+            state = shopping_state_for(record)
+            dialogue = self.state.store.shopping_dialogue(key)
         repair_reason, inference, result = "", [], {}
         attempts = 1 if direct_plan(message) else 2
         for attempt in range(attempts):
@@ -55,14 +59,20 @@ class CommerceTurnService:
                 )
 
             def search(request):
+                nonlocal search_calls
+                search_calls += 1
                 if progress:
                     progress("Finding products that match your preferences…")
-                return self.state.product_search.search(request)
+                with timings.measure("search_seconds"):
+                    searched = self.state.product_search.search(request)
+                accumulate_search_stages(search_stages, searched)
+                return searched
 
             try:
-                plan, result = await self.chat.shopping_plan(
-                    state, message, repair_reason, dialogue=dialogue
-                )
+                with timings.measure("intent_seconds"):
+                    plan, result = await self.chat.shopping_plan(
+                        state, message, repair_reason, dialogue=dialogue
+                    )
                 inference.append(result)
                 scoped = scope_reply(state, plan, message)
                 if scoped:
@@ -115,12 +125,19 @@ class CommerceTurnService:
             state_version=record["state_version"] + 1,
             intent_attempts=len(inference),
         )
-        if self.settings.commerce_natural:
+        products_ready = timings.elapsed() if commerce.get("products") else None
+        route = response_route(self.settings, message, commerce)
+        commerce["response_route"] = route
+        if route["mode"] == "fast":
+            commerce["answer_generation"] = {"status": "skipped", "reason": "fast_path"}
+        elif self.settings.commerce_natural:
             if progress:
                 progress("Preparing your answer…")
             if emit and (commerce.get("products") or commerce.get("groups")):
                 emit("commerce", {**commerce, "provisional": True})
-            inference.extend(await natural_answer(self.chat, state, message, commerce, dialogue))
+            inference.extend(
+                await natural_answer(self.chat, state, message, commerce, dialogue, timings=timings)
+            )
             commerce["preferences"] = preference_view(state)
         elif self.settings.commerce_summary and (
             commerce.get("products") or commerce.get("groups")
@@ -129,9 +146,21 @@ class CommerceTurnService:
                 progress("Preparing highlights from the product listings…")
             if emit:
                 emit("commerce", {**commerce, "provisional": True})
-            summary_usage = await add_summary(self.chat, message, commerce, emit)
+            with timings.measure("summary_seconds"):
+                summary_usage = await add_summary(self.chat, message, commerce, emit)
             if summary_usage is not None:
                 inference.append(summary_usage)
+        commerce["timings"] = {
+            "stages_seconds": timings.snapshot(),
+            "search_stages_seconds": {
+                name: round(value, 6) for name, value in search_stages.items()
+            },
+            "search_calls": search_calls,
+            "products_ready_seconds": round(products_ready, 6)
+            if products_ready is not None
+            else None,
+            "before_commit_seconds": round(timings.elapsed(), 6),
+        }
         response = {
             "conversation_id": key,
             "reply": commerce["reply"],
@@ -140,7 +169,11 @@ class CommerceTurnService:
             "commerce": commerce,
             "usage": aggregate_usage(inference),
         }
-        self.state.store.commit_commerce_turn(
-            key, message, state, commerce, record["state_version"], identity, response
-        )
+        with timings.measure("commit_seconds"):
+            self.state.store.commit_commerce_turn(
+                key, message, state, commerce, record["state_version"], identity, response
+            )
+        for stage, seconds in timings.seconds.items():
+            self.state.metrics.increment("turn_" + stage + "_total", seconds)
+        self.state.metrics.increment("turn_route_" + route["mode"] + "_total")
         return response

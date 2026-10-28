@@ -118,7 +118,9 @@ def search_catalog(
     candidate_texts=None,
     qdrant=None,
     collection=None,
+    phase_timings=None,
 ):
+    phase_timings = phase_timings if phase_timings is not None else {}
     if qdrant is None:
         with QdrantClient(QdrantSettings.from_env()) as client:
             return search_catalog(
@@ -130,6 +132,7 @@ def search_catalog(
                 candidate_texts=candidate_texts,
                 qdrant=client,
                 collection=collection,
+                phase_timings=phase_timings,
             )
     pinned = pinned or pin_search_build(db)
     config = pinned["config"]
@@ -145,6 +148,7 @@ def search_catalog(
         "SELECT p.product_id FROM commerce.catalog_products p WHERE p.import_id=%s" + suffix
     )
     collection = collection or pin_qdrant_index(db, pinned, qdrant)
+    phase_started = time.perf_counter()
     eligible_ids = [
         row[0]
         for row in db.execute(
@@ -152,6 +156,7 @@ def search_catalog(
             [pinned["import_id"], *params, qdrant.settings.max_eligible + 1],
         ).fetchall()
     ]
+    phase_timings["eligibility_seconds"] = time.perf_counter() - phase_started
     if len(eligible_ids) > qdrant.settings.max_eligible:
         raise CatalogError("Qdrant eligibility limit exceeded; narrow the search filters")
     eligible_count = len(eligible_ids)
@@ -173,9 +178,12 @@ def search_catalog(
     }
     if not eligible_count:
         return base
+    phase_started = time.perf_counter()
     embedder.verify_identity(config["model_digest"])
     retrieval_query = normalize_search(request.query)
     vector = query_vector(embedder, retrieval_query)
+    phase_timings["embedding_seconds"] = time.perf_counter() - phase_started
+    phase_started = time.perf_counter()
     keyword, semantic = qdrant.branches(
         collection,
         pinned,
@@ -183,6 +191,8 @@ def search_catalog(
         vector,
         eligible_ids,
     )
+    phase_timings["branches_seconds"] = time.perf_counter() - phase_started
+    phase_started = time.perf_counter()
     base["retrieval_collection"] = collection
     fused = reciprocal_rank_fusion(keyword, semantic)[: candidate_limit or request.limit]
     records = dict(
@@ -229,6 +239,7 @@ def search_catalog(
                 },
             }
         )
+    phase_timings["hydration_seconds"] = time.perf_counter() - phase_started
     return base
 
 
@@ -253,6 +264,17 @@ class ProductSearch:
 
     def search(self, request):
         started = time.perf_counter()
+        phases = dict.fromkeys(
+            [
+                "eligibility_seconds",
+                "embedding_seconds",
+                "branches_seconds",
+                "hydration_seconds",
+                "reranking_seconds",
+                "postprocess_seconds",
+            ],
+            0.0,
+        )
         texts = {} if request.rerank else None
         with (
             connect_database(self.database_url) as db,
@@ -281,6 +303,7 @@ class ProductSearch:
                 }
                 key = self.cache.key(request, pinned, runtime)
                 cached, cache_status = self.cache.get(key)
+                phases["setup_cache_seconds"] = time.perf_counter() - started
                 if (
                     cached is not None
                     and cached.get("build_id") == pinned["build_id"]
@@ -298,7 +321,11 @@ class ProductSearch:
                     )
                 ):
                     cached["cache"] = {"status": "hit"}
-                    cached["timings"] = {"total_seconds": time.perf_counter() - started}
+                    cached["timings"] = {
+                        **phases,
+                        "retrieval_seconds": 0.0,
+                        "total_seconds": time.perf_counter() - started,
+                    }
                     return cached
                 if cached is not None:
                     cache_status = "invalid"
@@ -314,10 +341,12 @@ class ProductSearch:
                     candidate_texts=texts,
                     qdrant=qdrant,
                     collection=collection,
+                    phase_timings=phases,
                 )
         # All product data was hydrated from one pinned snapshot; release PostgreSQL
         # before potentially slow cold model loading/scoring.
         retrieval_seconds = time.perf_counter() - retrieved
+        rerank_started = time.perf_counter()
         if request.rerank:
             result = apply_reranking(
                 result,
@@ -326,6 +355,7 @@ class ProductSearch:
                 self.reranker,
                 defer_limit=True,
             )
+            phases["reranking_seconds"] = time.perf_counter() - rerank_started
         else:
             result["reranking"] = {
                 "requested": False,
@@ -333,6 +363,7 @@ class ProductSearch:
                 "reason": "disabled",
                 "candidate_count": 0,
             }
+        postprocess_started = time.perf_counter()
         result = prioritize_listing_evidence(result, request)
         if any(
             not category_allowed(row.get("category"), request.filters.storefront_id)
@@ -341,7 +372,9 @@ class ProductSearch:
             raise CatalogError("Search results do not match the requested storefront")
         self.cache.put(key, result)
         result["cache"] = {"status": cache_status}
+        phases["postprocess_seconds"] = time.perf_counter() - postprocess_started
         result["timings"] = {
+            **phases,
             "retrieval_seconds": retrieval_seconds,
             "total_seconds": time.perf_counter() - started,
         }

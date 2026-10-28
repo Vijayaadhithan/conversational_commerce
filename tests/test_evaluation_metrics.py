@@ -3,7 +3,7 @@ from pathlib import Path
 
 import pytest
 
-from app.conversation_evaluation import dialogue_metrics
+from app.conversation_evaluation import dialogue_metrics, review_template
 
 
 def test_dialogue_capture_metrics_are_not_task_success_or_relevance():
@@ -39,6 +39,72 @@ def test_dialogue_capture_metrics_are_not_task_success_or_relevance():
     assert metrics["latency_seconds"] == {"median": 2, "p95": 8}
     assert "not_relevance_or_task_success" in metrics["measurement_type"]
     assert dialogue_metrics([])["latency_seconds"]["p95"] is None
+
+
+def test_stage_percentiles_have_sample_counts_and_ignore_old_provenance():
+    cases = [
+        {
+            "observations": [
+                {
+                    "http_status": 200,
+                    "seconds": 3,
+                    "response": {
+                        "commerce": {
+                            "action": "details",
+                            "response_route": {"mode": "fast"},
+                            "search": {"timings": {"embedding_seconds": 100}},
+                            "timings": {
+                                "stages_seconds": {"intent_seconds": 0.2},
+                                "search_stages_seconds": {},
+                                "products_ready_seconds": 0.3,
+                            },
+                        }
+                    },
+                }
+            ]
+        }
+    ]
+    result = dialogue_metrics(cases)
+    assert result["response_route_counts"] == {"fast": 1}
+    assert result["stage_latency_seconds"]["intent_seconds"] == {
+        "samples": 1,
+        "median": 0.2,
+        "p95": 0.2,
+    }
+    assert result["search_stage_latency_seconds"] == {}
+    assert result["products_ready_latency_seconds"]["median"] == 0.3
+
+
+def test_review_template_uses_last_recommendation_ids_and_cannot_be_scored_unfilled():
+    capture = {
+        "cases": [
+            {
+                "id": "one",
+                "observations": [
+                    {
+                        "response": {
+                            "commerce": {"action": "recommend", "products": [{"product_id": "old"}]}
+                        }
+                    },
+                    {
+                        "response": {
+                            "commerce": {"action": "multi", "products": [{"product_id": "new"}]}
+                        }
+                    },
+                    {
+                        "response": {
+                            "commerce": {"action": "details", "products": [{"product_id": "old"}]}
+                        }
+                    },
+                ],
+            }
+        ]
+    }
+    review = review_template(capture)
+    assert review["cases"][0]["product_grades"] == {"new": None}
+    assert review["human_reviewed"] is None and review["cases"][0]["outcome"] is None
+    with pytest.raises(ValueError, match="human_reviewed"):
+        module.summarize(capture, review)
 
 
 spec = importlib.util.spec_from_file_location(

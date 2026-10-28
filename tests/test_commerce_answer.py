@@ -63,6 +63,8 @@ def test_generated_answer_has_allowlisted_evidence_and_code_rendered_products():
     before = state.model_dump()
     usage = asyncio.run(natural_answer(chat, state, "Why these?", value))
     assert value["answer_generation"]["status"] == "generated" and len(calls) == len(usage) == 2
+    citation_schema = calls[0]["format"]["$defs"]["AnswerSentence"]["properties"]["evidence_ids"]
+    assert citation_schema["items"]["enum"] == list(answer_facts(state, value))
     assert "1. Moisturizer for dry skin 1" in value["reply"] and "$5 USD" in value["reply"]
     assert state.model_dump() == before
     assert (
@@ -97,6 +99,7 @@ def test_semantic_review_rejection_never_changes_reply_or_state(field):
     before = state.model_dump()
     asyncio.run(natural_answer(chat, state, "help", value))
     assert value["reply"] == "Original grounded result" and state.model_dump() == before
+    assert value["answer_generation"]["failure_stage"] == "review_verdict"
 
 
 def test_budget_and_timeout_fall_back_without_partial_text():
@@ -104,9 +107,11 @@ def test_budget_and_timeout_fall_back_without_partial_text():
     chat, calls = fake_chat([], context_size=2100)
     asyncio.run(natural_answer(chat, state, "help", value))
     assert not calls and value["reply"] == "Original grounded result"
+    assert value["answer_generation"]["failure_stage"] == "generation_context"
     chat, calls = fake_chat([TimeoutError("private error")])
     asyncio.run(natural_answer(chat, state, "help", value))
     assert len(calls) == 1 and "private" not in json.dumps(value)
+    assert value["answer_generation"]["failure_stage"] == "generation_request"
 
 
 def test_natural_question_is_saved_as_the_actual_pending_question():

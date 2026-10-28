@@ -33,6 +33,7 @@ tests are skipped. Use test services, never production credentials.
 | Shopping state transitions | `commerce_flow.py`, `commerce_single_turn.py`, `commerce_task_*.py` |
 | Display references and literal product reactions | `commerce_feedback.py` |
 | Natural replies, evidence packets and semantic review | `commerce_answer.py`, `commerce_answer_context.py` |
+| Fast response routing and per-turn timings | `commerce_performance.py` |
 | Preference validation and retrieval intent | `commerce_preferences.py`, `commerce_intent.py`, `commerce_requests.py` |
 | Retrieval contracts and SQL constraints | `search_models.py`, `search_filters.py`, `product_search.py` |
 | Admission and telemetry | `operations.py`, `operations_config.py`, `metrics.py` |

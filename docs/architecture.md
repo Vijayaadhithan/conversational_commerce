@@ -32,6 +32,10 @@ The planner can use three recent dialogue turns as bounded, untrusted context;
 state and current-message evidence always take priority. Resets exclude earlier
 dialogue. Clarification questions use missing preferences, and compact replies
 keep complete evidence in product metadata and detailed inspections.
+Exact supported commands can bypass natural prose generation using the validated
+code renderer. Other eligible turns retain generation and review. Per-turn timing
+separates intent, search, generation and review; search instrumentation identifies
+eligibility, embeddings, Qdrant, hydration and reranking without changing ranking.
 Tasks also retain literal product feedback and the last inspected positions.
 The planner can answer questions about displayed evidence without another search,
 and validated rejections exclude those products in future searches for that task.

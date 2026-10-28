@@ -1,0 +1,25 @@
+[
+  {
+    "id": "focused_shopping",
+    "goal": "Find moisturizer, inspect and compare actual options, refine budget without losing constraints, and answer an open-ended question from evidence.",
+    "turns": [
+      "Recommend moisturizer for dry skin under $30",
+      "Details about the second",
+      "Compare the first two",
+      "Make it $20",
+      "Why are these options relevant to my dry skin?"
+    ]
+  },
+  {
+    "id": "reaction_followup",
+    "goal": "Retain literal rejection reasons, exclude disliked options, and answer about a single inspected option.",
+    "turns": [
+      "Recommend shampoo under $20",
+      "I don't like these",
+      "Too floral",
+      "More options",
+      "Details about the first",
+      "Why that one?"
+    ]
+  }
+]

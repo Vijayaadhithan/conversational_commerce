@@ -16,6 +16,7 @@ from app.commerce_answer_context import (
     product_footer,
     validate_answer,
 )
+from app.commerce_performance import StageTimer
 from app.text_budget import byte_size, clip
 
 PROTECTED_QUESTIONS = {
@@ -30,7 +31,7 @@ PROTECTED_QUESTIONS = {
 }
 
 
-async def natural_answer(chat, state, message, commerce, dialogue=()):
+async def natural_answer(chat, state, message, commerce, dialogue=(), *, timings=None):
     """Return usage for at most two calls; never expose unchecked generated fragments."""
     if (
         commerce.get("validation_recovered")
@@ -54,10 +55,22 @@ async def natural_answer(chat, state, message, commerce, dialogue=()):
     facts = answer_facts(state, commerce)
     context = {"latest_message": message, "facts": facts}
     usage = []
+    timings = timings or StageTimer()
+    failure_stage = "context"
 
     async def request(prompt, payload, model, tokens):
+        nonlocal failure_stage
+        stage = "generation" if model is GroundedAnswer else "review"
+        failure_stage = stage + "_context"
         schema = compact_schema(model.model_json_schema())
         schema["title"] = model.__name__
+        if model is GroundedAnswer:
+            # Constrain citations at decoding time as well as validation time.
+            # Otherwise some models put quoted evidence text in this field.
+            schema["$defs"]["AnswerSentence"]["properties"]["evidence_ids"]["items"] = {
+                "type": "string",
+                "enum": list(facts),
+            }
         messages = [
             {"role": "system", "content": prompt},
             {"role": "user", "content": json.dumps(payload, ensure_ascii=False)},
@@ -76,40 +89,47 @@ async def natural_answer(chat, state, message, commerce, dialogue=()):
             ]
             if byte_size(proposed) + byte_size(schema) <= chat.settings.prompt_budget:
                 messages = proposed
-        result = await chat.model_request(
-            "POST",
-            "/api/chat",
-            json={
-                "model": chat.settings.model,
-                "messages": messages,
-                "format": schema,
-                "stream": False,
-                "keep_alive": chat.settings.keep_alive,
-                "options": {
-                    "temperature": 0,
-                    "num_ctx": chat.settings.context_size,
-                    "num_predict": min(tokens, chat.settings.max_tokens),
+        failure_stage = stage + "_request"
+        with timings.measure(stage + "_seconds"):
+            result = await chat.model_request(
+                "POST",
+                "/api/chat",
+                json={
+                    "model": chat.settings.model,
+                    "messages": messages,
+                    "format": schema,
+                    "stream": False,
+                    "keep_alive": chat.settings.keep_alive,
+                    "options": {
+                        "temperature": 0,
+                        "num_ctx": chat.settings.context_size,
+                        "num_predict": min(tokens, chat.settings.max_tokens),
+                    },
                 },
-            },
-        )
+            )
         usage.append(result)
+        failure_stage = stage + "_completion"
         if result.get("done") is not True or result.get("done_reason") == "length":
             raise ValueError("Incomplete answer")
+        failure_stage = stage + "_schema"
         return model.model_validate(strict_json(result["message"]["content"]))
 
     try:
         async with asyncio.timeout(min(chat.settings.timeout, 30)):
             answer = await request(WRITE_PROMPT, context, GroundedAnswer, 700)
+            failure_stage = "evidence_validation"
             text = validate_answer(answer, facts, commerce["action"])
             review = await request(
                 REVIEW_PROMPT, {**context, "candidate": answer.model_dump()}, AnswerReview, 128
             )
+            failure_stage = "review_verdict"
             if not (review.supported and review.answers_request and review.preserves_action):
                 raise ValueError("Answer review rejected")
     except (HTTPException, TimeoutError, ValueError, KeyError, TypeError):
         commerce["answer_generation"] = {
             "status": "fallback",
             "reason": "generation_or_review_failed",
+            "failure_stage": failure_stage,
         }
         # Interrupted inference can have unreported usage; never pretend it was free.
         usage.append({})
