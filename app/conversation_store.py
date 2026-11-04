@@ -10,6 +10,7 @@ from uuid import uuid4
 from fastapi import HTTPException
 
 from app.api_security import SecurityStore
+from app.request_runtime import check_deadline
 
 
 def now():
@@ -144,6 +145,7 @@ class Store(SecurityStore):
         self, conversation_id, user, state, metadata, expected_version, identity=None, response=None
     ):
         with self.connect() as db:
+            check_deadline()
             stamp = now()
             changed = db.execute(
                 """UPDATE conversations SET shopping_state=?,state_version=state_version+1,
@@ -176,6 +178,7 @@ class Store(SecurityStore):
     ):
         # Save the whole turn and its memory together, only after successful inference.
         with self.connect() as db:
+            check_deadline()
             stamp = now()
             db.execute(
                 "UPDATE conversations SET summary=?,summarized_through=?,updated_at=? WHERE id=?",
@@ -196,4 +199,8 @@ class Store(SecurityStore):
 
     def delete(self, conversation_id):
         with self.connect() as db:
+            db.execute(
+                "UPDATE api_requests SET response=NULL,expired=1 WHERE conversation_id=?",
+                (conversation_id,),
+            )
             db.execute("DELETE FROM conversations WHERE id=?", (conversation_id,))

@@ -49,7 +49,7 @@ class CommerceTurnService:
         with timings.measure("context_seconds"):
             key = record["id"]
             state = shopping_state_for(record)
-            dialogue = self.state.store.shopping_dialogue(key)
+            dialogue = await self.state.db_call(self.state.store.shopping_dialogue, key)
         repair_reason, inference, result = "", [], {}
         attempts = 1 if direct_plan(message) else 2
         for attempt in range(attempts):
@@ -102,7 +102,7 @@ class CommerceTurnService:
                     else "Preference schema or price validation failed"
                 )
                 logger.warning(
-                    "Shopping intent rejected (attempt %s): %s", attempt + 1, repair_reason
+                    "Shopping intent rejected (attempt %s): %s", attempt + 1, type(exc).__name__
                 )
                 if attempt + 1 < attempts:
                     continue
@@ -111,8 +111,8 @@ class CommerceTurnService:
                 # The rejected proposal is not a validated intent or a state patch.
                 plan = IntentPlan(intent="clarify", evidence=message[:500], question_kind="general")
                 break
-            except CatalogError as exc:
-                raise HTTPException(503, str(exc)) from exc
+            except CatalogError:
+                raise HTTPException(503, "Product search unavailable; retry later") from None
             except (psycopg.Error, OSError) as exc:
                 raise HTTPException(
                     503, "Product search unavailable; shopping turn was not saved"
@@ -170,8 +170,15 @@ class CommerceTurnService:
             "usage": aggregate_usage(inference),
         }
         with timings.measure("commit_seconds"):
-            self.state.store.commit_commerce_turn(
-                key, message, state, commerce, record["state_version"], identity, response
+            await self.state.db_call(
+                self.state.store.commit_commerce_turn,
+                key,
+                message,
+                state,
+                commerce,
+                record["state_version"],
+                identity,
+                response,
             )
         for stage, seconds in timings.seconds.items():
             self.state.metrics.increment("turn_" + stage + "_total", seconds)

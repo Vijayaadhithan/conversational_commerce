@@ -29,9 +29,12 @@ async def probe_dependencies(state, model):
                 "seconds": time.monotonic() - started,
             }
 
-    async def sqlite():
+    def sqlite_sync():
         with state.store.connect() as db:
             db.execute("SELECT 1").fetchone()
+
+    async def sqlite():
+        await state.db_call(sqlite_sync)
 
     async def models():
         import httpx

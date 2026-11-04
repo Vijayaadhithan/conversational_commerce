@@ -135,12 +135,19 @@ class VoyageReranker:
     def rank(self, query, documents, top_k, *, preserve_query=False):
         import httpx
 
+        from app.provider_safety import circuit, sync_json
         from app.providers import credential
+        from app.usage_budget import finish_call, reserve_call
 
         if not documents or top_k < 1:
             raise ValueError("Reranking requires documents and a valid top_k")
         top_k = min(top_k, len(documents))
+        breaker = circuit()
+        if breaker:
+            breaker.enter("voyage")
+        ticket, successful = None, False
         try:
+            ticket = reserve_call("voyage", self.model, "rerank")
             with httpx.Client(
                 base_url="https://api.voyageai.com/v1/",
                 trust_env=False,
@@ -149,8 +156,11 @@ class VoyageReranker:
                 headers={"Authorization": "Bearer " + credential("voyage")},
                 timeout=httpx.Timeout(self.timeout, connect=5),
             ) as client:
-                response = client.post(
+                payload = sync_json(
+                    client,
+                    "POST",
                     "rerank",
+                    timeout=self.timeout,
                     json={
                         "model": self.model,
                         "query": query,
@@ -160,8 +170,7 @@ class VoyageReranker:
                         "truncation": False,
                     },
                 )
-                response.raise_for_status()
-                rows = response.json()["data"]
+                rows = payload["data"]
             if not isinstance(rows, list) or len(rows) != top_k:
                 raise ValueError("Invalid ranking count")
             seen, results = set(), []
@@ -178,6 +187,8 @@ class VoyageReranker:
                 seen.add(index)
                 results.append({"index": index, "score": float(score), "text": documents[index]})
             results.sort(key=lambda row: (-row["score"], row["index"]))
+            finish_call(ticket)
+            successful = True
             return {
                 "model": self.model,
                 "revision": None,
@@ -186,10 +197,13 @@ class VoyageReranker:
                 "max_pair_tokens": None,
                 "results": results,
             }
-        except (httpx.HTTPError, ValueError, TypeError, KeyError):
+        except (httpx.HTTPError, TimeoutError, ValueError, TypeError, KeyError):
             raise RuntimeError(
                 "Voyage reranking failed; check credentials, quota, input limits and timeout"
             ) from None
+        finally:
+            if breaker:
+                breaker.finish("voyage", successful or ticket is None)
 
 
 def create_reranker():

@@ -302,6 +302,7 @@ def test_hosted_dependencies_do_not_require_local_models(tmp_path, monkeypatch):
 
     from app import dependencies
     from app.operations import Metrics
+    from app.request_runtime import AsyncStorage
 
     monkeypatch.setenv("EMBEDDING_PROVIDER", "google")
     settings = EmbeddingSettings.from_env()
@@ -343,6 +344,7 @@ def test_hosted_dependencies_do_not_require_local_models(tmp_path, monkeypatch):
         async with httpx.AsyncClient(base_url="https://api.groq.com/openai/v1/") as client:
             state = SimpleNamespace(
                 store=Store(tmp_path / "test.db"),
+                db_call=AsyncStorage(),
                 metrics=Metrics(),
                 ollama=client,
                 llm_provider="groq",

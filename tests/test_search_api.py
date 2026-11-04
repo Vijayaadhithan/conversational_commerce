@@ -77,7 +77,9 @@ def test_unready_search_returns_actionable_service_unavailable(tmp_path):
 
         client.app.state.product_search = Search()
         response = client.post("/products/search", json={"query": "blue shirt"})
-        assert response.status_code == 503 and "build_search_index.py" in response.json()["detail"]
+        assert response.status_code == 503
+        assert response.json()["detail"] == "Product search unavailable; retry later"
+        assert "build_search_index.py" not in response.text
 
 
 def test_search_can_explicitly_disable_reranking(tmp_path):

@@ -8,7 +8,8 @@ The API supports local bearer identities, conversation ownership, durable retry
 keys, per-user rates, bounded model admission, metrics and active alerts. Run
 **one Uvicorn worker per conversation SQLite database**. An exclusive OS file
 lock refuses a second worker. Distributed admission and identity federation are
-not implemented. Backups and recovery are outside this change.
+not implemented. See [local hardening and recovery](local_hardening.md) for token
+lifetimes/scopes, resource budgets, retention, and backup tooling.
 
 ## First use and access control
 
@@ -22,10 +23,13 @@ terminal client. Files are created with mode 0600 and are never overwritten;
 tokens are not printed. The database stores SHA-256 digests of randomly generated
 256-bit tokens. Provision each person with a separate identity/token through the
 local administrator CLI. Additional tokens for the same name share ownership
-and rate limits. There is no public signup endpoint. Tokens remain valid until
-revoked. To rotate, revoke existing tokens and issue a replacement into a new
-private file, then switch clients. `revoke` revokes **all** tokens belonging to
-the named user; individual-token revocation is not exposed by the CLI.
+and rate limits. There is no public signup endpoint. Existing tokens remain valid
+until revoked unless they have an expiry. New CLI
+tokens expire after seven days by default (`--expires-days`). To rotate, issue a
+replacement into a new private file, switch clients, then revoke the old token ID.
+`tokens` lists safe token metadata; `revoke --token-id ID` revokes one token, while
+`revoke --name NAME` revokes all tokens for that user. User CLI tokens default to
+shopping scope; use `--scopes shopping,rerank` when direct reranking is required.
 
 ```sh
 .venv/bin/python scripts/manage_api_users.py list
@@ -77,8 +81,9 @@ operation/conversation, so different users cannot replay each other's results.
 Different keys with identical text represent separate intentional messages.
 Ownership is checked before replay; deleting a conversation makes its message
 replays inaccessible. A replay of conversation creation returns the original ID,
-including when that conversation has since been deleted. Durable request rows
-use disk over time; no automatic retention purge is implemented.
+unless that conversation has been deleted or the replay payload expired; those
+keys return 410. Small tombstones prevent old keys from executing again. Retention
+is an explicit maintenance command, not an automatic background purge.
 
 The terminal client reads the token file, retries transient failures with the
 same key, and provides `/retry` for its last unresolved message. This pending key
@@ -115,7 +120,8 @@ higher setting. Do not use multiple workers to bypass this budget.
 `/livez` reports process liveness. `/health` retains the chat-model check.
 `/ready` checks SQLite, the active PostgreSQL search generation, installed chat
 and embedding models, and reranker file/runtime presence. It returns 503 if a
-required dependency is unavailable. Redis is optional and fails open; a Redis
+required dependency (including Qdrant) is unavailable. Redis is optional and fails
+open; a Redis
 outage raises an alert but does not alone make the API unready. Reranker presence
 is not an inference health test; enable `SEARCH_WARMUP=1` to run an actual
 embedding/reranking probe before startup completes.
@@ -230,8 +236,11 @@ maintenance commands above are the supported entry points; no background deletio
 
 ## Deferred operations work
 
-Dependency locking, coordinated backup/restore exercises, and automated conversation
-retention remain deferred. The shopping policy, bounded intent recovery and grounded
+Runtime version locking, security CI, explicit conversation retention and recovery
+tooling are available; see [local hardening](local_hardening.md). A full
+PostgreSQL/Qdrant recovery exercise and Linux server capacity validation remain
+required before deployment. Retention is never applied automatically. The shopping
+policy, bounded intent recovery and grounded
 summary stream are described in [conversations](conversations.md). Focused live journey
 checks do not replace a broad human-reviewed relevance evaluation or production capacity
 measurements.

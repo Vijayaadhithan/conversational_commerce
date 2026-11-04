@@ -184,6 +184,9 @@ def search_catalog(
     vector = query_vector(embedder, retrieval_query)
     phase_timings["embedding_seconds"] = time.perf_counter() - phase_started
     phase_started = time.perf_counter()
+    from app.request_runtime import check_deadline
+
+    check_deadline()
     keyword, semantic = qdrant.branches(
         collection,
         pinned,
@@ -263,6 +266,9 @@ class ProductSearch:
             raise CatalogError("PRODUCT_RERANK_CANDIDATES must be between 20 and 50")
 
     def search(self, request):
+        from app.request_runtime import check_deadline
+
+        check_deadline()
         started = time.perf_counter()
         phases = dict.fromkeys(
             [
@@ -277,7 +283,9 @@ class ProductSearch:
         )
         texts = {} if request.rerank else None
         with (
-            connect_database(self.database_url) as db,
+            connect_database(
+                self.database_url, options="-c statement_timeout=10000 -c lock_timeout=3000"
+            ) as db,
             QdrantClient(self.qdrant_settings) as qdrant,
         ):
             db.execute("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY")
@@ -348,6 +356,7 @@ class ProductSearch:
         retrieval_seconds = time.perf_counter() - retrieved
         rerank_started = time.perf_counter()
         if request.rerank:
+            check_deadline()
             result = apply_reranking(
                 result,
                 texts,
@@ -382,7 +391,12 @@ class ProductSearch:
 
     def warmup(self):
         started = time.perf_counter()
-        with connect_database(self.database_url) as db, create_embedder(self.settings) as embedder:
+        with (
+            connect_database(
+                self.database_url, options="-c statement_timeout=10000 -c lock_timeout=3000"
+            ) as db,
+            create_embedder(self.settings) as embedder,
+        ):
             db.execute("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY")
             pinned = pin_search_build(db)
             with QdrantClient(self.qdrant_settings) as client:

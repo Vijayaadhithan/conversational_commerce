@@ -1,5 +1,6 @@
 """Hosted inference protocol and credential handling. No provider SDK required."""
 
+import asyncio
 import json
 import math
 import os
@@ -7,6 +8,10 @@ from pathlib import Path
 
 import httpx
 from fastapi import HTTPException
+
+from app.provider_safety import async_json, circuit
+from app.request_runtime import remaining_timeout
+from app.usage_budget import finish_call, reserve_call
 
 LLM_ENDPOINTS = {
     "google": "https://generativelanguage.googleapis.com/v1beta/openai/",
@@ -93,16 +98,20 @@ async def hosted_chat(client, settings, payload):
             "require_parameters": True,
             "allow_fallbacks": False,
         }
+    breaker = circuit()
+    if breaker:
+        breaker.enter(settings.provider)
+    ticket, successful = None, False
     try:
-        response = await client.post("chat/completions", json=body)
-        if response.status_code == 429 or response.status_code >= 500:
-            raise HTTPException(
-                503,
-                "Model provider temporarily unavailable; retry with the same request key",
-                headers={"Retry-After": "5"},
+        ticket = await asyncio.to_thread(reserve_call, settings.provider, settings.model, "llm")
+        async with asyncio.timeout(remaining_timeout(settings.timeout)):
+            result = await async_json(
+                client,
+                "POST",
+                "chat/completions",
+                json=body,
+                timeout=remaining_timeout(settings.timeout),
             )
-        response.raise_for_status()
-        result = response.json()
         choice = result["choices"][0]
         content = choice["message"]["content"]
         if not isinstance(content, str):
@@ -110,30 +119,47 @@ async def hosted_chat(client, settings, payload):
         usage = result.get("usage") or {}
         if not isinstance(usage, dict):
             raise ValueError("Invalid usage")
-        return {
+        output = {
             "message": {"content": content},
             "done": choice.get("finish_reason") == "stop" and bool(content.strip()),
             "done_reason": choice.get("finish_reason"),
             "prompt_eval_count": usage.get("prompt_tokens"),
             "eval_count": usage.get("completion_tokens"),
         }
-    except httpx.TimeoutException:
+        await asyncio.to_thread(finish_call, ticket, output)
+        successful = True
+        return output
+    except (httpx.TimeoutException, TimeoutError):
         raise HTTPException(504, "Model provider timed out; turn was not saved") from None
     except httpx.RequestError:
         raise HTTPException(503, "Cannot reach model provider") from None
-    except (httpx.HTTPStatusError, ValueError, TypeError, KeyError, IndexError):
+    except httpx.HTTPStatusError as exc:
+        if exc.response.status_code == 429 or exc.response.status_code >= 500:
+            retry = exc.response.headers.get("Retry-After", "5")
+            retry = str(min(300, max(1, int(retry)))) if retry.isdigit() and len(retry) < 8 else "5"
+            raise HTTPException(
+                503,
+                "Model provider temporarily unavailable; retry with the same request key",
+                headers={"Retry-After": retry},
+            ) from None
+        raise HTTPException(
+            502, "Model provider returned a failed response; turn was not saved"
+        ) from None
+    except (ValueError, TypeError, KeyError, IndexError):
         # Never expose response bodies, request headers, prompts, or keys.
         raise HTTPException(
             502, "Model provider returned a failed or incomplete response; turn was not saved"
         ) from None
+    finally:
+        if breaker:
+            breaker.finish(settings.provider, successful or ticket is None)
 
 
 async def probe_llm(client, provider, model):
     """No billed inference in periodic health checks; this cannot prove quota."""
     path = "/api/tags" if provider == "ollama" else "models"
-    response = await client.get(path, timeout=3)
-    response.raise_for_status()
-    payload = response.json()
+    async with asyncio.timeout(3):
+        payload = await async_json(client, "GET", path, timeout=3)
     entries = payload.get("models" if provider == "ollama" else "data", [])
     key = "name" if provider == "ollama" else "id"
     if not any(isinstance(row, dict) and row.get(key) == model for row in entries):

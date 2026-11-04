@@ -16,13 +16,69 @@ class ProgressQueue(asyncio.Queue):
     """Track produced deltas even while a consumer has dequeued but not rendered one."""
 
     def __init__(self):
-        super().__init__()
+        super().__init__(maxsize=64)
         self.delta_text = ""
+        self.queued_bytes = 0
+        self.overflow = False
+        self.disconnected = False
 
     def put_nowait(self, item):
+        if self.disconnected:
+            return
+        name, value = item
+        terminal = name in {"done", "error"}
+        size = len(json.dumps(item, ensure_ascii=False).encode())
+        # Merge adjacent unsent text while preserving the exact displayed prefix.
+        if (
+            name == "delta"
+            and self._queue
+            and self._queue[-1][0] == "delta"
+            and len((self.delta_text + value["text"]).encode()) <= 65536
+            and self.queued_bytes + size <= 1024 * 1024
+        ):
+            previous = self._queue[-1]
+            merged = ("delta", {"text": previous[1]["text"] + value["text"]})
+            self.queued_bytes += len(json.dumps(merged, ensure_ascii=False).encode()) - len(
+                json.dumps(previous, ensure_ascii=False).encode()
+            )
+            self._queue[-1] = merged
+            self.delta_text += value["text"]
+            return
+        if not terminal and (
+            self.qsize() >= 62
+            or self.queued_bytes + size > 1024 * 1024
+            or (name == "delta" and len((self.delta_text + value["text"]).encode()) > 65536)
+        ):
+            if name == "delta":
+                self.overflow = True
+            return
+        if size > 1024 * 1024:
+            self.overflow = True
+            if not terminal:
+                return
+            item = (
+                "error",
+                {
+                    "status": 503,
+                    "retry_after": 0,
+                    "error": "Stream exceeded its budget; retry with the same key using JSON.",
+                },
+            )
+            size = len(json.dumps(item, ensure_ascii=False).encode())
         super().put_nowait(item)
+        self.queued_bytes += size
         if item[0] == "delta":
             self.delta_text += item[1]["text"]
+
+    def get_nowait(self):
+        item = super().get_nowait()
+        self.queued_bytes -= len(json.dumps(item, ensure_ascii=False).encode())
+        return item
+
+    def disconnect(self):
+        self.disconnected = True
+        while not self.empty():
+            self.get_nowait()
 
 
 async def stream_turn(work, progress):
@@ -38,6 +94,8 @@ async def stream_turn(work, progress):
                 raise RuntimeError("Streamed reply differs from committed reply")
             for line in result["reply"][len(prefix) :].splitlines(keepends=True):
                 progress.put_nowait(("delta", {"text": line}))
+            if getattr(progress, "overflow", False):
+                raise RuntimeError("Stream budget exceeded; committed response remains replayable")
             if result.get("commerce"):
                 progress.put_nowait(("commerce", result["commerce"]))
             progress.put_nowait(("done", result))
@@ -72,6 +130,9 @@ async def stream_turn(work, progress):
             if name in {"done", "error"}:
                 break
     finally:
+        if isinstance(progress, ProgressQueue):
+            progress.disconnect()
+
         # Closing the browser stream must not release admission or the retry key
         # while inference/search is still running. The committed turn is recoverable.
         async def finish():

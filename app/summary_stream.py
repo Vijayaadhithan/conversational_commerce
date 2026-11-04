@@ -7,6 +7,9 @@ import time
 import httpx
 
 from app.catalog import strict_json
+from app.provider_safety import bounded_lines, circuit
+from app.request_runtime import remaining_timeout
+from app.usage_budget import finish_call, reserve_call
 
 
 class SummaryStreamError(ValueError):
@@ -54,14 +57,20 @@ async def selection_stream(chat, messages, schema):
                 "allow_fallbacks": False,
             }
     size, done = 0, False
+    breaker = circuit() if not local else None
+    if breaker:
+        breaker.enter(settings.provider)
+    ticket = None
     try:
+        if not local:
+            ticket = await asyncio.to_thread(reserve_call, settings.provider, settings.model, "llm")
         # Bound total time as well as inactivity; a summary must not stall a valid result.
-        async with asyncio.timeout(min(settings.timeout, 30)):
+        async with asyncio.timeout(remaining_timeout(min(settings.timeout, 30))):
             async with chat.state.ollama.stream(
                 "POST", path, json=body, timeout=min(settings.timeout, 30)
             ) as response:
                 response.raise_for_status()
-                async for line in response.aiter_lines():
+                async for line in bounded_lines(response):
                     size += len(line.encode("utf-8"))
                     if size > 65536:
                         raise SummaryStreamError("Summary stream exceeded its budget")
@@ -100,6 +109,7 @@ async def selection_stream(chat, messages, schema):
                         if not valid:
                             raise SummaryStreamError("Incomplete summary")
                         done = True
+                        await asyncio.to_thread(finish_call, ticket, usage)
                         yield "", usage
                         break
         if not done:
@@ -116,4 +126,6 @@ async def selection_stream(chat, messages, schema):
         chat.state.metrics.increment(metric + "_failures_total")
         raise SummaryStreamError("Summary unavailable") from exc
     finally:
+        if breaker:
+            breaker.finish(settings.provider, done or ticket is None)
         chat.state.metrics.increment(metric + "_seconds_total", time.monotonic() - started)

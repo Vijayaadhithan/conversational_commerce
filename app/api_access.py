@@ -1,9 +1,12 @@
 """Shared ownership, idempotency, and model rate-limit checks."""
 
+import asyncio
+
 from fastapi import HTTPException, Request
 from fastapi.responses import JSONResponse
 from starlette.datastructures import State
 
+from app.operations import finish_on_disconnect
 from app.operations_config import OperationsSettings
 
 
@@ -15,14 +18,31 @@ class RequestAccess:
     def owner(self, request: Request) -> str:
         return request.state.principal["id"]
 
-    def claim(self, request, operation, body):
-        identity, replay = self.state.store.claim_request(
-            self.owner(request),
-            operation,
-            request.headers.get("Idempotency-Key"),
-            body.model_dump(mode="json"),
-            self.operations.idempotency_required,
+    async def claim(self, request, operation, body):
+        task = asyncio.create_task(
+            self.state.db_call(
+                self.state.store.claim_request,
+                self.owner(request),
+                operation,
+                request.headers.get("Idempotency-Key"),
+                body.model_dump(mode="json"),
+                self.operations.idempotency_required,
+            )
         )
+        try:
+            identity, replay = await asyncio.shield(task)
+        except asyncio.CancelledError:
+
+            async def release_abandoned():
+                identity, replay = await task
+                if replay is None:
+                    await self.state.db_call(self.state.store.release_request, identity)
+
+            try:
+                await finish_on_disconnect(release_abandoned())
+            except Exception:
+                pass
+            raise
         if replay:
             self.state.metrics.increment("idempotency_replays_total")
             return identity, JSONResponse(

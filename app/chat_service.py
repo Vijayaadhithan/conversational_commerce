@@ -21,6 +21,7 @@ from app.commerce_prompts import (
 )
 from app.config import Settings
 from app.providers import hosted_chat
+from app.request_runtime import check_deadline
 from app.text_budget import byte_size, chunks, clip
 
 
@@ -42,6 +43,7 @@ class ChatService:
         self.settings = settings
 
     async def model_request(self, method, path, **kwargs):
+        check_deadline()
         started = time.monotonic()
         metric = "ollama" if self.settings.provider == "ollama" else "llm"
         self.state.metrics.increment(metric + "_requests_total")

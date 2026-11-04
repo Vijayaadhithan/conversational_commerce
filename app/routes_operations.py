@@ -14,8 +14,10 @@ def register_routes(app, settings, operations, refresh_status):
     @app.get("/ready")
     async def ready():
         status = await refresh_status()
-        required = ("sqlite", "models", "postgres", "reranker")
-        available = all(status["dependencies"][name]["status"] == "ready" for name in required)
+        required = ("sqlite", "models", "postgres", "reranker", "qdrant")
+        available = all(
+            status["dependencies"].get(name, {}).get("status") == "ready" for name in required
+        )
         return JSONResponse(
             {"status": "ready" if available else "unavailable"},
             status_code=200 if available else 503,
@@ -33,10 +35,25 @@ def register_routes(app, settings, operations, refresh_status):
             media_type="text/plain; version=0.0.4",
         )
 
+    @app.get("/ops/usage")
+    async def usage():
+        return await app.state.db_call(app.state.usage.summary)
+
     @app.get("/health")
     async def health():
         try:
-            await probe_llm(app.state.ollama, settings.provider, settings.model)
+            async with app.state.health_lock:
+                import time
+
+                if time.monotonic() - app.state.health_checked >= operations.health_cache_seconds:
+                    app.state.health_ok = False
+                    try:
+                        await probe_llm(app.state.ollama, settings.provider, settings.model)
+                        app.state.health_ok = True
+                    finally:
+                        app.state.health_checked = time.monotonic()
+                if not app.state.health_ok:
+                    raise RuntimeError("Model unavailable")
         except Exception:
             raise HTTPException(503, "Configured model unavailable") from None
         return {

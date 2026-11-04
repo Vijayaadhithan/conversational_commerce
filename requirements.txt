@@ -1,6 +1,7 @@
 fastapi>=0.115,<1
 uvicorn>=0.34,<1
 httpx>=0.28,<1
+certifi>=2026.10.18,<2027
 python-dotenv>=1,<2
 psycopg[binary]>=3.2,<4
 jsonschema>=4,<5

@@ -31,14 +31,16 @@ class ConversationService:
         progress: Callable[[str], None] | None = None,
         emit=None,
     ) -> dict:
-        record = self.state.store.check_owner(key, user_id)
+        record = await self.state.db_call(self.state.store.check_owner, key, user_id)
         if record["mode"] == "commerce":
             return await self.commerce.process_message(
                 record, body.message, identity, progress, emit
             )
         if self.settings.commerce_only:
             raise HTTPException(409, "Start a new shopping conversation; general chat is disabled")
-        history = self.state.store.messages(key, record["summarized_through"], limit=1000)
+        history = await self.state.db_call(
+            self.state.store.messages, key, record["summarized_through"], limit=1000
+        )
         messages, summary, boundary = await self.chat.prepare_context(record, history, body.message)
         answer, result = await self.chat.complete(messages)
         response = {
@@ -49,7 +51,14 @@ class ConversationService:
             "usage": aggregate_usage([result]),
         }
 
-        self.state.store.commit_turn(
-            key, body.message, answer, summary, boundary, identity, response
+        await self.state.db_call(
+            self.state.store.commit_turn,
+            key,
+            body.message,
+            answer,
+            summary,
+            boundary,
+            identity,
+            response,
         )
         return response

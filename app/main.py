@@ -4,6 +4,7 @@ import asyncio
 import fcntl
 import logging
 import os
+import time
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -20,6 +21,7 @@ from app.config import Settings as Settings
 from app.conversation_service import ConversationService
 from app.conversation_store import Store as Store
 from app.dependencies import probe_dependencies
+from app.deployment_checks import deployment_errors
 from app.operations import (
     Admission,
     Metrics,
@@ -29,8 +31,10 @@ from app.operations import (
 )
 from app.product_search import ProductSearch
 from app.providers import llm_client_options, validate_llm
+from app.request_runtime import AsyncStorage, RequestRuntime
 from app.reranker import create_reranker
 from app.text_budget import byte_size as byte_size
+from app.usage_budget import UsageBudget
 
 logger = logging.getLogger(__name__)
 
@@ -43,6 +47,13 @@ def create_app(
     operations = operations or OperationsSettings.from_env()
     settings = settings or Settings()
     validate_llm(settings)
+    profile = os.getenv("DEPLOYMENT_PROFILE", "local")
+    if profile not in {"local", "demo"}:
+        raise ValueError("DEPLOYMENT_PROFILE must be local or demo")
+    if profile == "demo":
+        errors = deployment_errors(settings, operations)
+        if errors:
+            raise ValueError("; ".join(errors))
     if settings.max_tokens < 1 or settings.timeout <= 0:
         raise ValueError("Model token limit and timeout must be positive")
     if settings.prompt_budget < 7000 or byte_size(settings.system_prompt) > 1500:
@@ -66,6 +77,9 @@ def create_app(
         try:
             app.state.server_lock = lock_file
             app.state.store = Store(path)
+            app.state.db_call = AsyncStorage()
+            app.state.usage = UsageBudget(app.state.store)
+            app.state.runtime = RequestRuntime(app.state, operations)
             app.state.metrics = Metrics()
             app.state.metrics.increment(
                 "recovered_requests_total", app.state.store.recover_requests()
@@ -75,12 +89,18 @@ def create_app(
             app.state.reranker = create_reranker()
             app.state.product_search = ProductSearch(reranker=app.state.reranker)
             app.state.product_search.cache.metrics = app.state.metrics
+            app.state.summary_lock = asyncio.Lock()
             app.state.probe_lock = asyncio.Lock()
+            app.state.probe_checked = float("-inf")
+            app.state.health_lock = asyncio.Lock()
+            app.state.health_checked = float("-inf")
+            app.state.health_ok = False
             async with httpx.AsyncClient(
                 **llm_client_options(settings),
                 timeout=httpx.Timeout(settings.timeout, connect=5),
                 transport=transport,
                 trust_env=False,
+                limits=httpx.Limits(max_connections=8, max_keepalive_connections=4),
             ) as client:
                 app.state.ollama = client
                 app.state.llm_provider = settings.provider
@@ -95,6 +115,7 @@ def create_app(
                 try:
                     yield
                 finally:
+                    await app.state.runtime.close()
                     if monitor:
                         monitor.cancel()
                         try:
@@ -115,7 +136,9 @@ def create_app(
 
     async def refresh_status():
         async with app.state.probe_lock:
-            await probe_dependencies(app.state, settings.model)
+            if time.monotonic() - app.state.probe_checked >= operations.health_cache_seconds:
+                await probe_dependencies(app.state, settings.model)
+                app.state.probe_checked = time.monotonic()
         return app.state.metrics.evaluate(operations, app.state.admission)
 
     async def monitor_loop():

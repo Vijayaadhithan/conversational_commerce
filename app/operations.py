@@ -42,9 +42,27 @@ class Admission:
         self.semaphore = asyncio.Semaphore(settings.model_concurrency)
         self.active = self.waiting = 0
         self.conversations = {}
+        self.owners = {}
 
     @asynccontextmanager
-    async def workload(self):
+    async def workload(self, owner=None):
+        if owner is not None and self.owners.get(owner, 0) >= self.settings.user_workloads:
+            raise HTTPException(
+                429, "Too many workloads for this user", headers={"Retry-After": "5"}
+            )
+        if owner is not None:
+            self.owners[owner] = self.owners.get(owner, 0) + 1
+        try:
+            async with self._workload():
+                yield
+        finally:
+            if owner is not None:
+                self.owners[owner] -= 1
+                if not self.owners[owner]:
+                    del self.owners[owner]
+
+    @asynccontextmanager
+    async def _workload(self):
         if self.active + self.waiting >= self.settings.model_concurrency + self.settings.queue_size:
             self.metrics.increment("model_rejected_total")
             raise HTTPException(
@@ -113,6 +131,7 @@ class OperationalMiddleware:
     def __init__(self, app, settings, state):
         self.app, self.settings, self.state = app, settings, state
         self.buckets = TokenBuckets()
+        self.inflight = 0
 
     async def __call__(self, scope, receive, send):
         if scope["type"] != "http":
@@ -120,6 +139,7 @@ class OperationalMiddleware:
         started, status = time.monotonic(), 500
         request_id = uuid4().hex
         scope.setdefault("state", {})["request_id"] = request_id
+        admitted = False
 
         async def respond(code, detail, headers=()):
             await wrapped_send(
@@ -138,11 +158,19 @@ class OperationalMiddleware:
             if message["type"] == "http.response.start":
                 status = message["status"]
                 message["headers"] = list(message.get("headers", [])) + [
-                    (b"x-request-id", request_id.encode())
+                    (b"x-request-id", request_id.encode()),
+                    (b"x-content-type-options", b"nosniff"),
                 ]
-            await send(message)
+                if scope["path"].startswith(("/conversations", "/products", "/rerank", "/ops/")):
+                    if not any(key.lower() == b"cache-control" for key, _ in message["headers"]):
+                        message["headers"].append((b"cache-control", b"no-store"))
+            await asyncio.wait_for(send(message), timeout=self.settings.write_timeout)
 
         try:
+            if self.inflight >= self.settings.http_concurrency:
+                return await respond(503, "Server is busy", [(b"retry-after", b"5")])
+            self.inflight += 1
+            admitted = True
             headers = dict(scope.get("headers", []))
             public = scope["path"] in {
                 "/livez",
@@ -152,9 +180,20 @@ class OperationalMiddleware:
                 "/docs/oauth2-redirect",
             }
             if self.settings.auth_required and not public:
+                # Use the actual peer only; arbitrary forwarded headers are untrusted.
+                peer = (scope.get("client") or ("unknown", 0))[0]
+                retry = self.buckets.consume(
+                    ("preauth", peer), self.settings.preauth_rate, self.settings.preauth_burst
+                )
+                if retry:
+                    return await respond(
+                        429, "Request rate limit exceeded", [(b"retry-after", str(retry).encode())]
+                    )
                 token = headers.get(b"authorization", b"")
                 principal = (
-                    self.state.store.authenticate(token[7:].decode("latin1"))
+                    await self.state.db_call(
+                        self.state.store.authenticate, token[7:].decode("latin1")
+                    )
                     if token.startswith(b"Bearer ") and len(token) <= 256
                     else None
                 )
@@ -171,6 +210,14 @@ class OperationalMiddleware:
             else:
                 principal = {"id": "local-development", "role": "admin"}
             scope["state"]["principal"] = principal
+            if not public and principal.get("scopes", "*") != "*":
+                needed = (
+                    "ops"
+                    if scope["path"].startswith("/ops/")
+                    else ("rerank" if scope["path"] == "/rerank" else "shopping")
+                )
+                if needed not in principal["scopes"].split(","):
+                    return await respond(403, "Token does not permit this operation")
             if scope["path"].startswith("/ops/") and principal["role"] != "admin":
                 return await respond(403, "Administrator access required")
             retry = self.buckets.consume(
@@ -185,9 +232,13 @@ class OperationalMiddleware:
             # Bound input before JSON decoding, including chunked requests.
             if scope["method"] in {"POST", "PUT", "PATCH"}:
                 body = bytearray()
+                body_deadline = time.monotonic() + self.settings.body_timeout
                 while True:
                     try:
-                        event = await asyncio.wait_for(receive(), timeout=15)
+                        remaining = body_deadline - time.monotonic()
+                        if remaining <= 0:
+                            raise TimeoutError
+                        event = await asyncio.wait_for(receive(), timeout=min(15, remaining))
                     except TimeoutError:
                         return await respond(408, "Request body timed out")
                     if event["type"] == "http.disconnect":
@@ -210,6 +261,8 @@ class OperationalMiddleware:
             else:
                 await self.app(scope, receive, wrapped_send)
         finally:
+            if admitted:
+                self.inflight -= 1
             route = scope.get("route")
             route = getattr(route, "path", "unmatched")
             elapsed = time.monotonic() - started

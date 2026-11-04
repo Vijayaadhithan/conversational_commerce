@@ -46,7 +46,16 @@ After multiple groups, a bare `compare the first two` asks which task you mean;
 `/preferences` displays the saved state. `/history` displays the transcript.
 `/new` creates another session in the same mode; `Start over` explicitly clears
 the shopping tasks while keeping the transcript. Resume after restart with
-`scripts/chat.py --session CONVERSATION_ID`.
+`scripts/chat.py --session CONVERSATION_ID`; this also displays the saved transcript.
+Use `/sessions` (or `/sessions 2` for another page) to list your account's saved
+conversations, then `/resume CONVERSATION_ID` to reopen one and view its history.
+List saved sessions without creating a new conversation with
+`.venv/bin/python scripts/chat.py --list-sessions`.
+
+History remains isolated by account. Legacy conversations without an owner are
+preserved but hidden until an administrator explicitly assigns the correct owner.
+No history retention job runs automatically. A pending message must be resolved
+with `/retry` before switching conversations so its retry key is not lost.
 
 ## Request and response
 

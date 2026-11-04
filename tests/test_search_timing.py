@@ -19,7 +19,7 @@ def test_cached_search_reports_no_embedding_or_reranking_work(monkeypatch):
     }
     cache = SimpleNamespace(key=lambda *args: "key", get=lambda _: (deepcopy(payload), "hit"))
     db, client, embedder = MagicMock(), MagicMock(), MagicMock()
-    monkeypatch.setattr(product_search, "connect_database", lambda _: db)
+    monkeypatch.setattr(product_search, "connect_database", lambda _, **kwargs: db)
     monkeypatch.setattr(product_search, "QdrantClient", lambda _: client)
     monkeypatch.setattr(product_search, "create_embedder", lambda _: embedder)
     monkeypatch.setattr(

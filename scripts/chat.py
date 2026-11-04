@@ -5,15 +5,54 @@ import json
 import time
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 from api_credentials import authorization_headers
+
+
+def show_history(request, session):
+    after = 0
+    while True:
+        page = request("GET", f"/conversations/{session}/messages?after={after}&limit=500")
+        for message in page["messages"]:
+            print(f"{message['role']}: {message['content']}")
+        if not page["messages"]:
+            break
+        after = page["next_after"]
+
+
+def show_sessions(request, page=1):
+    if not 1 <= page <= 10000:
+        raise ValueError("Page must be between 1 and 10000")
+    records = request("GET", f"/conversations?limit=20&offset={(page - 1) * 20}")["conversations"]
+    if not records:
+        print("No saved conversations on this page for your account.")
+        return
+    print(f"Saved conversations — page {page}:")
+    for record in records:
+        title = json.dumps(record["title"], ensure_ascii=False)
+        print(f"{record['id']}  {record['mode']}  {record['updated_at']}  {title}")
+    print("Use /resume CONVERSATION_ID to reopen one.")
+    if len(records) == 20:
+        print(f"Next page: /sessions {page + 1}")
 
 
 def main():
     parser = argparse.ArgumentParser(description="Talk to your local conversational API")
     parser.add_argument("--url", default="http://127.0.0.1:8000")
-    parser.add_argument("--session", help="Resume a saved conversation ID")
+    parser.add_argument(
+        "--session",
+        type=lambda value: str(UUID(value)),
+        help="Resume a saved conversation ID and display its history",
+    )
+    parser.add_argument(
+        "--list-sessions",
+        action="store_true",
+        help="List saved conversations without creating a new one",
+    )
+    parser.add_argument(
+        "--page", type=int, default=1, help="Page for --list-sessions (20 conversations per page)"
+    )
     modes = parser.add_mutually_exclusive_group()
     modes.add_argument(
         "--commerce", action="store_true", help="Create a product recommendation conversation"
@@ -24,6 +63,8 @@ def main():
         help="General chat; requires COMMERCE_ONLY=0 on the server",
     )
     args = parser.parse_args()
+    if not 1 <= args.page <= 10000:
+        parser.error("--page must be between 1 and 10000")
 
     def request(method, path, body=None, request_key=None):
         data = json.dumps(body).encode() if body is not None else None
@@ -49,6 +90,9 @@ def main():
                 time.sleep(2)
 
     try:
+        if args.list_sessions:
+            show_sessions(request, args.page)
+            return
         session = (
             args.session
             or request(
@@ -63,8 +107,10 @@ def main():
         )
         mode = request("GET", f"/conversations/{session}")["mode"]
         print(
-            f"Conversation: {session} ({mode})\nCommands: /exit, /new, /history, /preferences, /retry"
+            f"Conversation: {session} ({mode})\nCommands: /exit, /new, /sessions [PAGE], /resume ID, /history, /preferences, /retry"
         )
+        if args.session:
+            show_history(request, session)
         pending = None
         while True:
             text = input("\nYou: ").strip()
@@ -73,9 +119,28 @@ def main():
             if not text:
                 continue
             try:
+                command, _, argument = text.partition(" ")
+                if command in {"/new", "/resume"} and pending is not None:
+                    print("Resolve the pending message with /retry before switching conversations.")
+                    continue
                 if text == "/new":
                     session = request("POST", "/conversations", {"mode": mode})["id"]
                     print(f"Conversation: {session}")
+                elif command == "/sessions":
+                    try:
+                        show_sessions(request, int(argument) if argument else 1)
+                    except ValueError:
+                        print("Use /sessions or /sessions PAGE (1-10000).")
+                elif command == "/resume":
+                    try:
+                        selected = str(UUID(argument.strip()))
+                    except ValueError:
+                        print("Use /resume CONVERSATION_ID with an ID from /sessions.")
+                        continue
+                    record = request("GET", f"/conversations/{selected}")
+                    session, mode = selected, record["mode"]
+                    print(f"Conversation: {session} ({mode})")
+                    show_history(request, session)
                 elif text == "/preferences":
                     print(
                         json.dumps(
@@ -83,16 +148,7 @@ def main():
                         )
                     )
                 elif text == "/history":
-                    after = 0
-                    while True:
-                        page = request(
-                            "GET", f"/conversations/{session}/messages?after={after}&limit=500"
-                        )
-                        for message in page["messages"]:
-                            print(f"{message['role']}: {message['content']}")
-                        if not page["messages"]:
-                            break
-                        after = page["next_after"]
+                    show_history(request, session)
                 else:
                     if text == "/retry":
                         if pending is None:

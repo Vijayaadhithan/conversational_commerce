@@ -20,6 +20,14 @@ class OperationsSettings:
     alert_error_ratio: float = 0.1
     alert_latency_seconds: float = 60
     alert_rss_mb: int = 8192
+    body_timeout: float = 30
+    turn_timeout: float = 180
+    http_concurrency: int = 64
+    user_workloads: int = 4
+    preauth_rate: int = 600
+    preauth_burst: int = 120
+    health_cache_seconds: float = 10
+    write_timeout: float = 30
 
     @classmethod
     def from_env(cls):
@@ -37,6 +45,14 @@ class OperationsSettings:
             "alert_error_ratio": "API_ALERT_ERROR_RATIO",
             "alert_latency_seconds": "API_ALERT_LATENCY_SECONDS",
             "alert_rss_mb": "API_ALERT_RSS_MB",
+            "body_timeout": "API_BODY_TIMEOUT_SECONDS",
+            "turn_timeout": "API_TURN_TIMEOUT_SECONDS",
+            "http_concurrency": "API_HTTP_CONCURRENCY",
+            "user_workloads": "API_USER_WORKLOAD_LIMIT",
+            "preauth_rate": "API_PREAUTH_REQUESTS_PER_MINUTE",
+            "preauth_burst": "API_PREAUTH_BURST",
+            "health_cache_seconds": "API_HEALTH_CACHE_SECONDS",
+            "write_timeout": "API_RESPONSE_WRITE_TIMEOUT_SECONDS",
         }
         defaults = cls()
         values = {}
@@ -58,12 +74,22 @@ class OperationsSettings:
                         "monitor_interval",
                         "alert_error_ratio",
                         "alert_latency_seconds",
+                        "body_timeout",
+                        "turn_timeout",
+                        "health_cache_seconds",
+                        "write_timeout",
                     }
                     else int
                 )(value)
         result = cls(**values)
         if (
             not 1 <= result.model_concurrency <= 4
+            or not 0 < result.body_timeout <= 120
+            or not 0 < result.write_timeout <= 120
+            or not 0 < result.turn_timeout <= 600
+            or not 0 <= result.health_cache_seconds <= 60
+            or not 1 <= result.http_concurrency <= 1024
+            or not 1 <= result.user_workloads <= 128
             or not 0 <= result.queue_size <= 128
             or not 0 < result.queue_timeout <= 600
             or not 0 <= result.monitor_interval <= 3600
@@ -77,6 +103,8 @@ class OperationsSettings:
                     "request_burst",
                     "model_requests_per_minute",
                     "model_burst",
+                    "preauth_rate",
+                    "preauth_burst",
                 )
             )
             or any(not math.isfinite(v) for v in values.values() if isinstance(v, float))

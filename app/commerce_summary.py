@@ -4,6 +4,8 @@ import json
 import re
 from contextlib import aclosing
 
+from fastapi import HTTPException
+
 from app.catalog import strict_json
 from app.commerce_replies import concise_reasons
 from app.summary_stream import SummaryStreamError, selection_stream
@@ -119,7 +121,7 @@ async def add_summary(chat, message, commerce, emit=None):
                     if emit:
                         emit("delta", {"text": chunk})
         selection.finish()
-    except (SummaryStreamError, ValueError, TypeError):
+    except (HTTPException, SummaryStreamError, ValueError, TypeError):
         # Already streamed highlights contain only verified facts. Preserve them;
         # use the original complete reply for everything else, without a reset event.
         status = "partial_fallback" if chunks else "fallback"

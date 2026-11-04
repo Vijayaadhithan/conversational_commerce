@@ -16,21 +16,28 @@ def register_routes(app, access):
     @app.get("/catalog/summary")
     async def summary():
         try:
-            return await asyncio.to_thread(catalog_summary, app.state.product_search.database_url)
+            async with app.state.summary_lock:
+                return await asyncio.to_thread(
+                    catalog_summary, app.state.product_search.database_url
+                )
         except (CatalogError, psycopg.Error, OSError):
             raise HTTPException(503, "Catalog overview unavailable") from None
 
     @app.post("/products/search")
     async def products_search(body: ProductSearchRequest, request: Request):
         access.model_rate(request)
-        return await finish_on_disconnect(search_work(body))
+        return await finish_on_disconnect(
+            app.state.runtime.run(
+                lambda: search_work(body, access.owner(request)), access.owner(request)
+            )
+        )
 
-    async def search_work(body):
-        async with app.state.admission.workload():
+    async def search_work(body, owner):
+        async with app.state.admission.workload(owner):
             try:
                 return await asyncio.to_thread(app.state.product_search.search, body)
-            except CatalogError as exc:
-                raise HTTPException(503, str(exc)) from exc
+            except CatalogError:
+                raise HTTPException(503, "Product search unavailable; retry later") from None
             except (psycopg.Error, OSError) as exc:
                 raise HTTPException(
                     503,
@@ -40,10 +47,14 @@ def register_routes(app, access):
     @app.post("/rerank")
     async def rerank(body: RerankRequest, request: Request):
         access.model_rate(request)
-        return await finish_on_disconnect(rerank_work(body))
+        return await finish_on_disconnect(
+            app.state.runtime.run(
+                lambda: rerank_work(body, access.owner(request)), access.owner(request)
+            )
+        )
 
-    async def rerank_work(body):
-        async with app.state.admission.workload():
+    async def rerank_work(body, owner):
+        async with app.state.admission.workload(owner):
             try:
                 return await asyncio.to_thread(
                     app.state.reranker.rank, body.query, body.documents, body.top_k
