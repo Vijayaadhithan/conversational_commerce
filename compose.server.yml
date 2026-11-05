@@ -1,0 +1,143 @@
+name: commerce
+
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+x-application: &application
+  image: commerce-api:demo
+  build: .
+  # Linux single-server deployment: dependency ports and API bind to loopback.
+  # This preserves the client's requirement for HTTPS on remote Qdrant URLs.
+  network_mode: host
+  env_file: .env.server
+  user: "10001:10001"
+  read_only: true
+  cap_drop: [ALL]
+  security_opt: [no-new-privileges:true]
+  tmpfs:
+    - /tmp:size=128m,mode=1777
+  volumes:
+    - ./data:/app/data
+  mem_limit: 1g
+  cpus: 1.0
+  pids_limit: 128
+  logging: *logging
+
+services:
+  proxy:
+    image: ${CADDY_IMAGE:-caddy:2-alpine}
+    profiles: [public]
+    restart: unless-stopped
+    network_mode: host
+    read_only: true
+    cap_drop: [ALL]
+    cap_add: [NET_BIND_SERVICE]
+    security_opt: [no-new-privileges:true]
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - ../state/caddy-data:/data
+      - ../state/caddy-config:/config
+    tmpfs:
+      - /tmp:size=32m,mode=1777
+    mem_limit: 192m
+    cpus: 0.5
+    pids_limit: 64
+    logging: *logging
+
+  postgres:
+    image: ${POSTGRES_IMAGE:-postgres:16-bookworm}
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: commerce
+      POSTGRES_DB: conversational_commerce
+      POSTGRES_PASSWORD_FILE: /run/secrets/postgres_password
+    secrets: [postgres_password]
+    command:
+      - postgres
+      - -c
+      - shared_buffers=128MB
+      - -c
+      - max_connections=30
+      - -c
+      - work_mem=8MB
+      - -c
+      - maintenance_work_mem=128MB
+    ports: ["127.0.0.1:5432:5432"]
+    volumes:
+      - ../state/postgres:/var/lib/postgresql/data
+    mem_limit: 1g
+    cpus: 0.75
+    pids_limit: 128
+    healthcheck:
+      test: [CMD-SHELL, "pg_isready -U commerce -d conversational_commerce"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    logging: *logging
+
+  qdrant:
+    image: ${QDRANT_IMAGE:-qdrant/qdrant:v1.19.2}
+    restart: unless-stopped
+    ports: ["127.0.0.1:6333:6333"]
+    volumes:
+      - ../state/qdrant:/qdrant/storage
+    environment:
+      QDRANT__TELEMETRY_DISABLED: "true"
+      QDRANT__STORAGE__PERFORMANCE__MAX_SEARCH_THREADS: "1"
+      QDRANT__STORAGE__OPTIMIZERS__MAX_OPTIMIZATION_THREADS: "1"
+    mem_limit: 2g
+    cpus: 1.0
+    pids_limit: 128
+    logging: *logging
+
+  ollama:
+    image: ${OLLAMA_IMAGE:-ollama/ollama:latest}
+    restart: unless-stopped
+    ports: ["127.0.0.1:11434:11434"]
+    environment:
+      OLLAMA_NUM_PARALLEL: "1"
+      OLLAMA_MAX_LOADED_MODELS: "1"
+      OLLAMA_KEEP_ALIVE: 10m
+      OLLAMA_CONTEXT_LENGTH: "2048"
+    volumes:
+      - ../state/ollama:/root/.ollama
+    mem_limit: 2g
+    cpus: 1.5
+    pids_limit: 128
+    healthcheck:
+      test: [CMD, ollama, list]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+    logging: *logging
+
+  api:
+    <<: *application
+    profiles: [app]
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      ollama:
+        condition: service_healthy
+      qdrant:
+        condition: service_started
+    healthcheck:
+      test: [CMD, python, -c, "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/livez', timeout=5)"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+  tools:
+    <<: *application
+    profiles: [tools]
+    restart: "no"
+    command: [python, scripts/check_deployment.py]
+
+secrets:
+  postgres_password:
+    file: ../secrets/postgres_password

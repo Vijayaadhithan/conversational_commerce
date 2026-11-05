@@ -1,0 +1,24 @@
+{
+	admin off
+}
+
+commerce-api.querix.co {
+	header {
+		-Server
+		X-Content-Type-Options nosniff
+		Strict-Transport-Security "max-age=31536000"
+	}
+
+	# Operations remain available through authenticated loopback/SSH access.
+	@private path /ops /ops/* /docs /docs/* /redoc /openapi.json
+	respond @private 404
+
+	# Caddy flushes text/event-stream responses immediately by default.
+	reverse_proxy 127.0.0.1:8000 {
+		stream_timeout 210s
+		transport http {
+			dial_timeout 5s
+			response_header_timeout 200s
+		}
+	}
+}
