@@ -4,8 +4,8 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1
 WORKDIR /app
-COPY requirements.lock ./
-RUN pip install --no-cache-dir -r requirements.lock \
+COPY requirements.lock requirements-fallback.lock ./
+RUN pip install --no-cache-dir -r requirements.lock -r requirements-fallback.lock \
     && groupadd --gid 10001 commerce \
     && useradd --uid 10001 --gid commerce --no-create-home commerce
 COPY --chown=10001:10001 app ./app

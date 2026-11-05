@@ -50,6 +50,8 @@ async def selection_stream(chat, messages, schema):
             "max_tokens": min(128, settings.max_tokens),
             "response_format": {"type": "json_object"},
         }
+        if settings.provider == "nvidia":
+            body["chat_template_kwargs"] = {"enable_thinking": False}
         if settings.provider == "openrouter":
             body["provider"] = {
                 "data_collection": "deny",

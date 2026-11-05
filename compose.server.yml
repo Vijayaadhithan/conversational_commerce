@@ -21,6 +21,7 @@ x-application: &application
     - /tmp:size=128m,mode=1777
   volumes:
     - ./data:/app/data
+    - ./models:/app/models:ro
   mem_limit: 1g
   cpus: 1.0
   pids_limit: 128
@@ -118,6 +119,7 @@ services:
     <<: *application
     profiles: [app]
     restart: unless-stopped
+    stop_grace_period: 210s
     depends_on:
       postgres:
         condition: service_healthy

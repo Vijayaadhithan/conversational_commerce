@@ -41,9 +41,9 @@ sh scripts/server_compose.sh ps
 nano .env.server
 ```
 
-Set `LLM_PROVIDER` to `google`, `groq`, or `openrouter`, set `LLM_MODEL` to the
+Set `LLM_PROVIDER` to `google`, `groq`, `openrouter`, or `nvidia`, set `LLM_MODEL` to the
 exact model ID, and fill the matching `GOOGLE_API_KEY`, `GROQ_API_KEY`, or
-`OPENROUTER_API_KEY`. Set `VOYAGE_API_KEY` for the configured Voyage reranker.
+`OPENROUTER_API_KEY`, or `NVIDIA_API_KEY`. Set `VOYAGE_API_KEY` for the configured Voyage reranker.
 Keep `EMBEDDING_PROVIDER=ollama` and the existing model name and digest; changing
 embedding identity requires rebuilding the catalog. Do not copy the production
 example over `.env.server`: the server file includes its database connection.

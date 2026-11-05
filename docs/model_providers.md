@@ -9,6 +9,7 @@ three components use hosted APIs; `requirements.txt` is sufficient.
 | --- | --- | --- | --- |
 | Local chat | `LLM_PROVIDER=ollama` | `OLLAMA_MODEL` | None |
 | Google AI Studio chat | `LLM_PROVIDER=google` | `LLM_MODEL` | `GOOGLE_API_KEY` |
+| NVIDIA chat | `LLM_PROVIDER=nvidia` | `LLM_MODEL` | `NVIDIA_API_KEY` |
 | GroqCloud chat | `LLM_PROVIDER=groq` | `LLM_MODEL` | `GROQ_API_KEY` |
 | OpenRouter chat | `LLM_PROVIDER=openrouter` | `LLM_MODEL` (vendor/model ID) | `OPENROUTER_API_KEY` |
 | Local embeddings | `EMBEDDING_PROVIDER=ollama` | `EMBEDDING_MODEL` | None |
@@ -132,3 +133,30 @@ Protocols follow the official [Google chat compatibility API](https://ai.google.
 [OpenRouter API](https://openrouter.ai/docs/api-reference/overview),
 [OpenRouter routing controls](https://openrouter.ai/docs/guides/routing/provider-selection),
 and [Voyage reranking API](https://docs.voyageai.com/reference/reranker-api).
+
+## NVIDIA and CPU outage fallback
+
+NVIDIA uses the fixed `https://integrate.api.nvidia.com/v1/` endpoint.
+The demo selects `nvidia/nemotron-3-ultra-550b-a55b` with thinking disabled
+for bounded structured plans and responses. JSON validation, usage caps,
+request deadlines and sanitized errors apply to this provider too.
+No automatic billed generation retries or cross-provider generation fallback are added.
+
+For Voyage outages, install `requirements-fallback.lock` (constrained by
+`requirements.lock`), run `python scripts/download_fallback_reranker.py`,
+and set `RERANK_FALLBACK_ENABLED=1`. The small pinned
+`cross-encoder/ms-marco-MiniLM-L6-v2` ONNX model runs offline on one CPU thread,
+in batches of two. The existing Mixedbread local model remains available through
+`RERANK_PROVIDER=local`; it is not loaded by the outage fallback.
+
+API transport errors, failed status responses, malformed rankings and an open
+Voyage circuit use local ranking. Application spending caps and exhausted turn
+deadlines still stop the request. Successful later Voyage calls resume hosted
+ranking. Provider output identifies the actual model used; authenticated dependency
+health includes fallback load state, successful fallback count and last backend.
+Only document text is truncated at 512 tokens; oversized queries fail explicitly.
+This smaller English reranker can produce different rankings from Voyage.
+
+Run `python scripts/check_fallback_reranker.py` to verify real CPU inference through
+a simulated hosted outage without sending paid requests. Docker mounts `./models`
+read-only and includes the CPU runtime, retaining the API's 1 GiB limit.

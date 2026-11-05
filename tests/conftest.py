@@ -12,10 +12,15 @@ from app import catalog
 
 @pytest.fixture(autouse=True)
 def isolate_optional_serving_features(monkeypatch):
+    monkeypatch.setenv("LLM_PROVIDER", "ollama")
+    monkeypatch.setenv("RERANK_PROVIDER", "local")
+    monkeypatch.setenv("LLM_CONTEXT_SIZE", "16384")
+    monkeypatch.setenv("LLM_MAX_TOKENS", "1024")
     monkeypatch.setenv("COMMERCE_ONLY", "0")
     monkeypatch.setenv("COMMERCE_SUMMARY_ENABLED", "0")
     monkeypatch.setenv("COMMERCE_NATURAL_REPLIES", "0")
     monkeypatch.setenv("SEARCH_WARMUP", "0")
+    monkeypatch.setenv("RERANK_FALLBACK_ENABLED", "0")
     monkeypatch.setenv("SEARCH_CACHE_REDIS_URL", "")
     monkeypatch.delenv("SEARCH_BACKEND", raising=False)
 

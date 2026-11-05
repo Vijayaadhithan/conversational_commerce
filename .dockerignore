@@ -1,6 +1,7 @@
 **
 !Dockerfile
 !requirements.lock
+!requirements-fallback.lock
 !app/
 !app/**
 !scripts/

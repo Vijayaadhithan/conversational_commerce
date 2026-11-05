@@ -27,7 +27,7 @@ jobs:
       - name: Install audit tool
         run: python -m pip install pip-audit==2.10.1
       - name: Audit locked runtime dependencies
-        run: python -m pip_audit --disable-pip --no-deps -r requirements.lock
+        run: python -m pip_audit --disable-pip --no-deps -r requirements.lock -r requirements-fallback.lock
 
   secrets:
     runs-on: ubuntu-latest

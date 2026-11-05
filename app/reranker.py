@@ -211,5 +211,15 @@ def create_reranker():
     if provider == "local":
         return LocalReranker()
     if provider == "voyage":
-        return VoyageReranker()
+        primary = VoyageReranker()
+        enabled = os.getenv("RERANK_FALLBACK_ENABLED", "0")
+        if enabled not in {"0", "1"}:
+            raise ValueError("RERANK_FALLBACK_ENABLED must be 0 or 1")
+        if enabled == "1":
+            from app.reranker_fallback import CpuFallbackReranker, RerankerWithFallback
+
+            fallback = CpuFallbackReranker()
+            fallback.check_available()
+            return RerankerWithFallback(primary, fallback)
+        return primary
     raise ValueError("RERANK_PROVIDER must be local or voyage")

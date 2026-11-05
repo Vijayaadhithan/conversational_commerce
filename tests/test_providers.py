@@ -37,6 +37,7 @@ def completion(content="Hello", reason="stop"):
     [
         ("google", "generativelanguage.googleapis.com", "/v1beta/openai/chat/completions"),
         ("groq", "api.groq.com", "/openai/v1/chat/completions"),
+        ("nvidia", "integrate.api.nvidia.com", "/v1/chat/completions"),
         ("openrouter", "openrouter.ai", "/api/v1/chat/completions"),
     ],
 )
@@ -51,6 +52,8 @@ def test_hosted_chat_security_persistence_and_json_planner(tmp_path, provider, h
         calls.append(body)
         assert request.url.path == path and body["model"] == "selected-model"
         assert "keep_alive" not in body and "options" not in body
+        if provider == "nvidia":
+            assert body["chat_template_kwargs"] == {"enable_thinking": False}
         if provider == "openrouter":
             assert body["provider"] == {
                 "allow_fallbacks": False,
@@ -282,7 +285,7 @@ def test_voyage_rejects_malformed_rankings(rows):
         engine.rank("q", ["a", "b"], min(len(rows), 2) or 1)
 
 
-@pytest.mark.parametrize("provider", ["google", "groq", "openrouter"])
+@pytest.mark.parametrize("provider", ["google", "groq", "openrouter", "nvidia"])
 def test_health_uses_selected_hosted_provider(tmp_path, provider):
     def handler(request):
         assert request.url.path.endswith("/models") and request.url.scheme == "https"

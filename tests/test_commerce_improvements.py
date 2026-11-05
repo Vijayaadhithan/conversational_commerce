@@ -173,7 +173,7 @@ def test_stream_delivers_highlight_before_completion_and_no_duplicate_on_fast_fi
     asyncio.run(check())
 
 
-@pytest.mark.parametrize("provider", ["ollama", "groq"])
+@pytest.mark.parametrize("provider", ["ollama", "groq", "nvidia"])
 def test_stream_protocol_and_final_usage(provider):
     from app.summary_stream import selection_stream
 

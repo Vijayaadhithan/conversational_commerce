@@ -14,11 +14,13 @@ from app.request_runtime import remaining_timeout
 from app.usage_budget import finish_call, reserve_call
 
 LLM_ENDPOINTS = {
+    "nvidia": "https://integrate.api.nvidia.com/v1/",
     "google": "https://generativelanguage.googleapis.com/v1beta/openai/",
     "groq": "https://api.groq.com/openai/v1/",
     "openrouter": "https://openrouter.ai/api/v1/",
 }
 KEY_NAMES = {
+    "nvidia": "NVIDIA_API_KEY",
     "google": "GOOGLE_API_KEY",
     "groq": "GROQ_API_KEY",
     "openrouter": "OPENROUTER_API_KEY",
@@ -53,7 +55,7 @@ def llm_model():
 
 def validate_llm(settings):
     if settings.provider not in {"ollama", *LLM_ENDPOINTS}:
-        raise ValueError("LLM_PROVIDER must be ollama, google, groq, or openrouter")
+        raise ValueError("LLM_PROVIDER must be ollama, google, groq, openrouter, or nvidia")
     if not settings.model.strip():
         raise ValueError("Set LLM_MODEL for the selected hosted provider")
     if not math.isfinite(settings.timeout) or not 0 < settings.timeout <= 600:
@@ -98,6 +100,8 @@ async def hosted_chat(client, settings, payload):
             "require_parameters": True,
             "allow_fallbacks": False,
         }
+    if settings.provider == "nvidia":
+        body["chat_template_kwargs"] = {"enable_thinking": False}
     breaker = circuit()
     if breaker:
         breaker.enter(settings.provider)

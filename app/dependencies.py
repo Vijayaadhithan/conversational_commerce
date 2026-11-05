@@ -124,6 +124,11 @@ async def probe_dependencies(state, model):
                 "provider": "voyage",
                 "check": "configuration_only",
                 "inference_verified": False,
+                "fallback": state.reranker.fallback.check_available()
+                if hasattr(state.reranker, "fallback")
+                else None,
+                "fallback_calls": getattr(state.reranker, "fallback_calls", 0),
+                "last_backend": getattr(state.reranker, "last_backend", None),
             }
         import importlib.util
         import os

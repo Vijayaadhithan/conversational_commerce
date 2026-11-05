@@ -142,7 +142,7 @@ def test_one_question_limit_is_checked_without_trusting_the_reviewer():
         )
 
 
-@pytest.mark.parametrize("provider", ["ollama", "google", "groq", "openrouter"])
+@pytest.mark.parametrize("provider", ["ollama", "google", "groq", "openrouter", "nvidia"])
 @pytest.mark.parametrize("accepted", [True, False])
 def test_natural_sse_replay_and_history_use_only_the_reviewed_reply(
     tmp_path, monkeypatch, provider, accepted
