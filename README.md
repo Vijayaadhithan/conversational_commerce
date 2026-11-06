@@ -1,29 +1,42 @@
 # Conversational Commerce Backend
 
-For Google AI Studio, GroqCloud, OpenRouter, and Voyage API options, see
-[model provider configuration](docs/model_providers.md) and `.env.production.example`.
+For NVIDIA, Google AI Studio, GroqCloud, OpenRouter, and Voyage API options, see
+[model provider configuration](docs/operations.md#model-providers) and `.env.production.example`.
 
 
-A local FastAPI backend for persistent conversations with Ollama, a local
+A FastAPI backend with local or hosted models for persistent conversations with Ollama, a local
 1.54B-parameter reranker, a versioned PostgreSQL fashion/beauty catalog, and Qdrant hybrid retrieval.
 
-- Chat model: `ministral-3:8b` through Ollama.
+- Chat: configurable hosted provider or `ministral-3:8b` through Ollama. The demo
+  selects NVIDIA `nvidia/nemotron-3-ultra-550b-a55b`.
 - Conversation memory: SQLite transcripts, recent turns, and rolling summaries.
 - Commerce mode: structured intent extraction, persistent shopping tasks and preferences,
   catalog recommendations with listing-based explanations, and follow-up comparisons/refinements.
 - Reranker: [Mixedbread mxbai-rerank-large-v2](https://huggingface.co/mixedbread-ai/mxbai-rerank-large-v2),
-  running through PyTorch on Apple MPS or CPU.
+  running through PyTorch on Apple MPS or CPU, or hosted Voyage with optional
+  offline MiniLM CPU fallback.
 - Catalog inputs: All Beauty, Amazon Fashion, and Beauty & Personal Care.
-- [Listing enrichment and concern explanations](docs/catalog_enrichment.md): versioned
+- [Listing enrichment and concern explanations](docs/architecture.md#catalog-and-enrichment): versioned
   metadata additions, individual concern evidence, and explicit unknown variant availability.
-- [Search and caching](docs/search.md): Qdrant retrieval, verification, and bounded Redis caching.
-- [Local Querix frontend](docs/conversations.md#local-check): connect the sibling
+- [Search and caching](docs/architecture.md#search-and-reranking): Qdrant retrieval, verification, and bounded Redis caching.
+- [Local Querix frontend](docs/development.md#local-frontend): connect the sibling
   frontend and check scoped shopping journeys.
 
 `POST /products/search` retrieves products using keyword/vector search and the
-local reranker, with structured mandatory filters. Conversations created with
+configured reranker, with structured mandatory filters. Conversations created with
 `mode: "commerce"` invoke that pipeline after extracting and validating intent.
 `POST /rerank` scores documents supplied by the caller.
+
+## Documentation
+
+Keep only this README and three maintained guides:
+
+- [Architecture](docs/architecture.md): storage, conversation and retrieval contracts.
+- [Development](docs/development.md): setup, catalog/index commands, frontend and testing.
+- [Operations](docs/operations.md): Docker, providers, security, monitoring and recovery.
+
+Update these files instead of creating additional Markdown plans, reports or handoffs.
+Keep generated test/evaluation results under ignored `data/`.
 
 ## Storage
 
@@ -145,7 +158,7 @@ starts another conversation, and `/exit` quits. Resume a saved chat with:
 Commerce mode also supports `/preferences`. It remembers requirements across
 turns and restarts, asks for missing product/recipient details, and supports
 “under $20 instead,” “more options,” “cheaper,” and “compare the first two.”
-See [conversational recommendations](docs/conversations.md) for the API, examples,
+See [conversational recommendations](docs/architecture.md#conversation-contracts) for the API, examples,
 state rules, and validation commands.
 
 ## Install the local 1.54B reranker
@@ -242,7 +255,7 @@ imports preserve the previous catalog. Repeating an import verifies and reuses
 its records; it does not append duplicates. Older snapshots remain available
 for deliberate rollback and are never pruned automatically.
 
-See [docs/catalog.md](docs/catalog.md) for the schema, sample queries, validation
+See [docs/development.md#catalog-import-and-enrichment](docs/development.md#catalog-import-and-enrichment) for the schema, sample queries, validation
 boundaries, and test commands. Build product embeddings as described below.
 
 ## Product embeddings and search
@@ -261,7 +274,7 @@ docker compose -f compose.qdrant.yml up -d
 The service setup script installs PostgreSQL and Redis; Qdrant is managed
 separately by this Compose file. Existing embeddings can be exported without model
 calls using `scripts/build_qdrant_index.py`; add `--verify-only` to verify an index.
-See [search setup and contracts](docs/search.md) for configuration and recovery.
+See [search setup and contracts](docs/architecture.md#search-and-reranking) for configuration and recovery.
 
 The existing local `embeddinggemma:latest` model produces 768-dimensional
 embeddings. This model must already be installed; setup and embedding scripts do
@@ -306,7 +319,7 @@ use the RRF baseline without that dependency:
 
 HTTP accepts `"rerank":false` for the same comparison. A requested rerank that
 fails returns 503 instead of silently falling back. `PRODUCT_RERANK_CANDIDATES`
-sets the server-side pool size (20-50). See [docs/product_reranking.md](docs/product_reranking.md).
+sets the server-side pool size (20-50). See [docs/architecture.md#search-and-reranking](docs/architecture.md#search-and-reranking).
 
 ```bash
 # Force selected products, or force an entirely new embedding generation
@@ -328,7 +341,7 @@ sets the server-side pool size (20-50). See [docs/product_reranking.md](docs/pro
 
 Replace placeholder product/build IDs with real IDs. Repeating a force flag
 starts another generation; use `--resume-build` to resume one. Explicit build
-deletion and retention details are in [docs/embedding_lifecycle.md](docs/embedding_lifecycle.md).
+deletion and retention details are in [docs/operations.md#retention-policy](docs/operations.md#retention-policy).
 
 With the backend running:
 
@@ -349,7 +362,7 @@ Results include RRF/reranker ranking signals, historical price, explicit attribu
 listing excerpts, and observation provenance. Similarity and excerpts do not
 establish medical suitability or live stock. Conversation-level preference
 handling remains a subsequent integration step. See
-[docs/search.md](docs/search.md) for build behavior and limitations.
+[docs/architecture.md#search-and-reranking](docs/architecture.md#search-and-reranking) for build behavior and limitations.
 
 ## API
 
@@ -369,7 +382,7 @@ Messages accept up to 4,000 UTF-8 bytes. JSON requests return the completed resp
 Commerce clients can request `Accept: text/event-stream` for progress, product cards,
 and evidence-grounded highlights during summary generation. Wait for `done` before
 considering the turn saved. Malformed intent receives one repair, then a clarification.
-See [conversation contracts](docs/conversations.md) for fallback and replay behavior.
+See [conversation contracts](docs/architecture.md#conversation-contracts) for fallback and replay behavior.
 
 Full conversation transcripts persist across restarts. Older turns are
 summarized to keep model input bounded; summaries are lossy. Failed inference

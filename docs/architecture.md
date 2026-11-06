@@ -1,90 +1,179 @@
-# Architecture
+# Architecture and contracts
 
 ## Request processing
 
-`app/main.py` composes the FastAPI application, provider clients, persistence,
-admission controls, and lifecycle monitoring. Route modules validate HTTP input
-and delegate to services. `chat_service.py` handles inference and bounded context;
-`conversation_service.py` checks ownership and dispatches chat versus commerce;
-`commerce_service.py` coordinates validated shopping turns and atomic persistence.
-`commerce_models.py` owns schemas, `commerce_taxonomy.py` owns the literal product
-vocabulary, and `commerce_prompts.py` owns planner instructions and examples.
-See [development standards](development.md) for module responsibilities.
+FastAPI `app/main.py` composes provider clients, persistence, admission controls
+and monitoring. Routes validate HTTP inputs; services apply ownership, inference,
+shopping policy and atomic persistence. Run one worker per conversation SQLite DB.
+The [development guide](development.md) maps modules and validation commands;
+[operations](operations.md) covers deployment, credentials and recovery.
 
-Each conversation has an owner, UUID, and SQLite transcript. User messages,
-assistant responses, state changes, and idempotency results commit together.
-Per-conversation locks serialize changes. An OS lock limits serving to one worker
-per conversation database. Authentication, request limits, and bounded model
-admission apply to local and hosted inference. See [operations](operations.md).
+SQLite stores conversations, transcripts, structured shopping state, retry records,
+users and usage accounting. PostgreSQL owns authoritative catalog snapshots and
+search-generation metadata. DuckDB writes immutable Parquet embedding batches;
+Qdrant is the online retrieval engine. Redis is an optional bounded cache.
+The sibling ETL repository normalizes source archives and publishes Parquet/JSONL.
 
-Chat context contains the system prompt, optional rolling summary, recent turns,
-and current message. At most six completed turns remain in the recent window;
-the UTF-8 budget may reduce that further. Original transcripts remain available.
-Shopping preferences use structured state rather than transcript summaries.
+## Conversation contracts
 
-## Shopping workflow
+Create a session with `POST /conversations`, using `mode: "commerce"` and an
+optional `storefront_id`. Submit messages to `/conversations/{id}/messages`.
+Authenticated ownership applies to listing, messages, preferences and deletion;
+administrators do not bypass ownership. Unknown and foreign IDs both return 404.
+`GET /conversations/{id}/messages` returns persisted history with `after` and
+`limit` pagination. `GET /conversations/{id}/preferences` exposes shopping state.
 
-The model proposes evidence-backed intent. Deterministic validation checks literal
-quotes, constraints, prices, and task scope before applying changes. Separate
-modules handle task selection, preference updates, discovery, and grounded replies.
-Each product task retains its own constraints and recommendation snapshots.
-The planner can use three recent dialogue turns as bounded, untrusted context;
-state and current-message evidence always take priority. Resets exclude earlier
-dialogue. Clarification questions use missing preferences, and compact replies
-keep complete evidence in product metadata and detailed inspections.
-Exact supported commands can bypass natural prose generation using the validated
-code renderer. Other eligible turns retain generation and review. Per-turn timing
-separates intent, search, generation and review; search instrumentation identifies
-eligibility, embeddings, Qdrant, hydration and reranking without changing ranking.
-Tasks also retain literal product feedback and the last inspected positions.
-The planner can answer questions about displayed evidence without another search,
-and validated rejections exclude those products in future searches for that task.
-Malformed intent and invalid proposals share one bounded repair attempt, then clarify
-without applying rejected changes. Business-scope classification shares the planner
-call. Natural replies use bounded evidence-cited generation and a separate semantic
-review, with code-rendered identities/prices and deterministic fallback. Generation
-cannot mutate filters or call tools; review is model-based and needs real-model
-evaluation. The legacy evidence-selection summary remains available when natural
-mode is disabled. `done` is sent only after atomic persistence. See
-[conversation contracts](conversations.md).
+A turn proposes structured intent, validates literal evidence and constraints,
+updates the selected task, retrieves eligible products when requested, and renders
+a grounded response. A malformed or invalid proposal gets at most one repair
+attempt; failed repair clarifies without applying rejected changes. Exact supported
+commands may use a deterministic fast path. Preferences live in structured state,
+not rolling chat summaries. Each task retains its constraints and displayed results.
 
-## Inference providers
+The planner receives bounded recent dialogue as untrusted context. Current input
+and saved state take priority; reset excludes earlier dialogue. Follow-ups such as
+more, cheaper, details, comparison and feedback refer to task-specific results.
+Questions about displayed products need not search again. Rejected products can
+be excluded from subsequent results. Multiple product clauses retain separate
+budgets and concerns; uncertainty prompts clarification instead of invented filters.
 
-Chat supports Ollama, Google AI Studio, GroqCloud, and OpenRouter. Embeddings
-support Ollama and Google AI Studio. Reranking supports the local Mixedbread
-model and Voyage. Components are configured independently. See
-[provider configuration](model_providers.md) for credentials and migration.
+Natural replies use evidence-cited generation and a separate model review. Product
+identities/prices are rendered by code. Rejected or oversized generated text falls
+back to a validated deterministic reply. Generation cannot modify filters or call
+tools. This review is not a guarantee of factual accuracy or recommendation quality.
+The optional older evidence-selection summary applies when natural mode is disabled.
 
-Local reranking loads pinned files without remote model code. Hosted calls use
-fixed HTTPS endpoints, bounded timeouts, and sanitized errors. Provider changes
-do not bypass authentication, evidence validation, or mandatory search filters.
+With `Accept: text/event-stream`, the API emits progress, commerce metadata and
+reply deltas. Only reviewed content is sent as the answer. The terminal `done`
+event follows atomic persistence of both messages, shopping state and replay data.
+Disconnects do not imply a failed commit: retry with the same idempotency key.
+Chat-mode context contains a system prompt, rolling summary and up to six recent
+turns bounded by UTF-8 bytes; original transcripts remain stored separately.
 
-## Retrieval and storage
+## Storefront isolation
 
-The separate ETL repository uses DuckDB to normalize and validate source archives,
-then publishes versioned Parquet and JSONL. PostgreSQL stores authoritative product
-snapshots, hard-filter projections, and generation metadata. Backend DuckDB writes
-immutable, checksummed Parquet embedding batches; PostgreSQL stores only their
-references. These snapshots support reuse, verification, and Qdrant rebuilds.
-Conversation SQLite is independent live state.
+Beauty, clothing, footwear and fashion sessions have separate state. The frontend
+keeps section-specific cookies and the backend enforces the recorded storefront.
+A cross-section request produces a handoff instead of silently changing the session.
+Mixed requests cannot pull out-of-section products into the current storefront.
+Storefront isolation and conversation ownership do not provide private tenant
+catalog isolation; catalog/Qdrant/cache tenant scope is separate future work.
 
-Qdrant is the only online candidate-retrieval engine: native BM25 and dense cosine
-search return candidates, which the backend fuses with RRF. Mandatory SQL eligibility
-and storefront rules restrict both branches before retrieval. Product facts are
-hydrated from the same pinned PostgreSQL snapshot. Shared listing evidence and
-reranking preserve the response contract. See [search](search.md).
+## Catalog and enrichment
 
-The builder finishes and verifies the Qdrant collection before publishing catalog
-and search pointers. Queries require that exact ready collection, including before
-serving cached results. Qdrant errors fail explicitly; PostgreSQL is not an online
-fallback. Redis caches are bounded and include generation, collection, retrieval
-mode, model identity, request constraints, and ranking-code identity.
+Imports verify completed ETL manifests, selected source records and schema before
+publishing immutable catalog snapshots. Applied SQL migrations are checksummed;
+add migrations instead of changing previously applied files. Catalog staging leaves
+the active serving generation unchanged until a compatible index is verified.
 
-See [catalog storage](catalog.md), [embedding lifecycle](embedding_lifecycle.md),
-[operations and retention](operations.md), and [reranking](product_reranking.md).
+Enrichment keeps selected product IDs, order, prices and observations. It adds
+source-backed attributes and concern evidence to a separate snapshot; it does not
+expand the sample or infer missing stock, ingredients or variant availability.
+Marketing mentions remain listing claims, with source fields and excerpts retained.
+The parent-product dataset does not establish current prices, inventory, medical
+outcomes or complete purchasable variant coverage.
 
-## Boundaries
+## Search and reranking
 
-Catalog snapshots do not establish current stock, prices, medical outcomes, or
-complete ingredient and variant coverage. Distributed admission, identity
-federation, and approximate-search quality validation remain separate work.
+```json
+{
+  "query": "moisturizer for dry skin",
+  "filters": {
+    "domain": "beauty",
+    "family": "skin_care",
+    "max_price": "30.00",
+    "attributes": {"fragrance_free": true}
+  },
+  "limit": 5,
+  "rerank": true
+}
+```
+
+Send to `POST /products/search`, or use:
+
+```bash
+.venv/bin/python scripts/search_products.py 'moisturizer for dry skin' \
+  --filters '{"domain":"beauty","family":"skin_care","max_price":"30.00","attributes":{"fragrance_free":true}}'
+```
+
+Query text must fit 1,000 UTF-8 bytes; limits are 1-20 products. Invalid fields,
+price ranges, and unsupported attribute filters return 422 from HTTP. SQL uses
+bound values. Database/service/build errors return 503 without connection-string
+disclosure. Search uses a read-only repeatable-read transaction to pin one
+catalog/build for the entire request.
+
+Mandatory filters are structured: domain, family, exact case-insensitive brand,
+minimum/maximum historical USD price, explicit attribute values, and up to 100
+excluded product IDs. Attribute text matches the entire observed value,
+case-insensitively; it does not split ambiguous compound labels. Only
+`fragrance_free` accepts a boolean. Unknown, missing, and conflicting values are
+not inferred as a match. Stock and detailed purchasable variant availability are
+unknown in this parent-product catalog, so corresponding filters are unsupported.
+
+The query text supplies relevance; it is not currently a natural-language filter
+parser. A budget or mandatory attribute mentioned only in query text is not
+enforced automatically. The response exposes `filters_applied` and
+`constraints_source: structured_filters` for downstream conversation planning.
+
+Both Qdrant branches use identical eligible IDs before their top-50 limits:
+
+1. Qdrant native `qdrant/bm25`, English tokenization and IDF.
+2. Dense cosine retrieval with `QDRANT_EXACT=1`; set it to `0` only after evaluating ANN.
+3. Reciprocal rank fusion with constant 60 and product-ID tie breaks.
+4. Hydration from the same pinned PostgreSQL catalog snapshot.
+5. Configured reranking of eligible candidates, followed by listing-evidence ordering.
+
+Qdrant is required for online search and index publication. Remove the retired
+`SEARCH_BACKEND` setting; a legacy `postgres` value is rejected with an explicit error.
+`QDRANT_URL`, optional `QDRANT_API_KEY`, and `QDRANT_COLLECTION_PREFIX` configure the
+service. The Compose file pins the server, binds it to loopback, and retains a named
+storage volume. Stop it with `docker compose -f compose.qdrant.yml down`, without volumes.
+
+PostgreSQL computes exact eligibility first. `QDRANT_MAX_ELIGIBLE` bounds this set at
+100,000 by default; over-limit requests fail rather than silently truncating results.
+Collections are named from the index contract and full build ID. Readiness validates
+the registered collection, vector contract, and point count before any cache hit.
+There is no automatic or selectable PostgreSQL online fallback.
+
+The standalone exporter can rebuild Qdrant from retained Parquet embedding snapshots without
+model calls: `.venv/bin/python scripts/build_qdrant_index.py`. A damaged ready collection
+is not repaired in place; export to a new `QDRANT_COLLECTION_PREFIX`, verify it, and then
+restart the API with that prefix. Keep the previous verified generation for rollback.
+
+The RRF
+candidate pool is bounded and does not guarantee that every relevant product
+appears in the final ranking. Similarity/RRF scores are not calibrated relevance
+or suitability probabilities, and semantic search can return weak matches.
+
+Results retain listing claims, historical price context, selected observation
+provenance, and contiguous listing excerpts with matched terms and original
+field references. Excerpts show lexical overlap, not a medical explanation or
+independent confirmation of suitability. Products with no mandatory matches
+return an empty result; the backend does not relax constraints to fill a page.
+
+Reranking uses only already eligible candidates; it cannot relax filters or add
+products. `PRODUCT_RERANK_CANDIDATES` sets the default pool (20–50). Validated
+indices/scores map back to original IDs, provenance and listing evidence. Ties
+retain deterministic ordering. API metadata identifies the actual model/device.
+Voyage can fall back to a small local CPU model; see [providers](operations.md#model-providers).
+
+## Embedding lifecycle and cache
+
+A generation pins the catalog, input producer/version, model identity, dimensions
+and vector files. Reuse requires the same selected-input hash and complete embedding
+contract. Changed text/model contracts require new inference; metadata-only changes
+can reuse compatible vectors while hydrating current facts. Each generation is a
+complete immutable snapshot, even when most vectors were reused.
+
+The builder verifies Qdrant before atomically publishing catalog/search pointers.
+Completed batches survive failure and can resume the same build. Concurrent catalog
+changes prevent publication. Missing products disappear from the next active snapshot.
+Switching embedding providers requires a new compatible generation; never mix query
+vectors from a new provider with an old index. Hosted identity is a contract hash,
+not proof that provider weights have stayed unchanged.
+
+Cache keys include generation, collection, retrieval mode, model identity, constraints
+and ranking-code identity. Queries validate the active collection before serving a
+cache hit. Redis failures do not disable search. Qdrant failures do: PostgreSQL is
+not an online fallback. Retain PostgreSQL metadata and Parquet snapshots together
+so Qdrant can be rebuilt without paid inference.

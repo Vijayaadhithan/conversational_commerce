@@ -1,0 +1,3 @@
+# Reviewed false positive: Docker rollback image tag in a historical deployment report.
+# Exact commit/file/rule/line only; do not exclude the file, commit, or generic-api-key rule.
+77df6a39a8382b80ab877c54ba855eb60812402c:docs/nvidia_deployment_validation.md:generic-api-key:51
