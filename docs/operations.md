@@ -579,3 +579,40 @@ multiple API replicas, broad human relevance evaluation and sustained capacity
 validation remain separate work. Local backup files alone do not protect against
 server loss. `scripts/load_test.py` uses real models and temporary conversations;
 run it deliberately, and report failures as well as latency.
+
+## Private tester accounts
+
+Bootstrap once through trusted server access, using a private output file:
+
+```bash
+sh scripts/server_compose.sh --profile tools run --rm --no-deps tools \
+  python scripts/bootstrap_portal.py --username admin \
+  --output data/credentials/portal-admin-initial.json
+```
+
+Sign in at `https://querix.co/commerce/login` and replace the temporary password.
+Remove the initial credentials file after changing it. The admin panel at
+`/commerce/admin` creates users, changes their category grants, disables accounts,
+resets passwords, and deletes accounts with optional history deletion. Deletion
+retains a disabled identity tombstone for audit/usage accounting and reserves the
+username; it never retains a usable password. Existing backups are unaffected.
+
+The frontend Worker service identity must have `portal` scope only. It may call
+`/portal/login` but cannot search or access conversations. Browser shopping and
+admin calls carry individual portal sessions; operational API tokens stay separate.
+Private Worker bindings and model/provider environment settings do not change.
+Portal accounts cannot bypass password/session revocation using legacy API tokens.
+
+Sessions expire after eight hours, with up to five concurrent sessions per user.
+Password change/reset and account disabling revoke all sessions. Category changes
+are checked on every new request, including history and replay, and again before
+committing a commerce turn. Previously delivered data cannot be recalled. The UI
+refreshes permissions on focus and every 30 seconds. New accounts require a password
+change before shopping/admin actions. Password hashes use Argon2id (19 MiB, two
+iterations, one lane); two concurrent hashing operations bound CPU/RAM use. Login
+is limited globally and to five attempts per username per 15-minute window.
+
+Back up the SQLite database consistently: it now contains account hashes, sessions,
+grants and the audit trail as well as conversation state. Never delete it to clear
+chat history. During rollback preserve the additive portal tables and keep the
+Worker token restricted; rolling back to anonymous browsing requires explicit review.

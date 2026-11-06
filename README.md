@@ -411,3 +411,11 @@ With Ollama and the backend running, check actual chat recall over nine turns:
 
 That smoke test deletes its temporary conversation. The separate reranker check
 runs local scoring and saves its observed device/results under `data/`.
+
+## Private tester access
+
+The Querix frontend provides `/commerce/login`, `/demo/commerce`, and
+`/commerce/admin`. Administrators create tester accounts and assign Clothing,
+Beauty & personal care, Footwear, and Fashion accessories independently. Passwords
+use Argon2id; only generated temporary passwords are shown once. See
+[operations](docs/operations.md#private-tester-accounts) for initial setup.

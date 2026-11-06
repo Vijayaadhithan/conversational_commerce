@@ -10,8 +10,11 @@ from pathlib import Path
 
 import httpx
 from fastapi import FastAPI
+from fastapi.exception_handlers import request_validation_exception_handler
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse
 
-from app import routes_conversations, routes_operations, routes_search
+from app import routes_conversations, routes_operations, routes_portal, routes_search
 from app.api_access import RequestAccess
 from app.api_schema import configure_schema
 from app.chat_service import ChatService
@@ -150,9 +153,20 @@ def create_app(
                 app.state.metrics.increment("monitor_failures_total")
             await asyncio.sleep(operations.monitor_interval)
 
+    routes_portal.register_routes(app, access)
     routes_conversations.register_routes(app, access, service)
     routes_search.register_routes(app, access)
     routes_operations.register_routes(app, settings, operations, refresh_status)
+
+    @app.exception_handler(RequestValidationError)
+    async def validation_error(request, exc):
+        if request.url.path.startswith("/portal/"):
+            return JSONResponse(
+                {"detail": "Check the username, password length and account fields"},
+                status_code=422,
+            )
+        return await request_validation_exception_handler(request, exc)
+
     configure_schema(app, operations)
     return app
 

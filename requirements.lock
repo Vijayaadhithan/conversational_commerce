@@ -30,3 +30,8 @@ typing-extensions==4.16.0
 typing-inspection==0.4.4
 uvicorn==0.54.0
 async-timeout==5.0.1; python_full_version < "3.11.3"
+
+argon2-cffi==25.1.0
+argon2-cffi-bindings==26.1.0
+cffi==2.1.1
+pycparser==3.12

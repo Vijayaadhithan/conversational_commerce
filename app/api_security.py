@@ -9,10 +9,11 @@ from uuid import uuid4
 
 from fastapi import HTTPException
 
+from app.portal_store import PortalStore
 from app.security_migrations import migrate_security
 
 
-class SecurityStore:
+class SecurityStore(PortalStore):
     def initialize_security(self):
         with self.connect() as db:
             db.executescript("""
@@ -29,6 +30,7 @@ class SecurityStore:
                 CREATE INDEX IF NOT EXISTS conversations_owner ON conversations(owner_id,updated_at);
             """)
             migrate_security(db)
+        self.initialize_portal()
 
     def issue_token(self, name, role="user", *, expires_in=None, label="", scopes="*"):
         if expires_in is not None and not 0 < expires_in <= 366 * 86400:
@@ -36,9 +38,9 @@ class SecurityStore:
         if len(label) > 120 or not name.strip() or len(name) > 120:
             raise ValueError("Token label and user name must fit within 120 characters")
         if scopes != "*" and (
-            not scopes or not set(scopes.split(",")) <= {"shopping", "rerank", "ops"}
+            not scopes or not set(scopes.split(",")) <= {"shopping", "rerank", "ops", "portal"}
         ):
-            raise ValueError("Scopes must be shopping, rerank, ops or *")
+            raise ValueError("Scopes must be shopping, rerank, ops, portal or *")
         token = secrets.token_urlsafe(32)
         stamp = time.time()
         with self.connect() as db:
@@ -72,10 +74,11 @@ class SecurityStore:
         with self.connect() as db:
             row = db.execute(
                 """SELECT u.id,u.role,t.scopes FROM api_tokens t JOIN api_users u ON u.id=t.user_id
-                WHERE t.digest=? AND t.revoked=0 AND (t.expires_at IS NULL OR t.expires_at>?)""",
+                WHERE t.digest=? AND t.revoked=0 AND (t.expires_at IS NULL OR t.expires_at>?)
+                AND NOT EXISTS (SELECT 1 FROM portal_accounts p WHERE p.user_id=u.id)""",
                 (hashlib.sha256(token.encode()).hexdigest(), time.time()),
             ).fetchone()
-        return dict(row) if row else None
+        return dict(row) if row else self.authenticate_portal(token)
 
     def revoke_token(self, token_id):
         with self.connect() as db:
@@ -183,4 +186,5 @@ class SecurityStore:
             owner == "local-development" and record.get("owner_id") is None
         ):
             raise HTTPException(404, "Conversation not found")
+        self.check_storefront(owner, record.get("storefront_id"))
         return record

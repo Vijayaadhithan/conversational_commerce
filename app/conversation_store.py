@@ -71,6 +71,7 @@ class Store(SecurityStore):
     def create(
         self, title, mode="chat", owner="local-development", identity=None, storefront_id=None
     ):
+        self.check_storefront(owner, storefront_id)
         record = dict(
             id=str(uuid4()),
             title=title,
@@ -80,6 +81,8 @@ class Store(SecurityStore):
             storefront_id=storefront_id,
         )
         with self.connect() as db:
+            db.execute("BEGIN IMMEDIATE")
+            self.check_storefront(owner, storefront_id, db)
             db.execute(
                 "INSERT INTO conversations(id,title,mode,created_at,updated_at,owner_id,storefront_id) VALUES (:id,:title,:mode,:created_at,:updated_at,:owner,:storefront_id)",
                 dict(record, owner=owner),
@@ -98,13 +101,27 @@ class Store(SecurityStore):
         record["shopping_state"] = json.loads(record["shopping_state"])
         return record
 
-    def list(self, limit, offset, owner="local-development"):
+    def list(self, limit, offset, owner="local-development", storefront_id=None):
         with self.connect() as db:
+            allowed = self.allowed_storefronts(db, owner)
+            clauses = ["(owner_id=? OR (owner_id IS NULL AND ?='local-development'))"]
+            args = [owner, owner]
+            if storefront_id is not None:
+                self.check_storefront(owner, storefront_id, db)
+                clauses.append("storefront_id=?")
+                args.append(storefront_id)
+            if allowed is not None:
+                if not allowed:
+                    return []
+                clauses.append("storefront_id IN (" + ",".join("?" for _ in allowed) + ")")
+                args.extend(allowed)
             return [
                 dict(r)
                 for r in db.execute(
-                    "SELECT id,title,mode,created_at,updated_at,storefront_id FROM conversations WHERE owner_id=? OR (owner_id IS NULL AND ?='local-development') ORDER BY updated_at DESC LIMIT ? OFFSET ?",
-                    (owner, owner, limit, offset),
+                    "SELECT id,title,mode,created_at,updated_at,storefront_id FROM conversations WHERE "
+                    + " AND ".join(clauses)
+                    + " ORDER BY updated_at DESC LIMIT ? OFFSET ?",
+                    [*args, limit, offset],
                 )
             ]
 
@@ -146,6 +163,8 @@ class Store(SecurityStore):
     ):
         with self.connect() as db:
             check_deadline()
+            db.execute("BEGIN IMMEDIATE")
+            self.check_commit_access(db, conversation_id)
             stamp = now()
             changed = db.execute(
                 """UPDATE conversations SET shopping_state=?,state_version=state_version+1,
@@ -156,6 +175,10 @@ class Store(SecurityStore):
                 raise HTTPException(
                     409, "Conversation changed during this request; reload before retrying"
                 )
+            db.execute(
+                "UPDATE conversations SET title=? WHERE id=? AND state_version=1 AND mode='commerce'",
+                (user[:80], conversation_id),
+            )
             db.execute(
                 "INSERT INTO messages(conversation_id,role,content,created_at) VALUES (?, 'user', ?, ?)",
                 (conversation_id, user, stamp),
@@ -179,6 +202,8 @@ class Store(SecurityStore):
         # Save the whole turn and its memory together, only after successful inference.
         with self.connect() as db:
             check_deadline()
+            db.execute("BEGIN IMMEDIATE")
+            self.check_commit_access(db, conversation_id)
             stamp = now()
             db.execute(
                 "UPDATE conversations SET summary=?,summarized_through=?,updated_at=? WHERE id=?",

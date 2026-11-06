@@ -161,7 +161,9 @@ class OperationalMiddleware:
                     (b"x-request-id", request_id.encode()),
                     (b"x-content-type-options", b"nosniff"),
                 ]
-                if scope["path"].startswith(("/conversations", "/products", "/rerank", "/ops/")):
+                if scope["path"].startswith(
+                    ("/conversations", "/products", "/rerank", "/ops/", "/portal/")
+                ):
                     if not any(key.lower() == b"cache-control" for key, _ in message["headers"]):
                         message["headers"].append((b"cache-control", b"no-store"))
             await asyncio.wait_for(send(message), timeout=self.settings.write_timeout)
@@ -210,11 +212,21 @@ class OperationalMiddleware:
             else:
                 principal = {"id": "local-development", "role": "admin"}
             scope["state"]["principal"] = principal
+            if principal.get("must_change_password") and scope["path"] not in {
+                "/portal/me",
+                "/portal/password",
+                "/portal/logout",
+            }:
+                return await respond(403, "Change your temporary password before continuing")
             if not public and principal.get("scopes", "*") != "*":
                 needed = (
                     "ops"
                     if scope["path"].startswith("/ops/")
-                    else ("rerank" if scope["path"] == "/rerank" else "shopping")
+                    else (
+                        "portal"
+                        if scope["path"].startswith("/portal/")
+                        else ("rerank" if scope["path"] == "/rerank" else "shopping")
+                    )
                 )
                 if needed not in principal["scopes"].split(","):
                     return await respond(403, "Token does not permit this operation")

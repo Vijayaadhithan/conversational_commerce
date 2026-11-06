@@ -11,6 +11,7 @@ from app.api_models import ChatRequest, NewConversation
 from app.commerce_models import preference_view, shopping_state_for
 from app.commerce_stream import ProgressQueue, stream_turn
 from app.operations import finish_on_disconnect
+from app.storefronts import StorefrontID
 
 
 def register_routes(app, access, service):
@@ -21,6 +22,11 @@ def register_routes(app, access, service):
         )
         if service.settings.commerce_only and mode != "commerce":
             raise HTTPException(422, "This deployment supports shopping conversations only")
+        await app.state.db_call(
+            app.state.store.check_storefront, access.owner(request), body.storefront_id
+        )
+        if request.state.principal.get("kind") == "portal" and mode != "commerce":
+            raise HTTPException(422, "Choose a shopping category")
         identity, replay = await access.claim(request, "create", body)
         if replay is not None:
             return replay
@@ -38,11 +44,14 @@ def register_routes(app, access, service):
 
     @app.get("/conversations")
     async def list_conversations(
-        request: Request, limit: int = Query(50, ge=1, le=100), offset: int = Query(0, ge=0)
+        request: Request,
+        limit: int = Query(50, ge=1, le=100),
+        offset: int = Query(0, ge=0),
+        storefront_id: StorefrontID | None = None,
     ):
         return {
             "conversations": await app.state.db_call(
-                app.state.store.list, limit, offset, access.owner(request)
+                app.state.store.list, limit, offset, access.owner(request), storefront_id
             )
         }
 
