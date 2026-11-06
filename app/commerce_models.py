@@ -52,7 +52,7 @@ class Change(BaseModel):
 
 
 class TaskRequest(BaseModel):
-    """One verbatim, independently scoped part of a multi-product message."""
+    """One product scope; shared concerns may join independently verified source spans."""
 
     model_config = ConfigDict(extra="forbid")
     evidence: str = Field(min_length=1, max_length=1000)

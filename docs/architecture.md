@@ -36,6 +36,9 @@ more, cheaper, details, comparison and feedback refer to task-specific results.
 Questions about displayed products need not search again. Rejected products can
 be excluded from subsequent results. Multiple product clauses retain separate
 budgets and concerns; uncertainty prompts clarification instead of invented filters.
+A bare coordinated list can share a trailing literal concern, such as shampoo and
+conditioner for dandruff. Each preference still cites actual message text; separate
+clauses, prices, recipients and hard filters are never copied between tasks.
 
 Natural replies use evidence-cited generation and a separate model review. Product
 identities/prices are rendered by code. Rejected or oversized generated text falls

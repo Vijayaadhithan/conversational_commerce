@@ -917,3 +917,275 @@ def test_task_suffix_does_not_swallow_freeform_or_negated_requests(message):
     from app.commerce import direct_plan
 
     assert direct_plan(message) is None
+
+
+@pytest.mark.parametrize(
+    "message",
+    [
+        "shampoo and hair conditioner for dandruff",
+        "i need shampoo and hair conditioner for dandruff",
+        "shampoo and hair conditioner for dandruf",
+        "shampoo and hair conditioner for dry hair",
+    ],
+)
+@pytest.mark.parametrize("shape", ["expanded", "literal", "top_level", "flat"])
+def test_coordinated_products_keep_the_same_literal_concern(message, shape):
+    need = message.split(" for ", 1)[1]
+    first = message.split(" and ", 1)[0]
+    requests = [
+        {
+            "evidence": "shampoo for " + need if shape == "expanded" else first,
+            "changes": [change("query", "shampoo", "shampoo")],
+        },
+        {
+            "evidence": "hair conditioner for " + need,
+            "changes": [change("query", "hair conditioner", "hair conditioner")],
+        },
+    ]
+    changes = []
+    if shape == "expanded":
+        for request in requests:
+            request["changes"].append(change("need", need, need))
+    elif shape == "literal":
+        requests[1]["changes"].append(change("need", need, need))
+    else:
+        changes = [change("need", need, need)]
+    if shape == "flat":
+        changes += [change("query", "shampoo and hair conditioner", "shampoo and hair conditioner")]
+        requests = []
+    search = Search()
+    proposal = IntentPlan.model_validate(plan("search", message, *changes, requests=requests))
+    state, result = handle_turn({}, proposal, message, search.search)
+    assert result["action"] == "multi" and len(state.tasks) == 2
+    assert len(search.calls) == 2
+    for task, request in zip(state.tasks, search.calls):
+        assert task.need == need and need in request.query
+        assert task.filters.max_price is None and task.filters.attributes == {}
+        assert all(item.evidence in message for item in task.needs)
+    assert "conditioner" not in search.calls[0].query
+    assert "shampoo" not in search.calls[1].query
+
+
+def test_shared_concern_is_not_limited_to_a_named_hair_condition():
+    message = "dress and shoes for a wedding"
+    proposal = IntentPlan.model_validate(
+        plan("search", message, change("need", "a wedding", "a wedding"))
+    )
+    state, result = handle_turn({}, proposal, message, Search().search)
+    assert result["action"] == "multi"
+    assert [task.need for task in state.tasks] == ["a wedding", "a wedding"]
+
+
+@pytest.mark.parametrize(
+    "message",
+    [
+        "shampoo for dandruff and conditioner for dry hair",
+        "shampoo. Hair conditioner for dry hair",
+        "shampoo; hair conditioner for dry hair",
+        "red shampoo and hair conditioner for dry hair",
+    ],
+)
+def test_shared_concern_does_not_cross_independent_product_clauses(message):
+    # A model must not transfer the last product's concern to an earlier qualified clause.
+    from app.commerce_requests import multi_requests
+
+    proposal = IntentPlan.model_validate(
+        plan(
+            "search",
+            message,
+            requests=[
+                {
+                    "evidence": message.split(" and ")[0].split(".")[0].split(";")[0],
+                    "changes": [change("need", "dry hair", "dry hair")],
+                },
+                {"evidence": "conditioner for dry hair", "changes": []},
+            ],
+        )
+    )
+    with pytest.raises(IntentError):
+        multi_requests(proposal, message)
+
+
+def test_shared_concern_does_not_legalize_manufactured_preference_quotes():
+    message = "shampoo and conditioner for dandruff"
+    proposal = IntentPlan.model_validate(
+        plan(
+            "search",
+            message,
+            requests=[
+                {
+                    "evidence": "shampoo for dandruff",
+                    "changes": [
+                        change("query", "shampoo", "shampoo for dandruff"),
+                        change("need", "dandruff", "dandruff"),
+                    ],
+                },
+                {"evidence": "conditioner for dandruff", "changes": []},
+            ],
+        )
+    )
+    with pytest.raises(IntentError):
+        handle_turn({}, proposal, message, Search().search)
+
+
+def test_shared_concern_preserves_existing_budgets_and_scoped_followups(tmp_path):
+    message = "shampoo and hair conditioner for dandruff"
+    initial = plan(
+        "search",
+        message,
+        requests=[
+            {
+                "evidence": "shampoo for dandruff",
+                "changes": [
+                    change("query", "shampoo", "shampoo"),
+                    change("need", "dandruff", "dandruff"),
+                ],
+            },
+            {
+                "evidence": "hair conditioner for dandruff",
+                "changes": [
+                    change("query", "hair conditioner", "hair conditioner"),
+                    change("need", "dandruff", "dandruff"),
+                ],
+            },
+        ],
+    )
+    config, app, _ = harness(
+        tmp_path,
+        {
+            message: initial,
+            "shampoo under $10": plan(
+                "refine", "shampoo under $10", change("max_price", "10", "$10")
+            ),
+        },
+    )
+    with TestClient(app) as client:
+        app.state.product_search = Search()
+        session = client.post(
+            "/conversations", json={"mode": "commerce", "storefront_id": "beauty"}
+        ).json()["id"]
+        saved = ShoppingState(
+            storefront_id="beauty",
+            active_task_id=1,
+            tasks=[
+                ShoppingTask(
+                    id=1,
+                    query="shampoo",
+                    filters=ProductFilters(domain="beauty", family="hair_care", max_price=15),
+                ),
+                ShoppingTask(
+                    id=2,
+                    query="hair conditioner",
+                    filters=ProductFilters(domain="beauty", family="hair_care", max_price=25),
+                ),
+            ],
+        )
+        app.state.store.commit_commerce_turn(session, "initial", saved, {"reply": "saved"}, 0)
+        result = commerce(client, session, message)
+        tasks = result["preferences"]["tasks"]
+        assert result["action"] == "multi" and not result.get("validation_recovered")
+        assert len(tasks) == 2 and [t["need"] for t in tasks] == ["dandruff", "dandruff"]
+        assert [t["filters"]["max_price"] for t in tasks] == ["15", "25"]
+        result = commerce(client, session, "shampoo under $10")
+        assert result["preferences"]["tasks"][0]["filters"]["max_price"] == "9.99"
+        assert result["preferences"]["tasks"][1]["filters"]["max_price"] == "25"
+        history = client.get(f"/conversations/{session}/messages").json()["messages"]
+        assert history[-3]["commerce"]["action"] == "multi"
+    with TestClient(create_app(config)) as client:
+        assert client.get(f"/conversations/{session}/messages").json()["messages"] == history
+
+
+def test_shared_compound_concern_is_saved_once_per_product():
+    message = "shampoo and conditioner for dry hair and frizz"
+    proposal = IntentPlan.model_validate(
+        plan(
+            "search",
+            message,
+            requests=[
+                {
+                    "evidence": "shampoo for dry hair and frizz",
+                    "changes": [
+                        change("query", "shampoo", "shampoo"),
+                        change("need", "dry hair", "dry hair"),
+                        change("need", "frizz", "frizz"),
+                    ],
+                },
+                {
+                    "evidence": "conditioner for dry hair and frizz",
+                    "changes": [
+                        change("query", "conditioner", "conditioner"),
+                        change("need", "dry hair", "dry hair"),
+                        change("need", "frizz", "frizz"),
+                    ],
+                },
+            ],
+        )
+    )
+    state, result = handle_turn({}, proposal, message, Search().search)
+    assert result["action"] == "multi"
+    assert [task.need for task in state.tasks] == ["dry hair and frizz"] * 2
+    assert all(len(task.needs) == 1 for task in state.tasks)
+
+
+def test_mixed_top_level_and_nested_product_plan_preserves_typo_and_all_products():
+    message = "shampoo and conditioner for dandruf"
+    proposal = IntentPlan.model_validate(
+        plan(
+            "search",
+            message,
+            change("query", "shampoo", "shampoo"),
+            change("need", "dandruf", "dandruf"),
+            requests=[
+                {
+                    "evidence": "conditioner for dandruf",
+                    "changes": [
+                        change("query", "conditioner", "conditioner"),
+                        change("need", "dandruf", "dandruf"),
+                    ],
+                }
+            ],
+        )
+    )
+    state, result = handle_turn({}, proposal, message, Search().search)
+    assert result["action"] == "multi"
+    assert [task.query for task in state.tasks] == ["shampoo", "conditioner"]
+    assert [task.need for task in state.tasks] == ["dandruf", "dandruf"]
+
+
+def test_reordered_product_plan_uses_evidence_not_array_position():
+    message = "shampoo under $15 and conditioner under $25"
+    proposal = IntentPlan.model_validate(
+        plan(
+            "search",
+            message,
+            requests=[
+                {
+                    "evidence": "conditioner under $25",
+                    "changes": [change("max_price", "25", "$25")],
+                },
+                {"evidence": "shampoo under $15", "changes": [change("max_price", "15", "$15")]},
+            ],
+        )
+    )
+    state, result = handle_turn({}, proposal, message, Search().search)
+    assert result["action"] == "multi"
+    assert [task.query for task in state.tasks] == ["shampoo", "conditioner"]
+    assert [str(task.filters.max_price) for task in state.tasks] == ["14.99", "24.99"]
+
+
+def test_duplicate_product_proposals_fail_without_searching():
+    message = "shampoo under $15 and conditioner under $25"
+    proposal = IntentPlan.model_validate(
+        plan(
+            "search",
+            message,
+            requests=[
+                {"evidence": "shampoo", "changes": []},
+                {"evidence": "shampoo", "changes": []},
+            ],
+        )
+    )
+    search = Search()
+    with pytest.raises(IntentError):
+        handle_turn({}, proposal, message, search.search)
+    assert not search.calls
