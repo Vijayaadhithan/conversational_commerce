@@ -13,7 +13,7 @@ CONTEXT_WORDS = set(
 )
 
 
-def semantic_product_family(plan, message, *, storefront_id=None):
+def semantic_product_scope(plan, message, *, storefront_id=None):
     """Classify an explicit unfamiliar product within its planner-selected section.
 
     The model classifies the user's literal goal, not catalog facts or new requirements.
@@ -21,7 +21,8 @@ def semantic_product_family(plan, message, *, storefront_id=None):
     """
     if plan.scope != "shopping" or plan.recommendation_requested is not True:
         return None
-    section = STOREFRONTS.get(plan.requested_storefront or storefront_id, {})
+    scope = plan.requested_storefront or storefront_id
+    section = STOREFRONTS.get(scope, {})
     families = section.get("families", ())
     if not families:
         return None
@@ -39,8 +40,6 @@ def semantic_product_family(plan, message, *, storefront_id=None):
         or not (set(re.findall(r"\w+", normalized(goal.value))) - CONTEXT_WORDS)
     ):
         return None
-    if len(families) == 1:
-        return families[0]
     classified = {
         change.value
         for change in plan.changes
@@ -50,4 +49,12 @@ def semantic_product_family(plan, message, *, storefront_id=None):
         and evidence_ok(change.evidence, message)
         and evidence_ok(goal.value, change.evidence)
     }
-    return classified.pop() if len(classified) == 1 else None
+    family = (
+        families[0] if len(families) == 1 else classified.pop() if len(classified) == 1 else None
+    )
+    return {"storefront_id": scope, "domain": section["domain"], "family": family}
+
+
+def semantic_product_family(plan, message, *, storefront_id=None):
+    scope = semantic_product_scope(plan, message, storefront_id=storefront_id)
+    return scope["family"] if scope else None

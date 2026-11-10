@@ -5,7 +5,7 @@ from decimal import Decimal
 from difflib import SequenceMatcher
 
 from app.commerce_errors import IntentError, PreferenceConflict
-from app.commerce_goals import semantic_product_family
+from app.commerce_goals import semantic_product_family, semantic_product_scope
 from app.commerce_models import (
     Change,
     Concern,
@@ -30,9 +30,9 @@ from app.search_normalization import normalize_search
 def apply_changes(task, plan, message, *, storefront_id=None):
     fields = task.filters.model_dump(mode="json")
     scope = plan.requested_storefront or storefront_id or task.filters.storefront_id
-    semantic_family = semantic_product_family(plan, message, storefront_id=scope)
-    if semantic_family:
-        fields.update(domain=FAMILIES[semantic_family][0], family=semantic_family)
+    semantic_scope = semantic_product_scope(plan, message, storefront_id=scope)
+    if semantic_scope:
+        fields.update(domain=semantic_scope["domain"], family=semantic_scope["family"])
     changed = set()
     effective = []
     # Older sessions stored one concern string. Preserve it and its original evidence.
@@ -159,7 +159,14 @@ def apply_changes(task, plan, message, *, storefront_id=None):
                 raise IntentError("Negated preference cannot become a positive requirement")
             if key == "query" and value:
                 proposed, supported = matching_families(value), matching_families(change.evidence)
-                if (not proposed or not set(proposed) & set(supported)) and not semantic_family:
+                if (not proposed or not set(proposed) & set(supported)) and not semantic_scope:
+                    if not proposed and not supported:
+                        raise IntentError(
+                            "Literal product needs a category classification: add a family change "
+                            "using a supported context family as value and the product quote as "
+                            "evidence. Keep the query literal; set requested_storefront. "
+                            "A concern alone is not a product."
+                        )
                     raise IntentError("Product goal was not stated by the user")
                 if not task.query and len(supported) == 1:
                     family = supported[0]
@@ -170,15 +177,17 @@ def apply_changes(task, plan, message, *, storefront_id=None):
                             "evidence": change.evidence,
                             "source": "product_type_mapping",
                         }
-                elif semantic_family:
+                elif semantic_scope:
                     for category, mapped in (
-                        ("domain", FAMILIES[semantic_family][0]),
-                        ("family", semantic_family),
+                        ("domain", semantic_scope["domain"]),
+                        ("family", semantic_scope["family"]),
                     ):
                         task.sources[category] = {
                             "value": mapped,
                             "evidence": change.evidence,
-                            "source": "semantic_product_classification",
+                            "source": "semantic_product_classification"
+                            if semantic_scope["family"]
+                            else "scoped_semantic_browsing",
                             "storefront_id": scope,
                         }
             if key == "need":
@@ -411,7 +420,11 @@ def preserve_literal_preferences(plan, message, *, storefront_id=None):
             and evidence_ok(change.evidence, message)
             and not evidence_ok(change.value, change.evidence)
         ):
-            candidates = [change.evidence, *(item[3] for item in product_mentions(change.evidence))]
+            candidates = [
+                change.evidence,
+                *(item[3] for item in product_mentions(change.evidence)),
+                *(match.group() for match in re.finditer(r"\b[\w'-]+\b", change.evidence)),
+            ]
             for literal in candidates:
                 if normalized(normalize_search(change.value, storefront_id=scope)) == normalized(
                     normalize_search(literal, storefront_id=scope)

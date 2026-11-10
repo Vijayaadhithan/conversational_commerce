@@ -129,7 +129,11 @@ def test_unknown_product_classification_cannot_override_a_known_category():
     assert result["handoff"]["targets"][0]["storefront_id"] == "beauty"
 
 
-def test_alias_rewrite_preserves_literal_wording_and_existing_budget():
+@pytest.mark.parametrize(
+    "rewritten,literal",
+    [("winter clothing", "winter cloths"), ("clothing", "cloths"), ("clothes", "cloths")],
+)
+def test_alias_rewrite_preserves_literal_wording_and_existing_budget(rewritten, literal):
     saved = ShoppingState(
         storefront_id="clothing",
         active_task_id=1,
@@ -149,13 +153,54 @@ def test_alias_rewrite_preserves_literal_wording_and_existing_budget():
     message = "winter cloths"
     extracted = proposal(message, message)
     extracted.requested_storefront = None
-    extracted.changes[0].value = "winter clothing"
+    extracted.changes[0].value = rewritten
     state, result = handle_storefront_turn(
         saved.model_dump(), extracted, message, ClothingSearch().search, handle_turn
     )
     assert result["action"] == "recommend" and len(state.tasks) == 1
     assert state.active().filters.max_price == Decimal("35")
-    assert state.active().query == message and "winter" in state.active().need
+    assert state.active().query == literal and "winter" in state.active().need
+
+
+def test_missing_semantic_category_repair_asks_for_classification_not_another_product(tmp_path):
+    message = "I need a balm for dry skin"
+    first = proposal(message, "balm", change("need", "dry skin", "dry skin"), section="beauty")
+    first.requested_storefront = None
+    repaired = first.model_copy(deep=True)
+    repaired.requested_storefront = "beauty"
+    repaired.changes.append(
+        change_model := first.changes[0].model_copy(
+            update={"field": "family", "value": "skin_care", "evidence": "balm"}
+        )
+    )
+    assert change_model.value == "skin_care"
+    _, app, calls = harness(tmp_path, {message: [first.model_dump(), repaired.model_dump()]})
+    with TestClient(app) as client:
+        app.state.product_search = ClothingSearch()
+        cid = client.post("/conversations", json={"mode": "commerce"}).json()["id"]
+        result = commerce(client, cid, message)
+        assert result["action"] == "recommend" and result["intent_attempts"] == 2
+        assert result["preferences"]["tasks"][0]["filters"]["family"] == "skin_care"
+        feedback = [
+            item["content"]
+            for item in calls[1]["messages"]
+            if "Validation feedback:" in item["content"]
+        ]
+        assert len(feedback) == 1 and "category classification" in feedback[0]
+
+
+def test_unknown_subcategory_can_browse_the_immutable_section_without_inventing_one():
+    message = "I need a balm for dry skin"
+    extracted = proposal(message, "balm", change("need", "dry skin", "dry skin"), section="beauty")
+    extracted.requested_storefront = None
+    search = ClothingSearch()
+    state, result = handle_storefront_turn(
+        {"storefront_id": "beauty"}, extracted, message, search.search, handle_turn
+    )
+    assert result["action"] == "recommend" and state.active().query == "balm"
+    assert state.active().filters.family is None
+    assert search.calls[-1].filters.storefront_id == "beauty"
+    assert search.calls[-1].filters.domain == "beauty"
 
 
 def test_typo_alias_is_scoped_and_does_not_rewrite_cleaning_cloths():

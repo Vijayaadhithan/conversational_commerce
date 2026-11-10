@@ -36,8 +36,9 @@ not rolling chat summaries. Each task retains its constraints and displayed resu
 
 Ordinary category words such as clothes, garments and outfits support broad browsing.
 The planner can classify an unfamiliar literal product within a selected shopping
-section; multi-family sections require a supported family classification quoting that
-product. Known product mappings remain authoritative. A season or recipient alone
+section. A family classification quoting the product narrows retrieval; when omitted,
+search stays within the immutable section and ranks the literal product goal without
+inventing a narrower category. Known product mappings remain authoritative. A season or recipient alone
 cannot establish an unfamiliar product goal. Query aliases are checked before validation
 and normalized only for retrieval; saved text and evidence retain the user's wording.
 The clothing section accepts `cloths` as a spelling variant while keeping cleaning
