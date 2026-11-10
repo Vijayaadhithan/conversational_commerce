@@ -34,6 +34,16 @@ budget for each item also bypass intent inference; additional qualifiers and
 ambiguous shared constraints still use the planner. Preferences live in structured state,
 not rolling chat summaries. Each task retains its constraints and displayed results.
 
+Ordinary category words such as clothes, garments and outfits support broad browsing.
+The planner can classify an unfamiliar literal product within a selected shopping
+section; multi-family sections require a supported family classification quoting that
+product. Known product mappings remain authoritative. A season or recipient alone
+cannot establish an unfamiliar product goal. Query aliases are checked before validation
+and normalized only for retrieval; saved text and evidence retain the user's wording.
+The clothing section accepts `cloths` as a spelling variant while keeping cleaning
+cloths distinct. Equivalent clothing names reuse the same task, and seasonal preferences
+remain literal soft needs rather than inferred material or performance requirements.
+
 The planner receives bounded recent dialogue as untrusted context. Current input
 and saved state take priority; reset excludes earlier dialogue. Follow-ups such as
 more, cheaper, details, comparison and feedback refer to task-specific results.

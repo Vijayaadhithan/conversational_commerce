@@ -91,16 +91,21 @@ def matching_families(text):
     return list(dict.fromkeys(item[2] for item in product_mentions(text)))
 
 
-def product_keys(text):
+def product_keys(text, *, storefront_id=None):
+    from app.search_normalization import normalize_search
+
+    text = normalize_search(text, storefront_id=storefront_id)
     return {normalized(item[3]).rstrip("s") for item in product_mentions(text)}
 
 
 def task_matches(task, message):
+    scope = task.filters.storefront_id or ("clothing" if task.filters.family == "apparel" else None)
     return bool(
         task.query
         and (
             normalized(task.query) in normalized(message)
-            or product_keys(task.query) & product_keys(message)
+            or product_keys(task.query, storefront_id=scope)
+            & product_keys(message, storefront_id=scope)
         )
     )
 

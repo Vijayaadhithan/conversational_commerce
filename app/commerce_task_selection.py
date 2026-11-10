@@ -4,6 +4,7 @@ import re
 
 from app.commerce_discovery import question, wants_recommendations
 from app.commerce_errors import IntentError
+from app.commerce_goals import semantic_product_family
 from app.commerce_intent import direct_plan, fill_explicit_goal
 from app.commerce_models import (
     ShoppingState,
@@ -18,6 +19,7 @@ from app.commerce_text import (
     evidence_ok,
     matching_families,
     normalized,
+    product_keys,
     product_mentions,
     task_matches,
 )
@@ -32,7 +34,7 @@ def normalize_plan(state, plan, message):
         return None
     if wants_recommendations(plan) and plan.intent in {"clarify", "smalltalk"}:
         plan.intent = "refine" if state.active() else "search"
-    preserve_literal_preferences(plan, message)
+    preserve_literal_preferences(plan, message, storefront_id=state.storefront_id)
     # A facial concern can be mislabelled as a product goal by the model.
     # Keep that literal concern without pretending a concrete product type was chosen.
     for change in plan.changes:
@@ -105,6 +107,9 @@ def normalize_plan(state, plan, message):
         }
     ):
         families = matching_families(goals[0].value)
+        semantic_family = semantic_product_family(plan, message, storefront_id=state.storefront_id)
+        if not families and semantic_family:
+            families = [semantic_family]
         if len(families) > 1:
             state.turns += 1
             return state, question(
@@ -121,6 +126,10 @@ def normalize_plan(state, plan, message):
             and product_mentions(active.query)
             and active.query != "skin care"
             and normalized(goals[0].value) != normalized(active.query)
+            and not (
+                product_keys(goals[0].value, storefront_id=state.storefront_id)
+                & product_keys(active.query, storefront_id=state.storefront_id)
+            )
             and not re.search(r"\binstead\b", message, re.I)
         ):
             plan.intent = "new_task"

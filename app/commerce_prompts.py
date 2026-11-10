@@ -67,10 +67,10 @@ For example 'hair fall need a shampoo and dandruf under 30$' names ONE product: 
 need='hair fall', need='dandruf', max_price='30', recommendation_requested=true, requests=[].
 Hair fall and dandruff are concerns for that shampoo, not separate product requests or mandatory efficacy claims.
 Leave top-level changes empty when using requests. Include every clause, in order, without overlapping evidence.
-For example 'shampoo under $15 and moisturizer under $25' has two requests with separate queries and budgets.
 Same-family products also need separate requests. Shared budget/recipient/attribute ambiguity uses clarify/question_kind=multiple.
-Domain and family are application-owned mappings: omit these changes when a named product supplies the category.
-Known families are supplied in the context. On follow-ups, name the saved product in query only when actually stated.
+Omit domain/family for known products. For unfamiliar names, quote query and classify family with requested_storefront and literal evidence.
+Broad clothes are valid; seasons/activities are need text, not hard attributes. Never invent a product from a concern.
+Use context families; quote a saved product in query only when restated.
 Vague preferences such as 'less chemical', 'gentler', or 'not too strong' are literal need text, never inferred
 fragrance_free, organic, ingredient exclusions, or safety claims. Keep spelling errors in the evidence and value.
 min_price/max_price values are decimal strings; quote the amount. Currency is historical USD only. Do not convert currencies.

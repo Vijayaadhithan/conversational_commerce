@@ -102,7 +102,10 @@ class CommerceTurnService:
                     else "Preference schema or price validation failed"
                 )
                 logger.warning(
-                    "Shopping intent rejected (attempt %s): %s", attempt + 1, type(exc).__name__
+                    "Shopping intent rejected (attempt %s): %s; %s",
+                    attempt + 1,
+                    type(exc).__name__,
+                    repair_reason,
                 )
                 if attempt + 1 < attempts:
                     continue

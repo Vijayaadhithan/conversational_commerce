@@ -57,7 +57,7 @@ def update_task(state, plan, message, old_pending):
             )
     proposed = task.model_copy(deep=True)
     try:
-        apply_changes(proposed, plan, message)
+        apply_changes(proposed, plan, message, storefront_id=state.storefront_id)
     except PreferenceConflict as exc:
         return state, question(state, str(exc), "budget_conflict")
     if (

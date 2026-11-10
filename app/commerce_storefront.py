@@ -110,8 +110,8 @@ def handle_storefront_turn(
             raise ScopeConflict()
         payload = request.model_dump(mode="json")
         payload["filters"]["storefront_id"] = scope
-        payload["query"] = normalize_search(request.query)
-        payload["product_goal"] = normalize_search(request.product_goal)
+        payload["query"] = normalize_search(request.query, storefront_id=scope)
+        payload["product_goal"] = normalize_search(request.product_goal, storefront_id=scope)
         result = search(ProductSearchRequest.model_validate(payload))
         if any(not category_allowed(row.get("category"), scope) for row in result["results"]):
             raise CatalogError("Product search returned a different storefront")

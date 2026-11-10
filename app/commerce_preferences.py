@@ -5,6 +5,7 @@ from decimal import Decimal
 from difflib import SequenceMatcher
 
 from app.commerce_errors import IntentError, PreferenceConflict
+from app.commerce_goals import semantic_product_family
 from app.commerce_models import (
     Change,
     Concern,
@@ -23,10 +24,15 @@ from app.commerce_text import (
     product_mentions,
 )
 from app.search_models import ProductFilters
+from app.search_normalization import normalize_search
 
 
-def apply_changes(task, plan, message):
+def apply_changes(task, plan, message, *, storefront_id=None):
     fields = task.filters.model_dump(mode="json")
+    scope = plan.requested_storefront or storefront_id or task.filters.storefront_id
+    semantic_family = semantic_product_family(plan, message, storefront_id=scope)
+    if semantic_family:
+        fields.update(domain=FAMILIES[semantic_family][0], family=semantic_family)
     changed = set()
     effective = []
     # Older sessions stored one concern string. Preserve it and its original evidence.
@@ -153,7 +159,7 @@ def apply_changes(task, plan, message):
                 raise IntentError("Negated preference cannot become a positive requirement")
             if key == "query" and value:
                 proposed, supported = matching_families(value), matching_families(change.evidence)
-                if not proposed or not set(proposed) & set(supported):
+                if (not proposed or not set(proposed) & set(supported)) and not semantic_family:
                     raise IntentError("Product goal was not stated by the user")
                 if not task.query and len(supported) == 1:
                     family = supported[0]
@@ -163,6 +169,17 @@ def apply_changes(task, plan, message):
                             "value": mapped,
                             "evidence": change.evidence,
                             "source": "product_type_mapping",
+                        }
+                elif semantic_family:
+                    for category, mapped in (
+                        ("domain", FAMILIES[semantic_family][0]),
+                        ("family", semantic_family),
+                    ):
+                        task.sources[category] = {
+                            "value": mapped,
+                            "evidence": change.evidence,
+                            "source": "semantic_product_classification",
+                            "storefront_id": scope,
                         }
             if key == "need":
                 if value is None:
@@ -385,8 +402,22 @@ def vague_preference(message):
     )
 
 
-def preserve_literal_preferences(plan, message):
+def preserve_literal_preferences(plan, message, *, storefront_id=None):
+    scope = plan.requested_storefront or storefront_id
     for change in plan.changes:
+        if (
+            change.field == "query"
+            and isinstance(change.value, str)
+            and evidence_ok(change.evidence, message)
+            and not evidence_ok(change.value, change.evidence)
+        ):
+            candidates = [change.evidence, *(item[3] for item in product_mentions(change.evidence))]
+            for literal in candidates:
+                if normalized(normalize_search(change.value, storefront_id=scope)) == normalized(
+                    normalize_search(literal, storefront_id=scope)
+                ):
+                    change.value = literal
+                    break
         if change.field == "recipient" and isinstance(change.value, str):
             literal = recipient_evidence(change.evidence)
             proposed = recipient_evidence(change.value)
@@ -411,6 +442,27 @@ def preserve_literal_preferences(plan, message):
         ):
             # Store what was actually said. A rewritten model value is never evidence.
             change.value = change.evidence
+    if (
+        plan.intent in {"search", "refine", "new_task"}
+        and plan.recommendation_requested is not False
+        and (
+            set(matching_families(message)) & {"apparel", "footwear"}
+            or semantic_product_family(plan, message, storefront_id=scope)
+            in {"apparel", "footwear"}
+        )
+    ):
+        for match in re.finditer(
+            r"\b(?:winter|summer|spring|autumn|fall|monsoon)\b", message, re.I
+        ):
+            if not negated(match.group(), message) and not any(
+                c.field == "need"
+                and isinstance(c.value, str)
+                and evidence_ok(match.group(), c.value)
+                for c in plan.changes
+            ):
+                plan.changes.append(
+                    Change(field="need", value=match.group(), evidence=match.group())
+                )
     if (
         len(message) <= 500
         and vague_preference(message)
