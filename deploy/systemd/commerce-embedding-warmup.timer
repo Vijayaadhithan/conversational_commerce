@@ -1,0 +1,11 @@
+[Unit]
+Description=Warm commerce embeddings every five minutes
+
+[Timer]
+OnBootSec=90s
+OnUnitActiveSec=5min
+AccuracySec=10s
+Unit=commerce-embedding-warmup.service
+
+[Install]
+WantedBy=timers.target

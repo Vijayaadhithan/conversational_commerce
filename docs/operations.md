@@ -40,6 +40,42 @@ restore the previous environment and image, then recreate API; do not restore th
 conversation database and discard newly saved messages. Do not run `down -v` or
 remove state directories during an ordinary deployment.
 
+### Keep local embeddings warm
+
+The demo's Ollama embedding requests use `keep_alive: "10m"`. After ten minutes
+without embedding traffic, the next search must reload EmbeddingGemma. On November
+10, 2026, a direct server measurement took 24.38 seconds cold (24.33 seconds loading)
+and 0.039 seconds warm. These are embedding timings, not full query timings.
+
+For this Linux deployment, the checked-in systemd timer sends one small synthetic
+embedding request every five minutes, with its first activation 90 seconds after
+boot. It uses loopback Ollama, requires only Python's standard library, and writes
+timings to the system journal. It does not call hosted providers or save conversation
+turns. Ollama must already have `embeddinggemma:latest` installed and be running on
+`127.0.0.1:11434`. The model occupies about 693 MB while loaded on the measured server.
+
+Install or update the host job from the repository root:
+
+```sh
+sudo install -d -m 0755 /usr/local/libexec
+sudo install -m 0644 scripts/warm_embedding.py /usr/local/libexec/commerce-warm-embedding.py
+sudo install -m 0644 deploy/systemd/commerce-embedding-warmup.service /etc/systemd/system/
+sudo install -m 0644 deploy/systemd/commerce-embedding-warmup.timer /etc/systemd/system/
+sudo systemd-analyze verify /etc/systemd/system/commerce-embedding-warmup.service /etc/systemd/system/commerce-embedding-warmup.timer
+sudo systemctl daemon-reload
+sudo systemctl enable --now commerce-embedding-warmup.timer
+sudo systemctl start commerce-embedding-warmup.service
+systemctl list-timers commerce-embedding-warmup.timer --no-pager
+sudo journalctl -u commerce-embedding-warmup.service -n 20 --no-pager
+```
+
+The service has a 75-second HTTP timeout and a 90-second execution limit. A failed
+run is logged; the timer tries again on its next five-minute interval. This prevents
+routine idle unloads while Ollama is healthy; it does not eliminate the first load
+after a restart or delays from NVIDIA generation, reranking, or other search work.
+To stop scheduled warm-ups, run
+`sudo systemctl disable --now commerce-embedding-warmup.timer`.
+
 ## HTTPS and frontend
 
 `commerce-api.querix.co` points to the commerce server using a DNS-only A record.
