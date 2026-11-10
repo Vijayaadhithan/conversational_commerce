@@ -182,6 +182,7 @@ def test_natural_sse_replay_and_history_use_only_the_reviewed_reply(
         Settings(),
         database=str(tmp_path / "natural.sqlite3"),
         commerce_natural=True,
+        commerce_fast_path=False,
         provider=provider,
     )
     with TestClient(create_app(config, httpx.MockTransport(handler))) as client:

@@ -4,10 +4,11 @@ from types import SimpleNamespace
 
 import pytest
 from fastapi.testclient import TestClient
-from test_commerce import Search, harness, new
+from test_commerce import Search, harness, new, plan
 from test_commerce_feedback import seeded
 from test_commerce_stream import frames
 
+from app.commerce_intent import direct_plan
 from app.commerce_performance import StageTimer, accumulate_search_stages, response_route
 
 
@@ -60,6 +61,70 @@ def test_search_stage_aggregation_is_bounded_and_rejects_non_finite_values():
         },
     )
     assert total == {"embedding_seconds": 5}
+
+
+@pytest.mark.parametrize("action", ["recommend", "multi", "clarify"])
+def test_validated_results_and_required_questions_do_not_need_a_rewrite(action):
+    settings = SimpleNamespace(commerce_natural=True, commerce_fast_path=True)
+    value = {"action": action, "reply": "Validated backend reply"}
+    assert response_route(settings, "moisturizer for dry skin", value)["mode"] == "fast"
+    if action != "clarify":
+        assert response_route(settings, "Explain the tradeoffs", value)["mode"] == "reviewed"
+    for field in ("validation_recovered", "policy_redirect"):
+        assert response_route(settings, "moisturizer", {**value, field: True})["mode"] == "reviewed"
+
+
+@pytest.mark.parametrize(
+    "message",
+    [
+        "shampoo and moisturizer under $25",
+        "shampoo under $15 and moisturizer under $25 total",
+        "shampoo under $15 and fragrance-free moisturizer under $25",
+        "shampoo under $15 and moisturizer under $25; explain why",
+        "shampoo under $15 and moisturizer under €25",
+        "shampoo under $15 and moisturizer under $25 for dry skin",
+    ],
+)
+def test_budget_shortcut_leaves_qualified_or_ambiguous_requests_to_the_planner(message):
+    assert direct_plan(message) is None
+
+
+def test_reported_multi_request_skips_models_preserves_filters_and_replays(tmp_path, monkeypatch):
+    monkeypatch.setenv("COMMERCE_NATURAL_REPLIES", "1")
+    message = "Shampoo under $15 and moisturizer under $25"
+    _, app, calls = harness(tmp_path, {})
+    with TestClient(app) as client:
+        app.state.product_search = search = Search()
+        cid = new(client)
+        headers = {"Accept": "text/event-stream", "Idempotency-Key": "multi-budget-fast"}
+        url = f"/conversations/{cid}/messages"
+        events = frames(client.post(url, json={"message": message}, headers=headers).text)
+        assert events[-1][0] == "done", events
+        response = events[-1][1]
+        result = response["commerce"]
+        assert result["action"] == "multi" and len(result["groups"]) == 2
+        assert [str(request.filters.max_price) for request in search.calls] == ["14.99", "24.99"]
+        assert result["response_route"] == {"mode": "fast", "reason": "validated_product_results"}
+        assert result["answer_generation"]["status"] == "skipped" and not calls
+        assert "generation_seconds" not in result["timings"]["stages_seconds"]
+        replay = frames(client.post(url, json={"message": message}, headers=headers).text)
+        assert replay[-1][1] == response and len(search.calls) == 2
+
+
+def test_free_form_recommendation_only_uses_the_intent_model(tmp_path, monkeypatch):
+    monkeypatch.setenv("COMMERCE_NATURAL_REPLIES", "1")
+    message = "I would like a moisturizer for dry skin"
+    _, app, calls = harness(
+        tmp_path, {message: plan("search", message, recommendation_requested=True)}
+    )
+    with TestClient(app) as client:
+        app.state.product_search = Search()
+        cid = new(client)
+        response = client.post(f"/conversations/{cid}/messages", json={"message": message})
+        assert response.status_code == 200, response.text
+        value = response.json()["commerce"]
+        assert value["action"] == "recommend" and value["answer_generation"]["status"] == "skipped"
+        assert len(calls) == 1
 
 
 def test_fast_details_skip_inference_and_do_not_count_old_search_timings(tmp_path, monkeypatch):

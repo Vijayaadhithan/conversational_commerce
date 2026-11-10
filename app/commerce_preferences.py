@@ -9,6 +9,7 @@ from app.commerce_models import (
     Change,
     Concern,
 )
+from app.commerce_recipients import recipient_evidence
 from app.commerce_taxonomy import FAMILIES
 from app.commerce_text import (
     FOREIGN_CURRENCY,
@@ -255,7 +256,7 @@ def apply_changes(task, plan, message):
             if value is None:
                 fields["attributes"].pop(name, None)
             else:
-                alias = {"mens": ["men", "men's", "mens"], "womens": ["women", "women's", "womens"]}
+                recipient = recipient_evidence(change.evidence) if name == "department" else None
                 if name == "fragrance_free":
                     if type(value) is not bool or (
                         value and not re.search(r"fragrance[ -]free", quote)
@@ -269,8 +270,8 @@ def apply_changes(task, plan, message):
                         r"not fragrance[ -]free|contains fragrance|with fragrance", quote
                     ):
                         raise IntentError("Negative fragrance claim was not stated")
-                elif not isinstance(value, str) or not any(
-                    evidence_ok(item, quote) for item in alias.get(normalized(value), [value])
+                elif not isinstance(value, str) or not (
+                    (recipient and normalized(value) == recipient[1]) or evidence_ok(value, quote)
                 ):
                     raise IntentError("Attribute value was not stated")
                 elif negated(value, message):
@@ -325,14 +326,11 @@ def apply_changes(task, plan, message):
         fields.get("family") in {"footwear", "apparel"}
         and plan.recommendation_requested is not False
     ):
-        recipient = re.search(r"\b(?:adult\s+)?(?:women|men|boys|girls|children)\b", message, re.I)
-        if recipient and not negated(recipient.group(), message):
-            literal = recipient.group()
+        recipient = recipient_evidence(message)
+        if recipient:
+            literal, department = recipient
             task.recipient = literal
             task.sources["recipient"] = {"value": literal, "evidence": literal, "source": "user"}
-            department = {"women": "womens", "men": "mens", "boys": "boys", "girls": "girls"}.get(
-                literal.lower().split()[-1]
-            )
             if department and not any(
                 c.field == "attribute.department" and c.value is None for c in plan.changes
             ):
@@ -389,6 +387,11 @@ def vague_preference(message):
 
 def preserve_literal_preferences(plan, message):
     for change in plan.changes:
+        if change.field == "recipient" and isinstance(change.value, str):
+            literal = recipient_evidence(change.evidence)
+            proposed = recipient_evidence(change.value)
+            if literal and proposed and literal[1] == proposed[1]:
+                change.value = literal[0]
         if (
             evidence_ok(change.evidence, message)
             and vague_preference(change.evidence)

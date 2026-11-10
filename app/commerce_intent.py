@@ -3,6 +3,7 @@
 import re
 
 from app.commerce_models import FAMILIES, Change, IntentPlan
+from app.commerce_recipients import recipient_evidence
 from app.commerce_text import (
     evidence_ok,
     matching_families,
@@ -38,8 +39,63 @@ def fill_explicit_goal(plan, message):
         plan.changes.append(Change(field="query", value=match.group(), evidence=match.group()))
 
 
+def recipient_plan(state, message):
+    """Resolve a complete answer to a saved recipient question without model inference."""
+    task = state.active()
+    if (
+        not task
+        or task.filters.family not in {"footwear", "apparel"}
+        or state.pending_kind != "recipient"
+        or len(state.displayed_task_ids) > 1
+    ):
+        return None
+    recipient = recipient_evidence(message)
+    if not recipient:
+        return None
+    literal, department = recipient
+    if not re.fullmatch(
+        r"(?:(?:it(?:'s| is)|they(?:'re| are)|these are) )?(?:for )?(?:a |an )?"
+        + re.escape(normalized(literal)),
+        normalized(message).rstrip(".!?"),
+    ):
+        return None
+    return IntentPlan(
+        intent="refine",
+        scope="shopping",
+        evidence=message,
+        recommendation_requested=True,
+        changes=[
+            Change(field="recipient", value=literal, evidence=literal),
+            Change(field="attribute.department", value=department, evidence=literal),
+        ],
+    )
+
+
+def simple_budget_requests(message):
+    """Recognize only complete, separately budgeted product clauses without extra needs."""
+    if len(message) > 500:
+        return False
+    clauses = re.split(r"\s+(?:and|plus)\s+|;\s*", normalized(message).rstrip(".!?"))
+    if not 2 <= len(clauses) <= 5:
+        return False
+    for clause in clauses:
+        mentions = product_mentions(clause)
+        if len(mentions) != 1:
+            return False
+        start, end, _, _ = mentions[0]
+        if not re.fullmatch(
+            r"(?:(?:please )?(?:show(?: me)?|find(?: me)?|recommend(?: me)?|i need|i want) )?"
+            r"(?:a |an |some )?",
+            clause[:start],
+        ) or not re.fullmatch(r" under \$\d{1,7}(?:\.\d{1,2})?", clause[end:]):
+            return False
+    return True
+
+
 def direct_plan(message):
     text = normalized(message).rstrip(".!?")
+    if simple_budget_requests(message):
+        return IntentPlan(intent="search", evidence=message, recommendation_requested=True)
     # UI actions carry an explicit task suffix. Route only otherwise complete
     # inspection/navigation commands; free-form requirements still use the planner.
     scoped = re.fullmatch(r"(.+) (?:for|in) task ([1-5])", text)

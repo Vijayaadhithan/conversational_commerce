@@ -27,7 +27,11 @@ A turn proposes structured intent, validates literal evidence and constraints,
 updates the selected task, retrieves eligible products when requested, and renders
 a grounded response. A malformed or invalid proposal gets at most one repair
 attempt; failed repair clarifies without applying rejected changes. Exact supported
-commands may use a deterministic fast path. Preferences live in structured state,
+commands and complete recipient answers may use a deterministic fast path. Singular
+and plural recipient aliases share department mappings while retaining the user's
+literal wording as evidence. Fully specified product lists with a separate dollar
+budget for each item also bypass intent inference; additional qualifiers and
+ambiguous shared constraints still use the planner. Preferences live in structured state,
 not rolling chat summaries. Each task retains its constraints and displayed results.
 
 The planner receives bounded recent dialogue as untrusted context. Current input
@@ -40,14 +44,21 @@ A bare coordinated list can share a trailing literal concern, such as shampoo an
 conditioner for dandruff. Each preference still cites actual message text; separate
 clauses, prices, recipients and hard filters are never copied between tasks.
 
-Natural replies use evidence-cited generation and a separate model review. Product
+With `COMMERCE_FAST_PATH=1`, validated recommendation lists and required clarification
+questions are returned directly, including multi-product results. An explicit request
+for an explanation keeps the reviewed reply path. This avoids optional model writing
+and review calls after the backend has already prepared a complete grounded reply.
+Set `COMMERCE_FAST_PATH=0` to retain the reviewed path for these results.
+
+Other natural replies use evidence-cited generation and a separate model review. Product
 identities/prices are rendered by code. Rejected or oversized generated text falls
 back to a validated deterministic reply. Generation cannot modify filters or call
 tools. This review is not a guarantee of factual accuracy or recommendation quality.
 The optional older evidence-selection summary applies when natural mode is disabled.
 
 With `Accept: text/event-stream`, the API emits progress, commerce metadata and
-reply deltas. Only reviewed content is sent as the answer. The terminal `done`
+reply deltas. Only validated backend replies or reviewed generated content are sent
+as the answer. The terminal `done`
 event follows atomic persistence of both messages, shopping state and replay data.
 Disconnects do not imply a failed commit: retry with the same idempotency key.
 Chat-mode context contains a system prompt, rolling summary and up to six recent

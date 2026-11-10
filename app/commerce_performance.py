@@ -1,6 +1,7 @@
 """Per-turn stage timing and conservative routing for code-rendered answers."""
 
 import math
+import re
 import time
 from contextlib import contextmanager
 
@@ -41,6 +42,24 @@ class StageTimer:
 def response_route(settings, message, commerce):
     if not settings.commerce_natural:
         return {"mode": "legacy", "reason": "natural_replies_disabled"}
+    if (
+        settings.commerce_fast_path
+        and commerce.get("reply")
+        and not commerce.get("validation_recovered")
+        and not commerce.get("policy_redirect")
+    ):
+        if commerce["action"] == "clarify":
+            return {"mode": "fast", "reason": "validated_question"}
+        if (
+            commerce["action"] in {"recommend", "multi"}
+            and not re.search(
+                r"\b(?:why|explain|trade.?offs?|how|better|difference|compare)\b", message, re.I
+            )
+            and all(
+                group["action"] in {"recommend", "clarify"} for group in commerce.get("groups", [])
+            )
+        ):
+            return {"mode": "fast", "reason": "validated_product_results"}
     if (
         settings.commerce_fast_path
         and direct_plan(message) is not None
