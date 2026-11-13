@@ -274,7 +274,7 @@ def test_failed_search_rolls_back_state_and_messages(tmp_path):
         assert commerce(client, session, message)["products"]
 
 
-def test_separate_tasks_restore_requirements_and_ask_recipient(tmp_path):
+def test_separate_tasks_restore_requirements_and_allow_optional_recipient(tmp_path):
     plans = {
         "moisturizer under $20": plan(
             "search", "moisturizer under $20", change("query", "moisturizer", "moisturizer")
@@ -294,7 +294,7 @@ def test_separate_tasks_restore_requirements_and_ask_recipient(tmp_path):
         session = new(client)
         commerce(client, session, "moisturizer under $20")
         response = commerce(client, session, "Now a shirt")
-        assert response["action"] == "clarify" and "Who are these for" in response["reply"]
+        assert response["action"] == "recommend" and "Who are these for" not in response["reply"]
         assert response["preferences"]["tasks"][1]["filters"]["max_price"] is None
         commerce(client, session, "For men")
         assert search.calls[-1].filters.attributes == {"department": "mens"}
@@ -518,7 +518,7 @@ def test_explicit_new_family_starts_fresh_even_if_model_labels_it_refinement():
     proposal = IntentPlan.model_validate(plan("refine", message, change("query", "shirt", "shirt")))
     search = Search()
     state, result = handle_turn(state.model_dump(), proposal, message, search.search)
-    assert result["action"] == "clarify" and not search.calls
+    assert result["action"] == "recommend" and len(search.calls) == 1
     assert state.active().filters.family == "apparel" and state.active().filters.max_price is None
     assert state.tasks[0].filters.max_price == Decimal("20")
 
@@ -527,7 +527,7 @@ def test_literal_goal_recovery_and_missing_concern_evidence():
     message = "Now I also need a shirt"
     proposal = IntentPlan(intent="new_task", evidence=message)
     state, result = handle_turn({}, proposal, message, Search().search)
-    assert state.active().query == "shirt" and result["action"] == "clarify"
+    assert state.active().query == "shirt" and result["action"] == "recommend"
     message = "moisturizer"
     proposal = IntentPlan.model_validate(plan("search", message, change("query", message, message)))
     row = product()

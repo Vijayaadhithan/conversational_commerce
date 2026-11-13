@@ -2,6 +2,7 @@
 
 import re
 
+from app.commerce_browsing import continue_browsing
 from app.commerce_discovery import question, wants_recommendations
 from app.commerce_errors import IntentError
 from app.commerce_goals import semantic_product_family
@@ -32,6 +33,23 @@ def normalize_plan(state, plan, message):
         # Product questions inspect evidence; concern recovery must not turn
         # "does it help with dry skin?" into a new preference or search.
         return None
+    continue_browsing(state, plan, message)
+    active = state.active()
+    if (
+        plan.intent == "similar"
+        and plan.cheaper_than_reference
+        and active
+        and len(active.shown) > 1
+        and not active.focused_positions
+        and not re.search(
+            r"\b(?:it|this|that|one|first|second|third|fourth|fifth|option|product|number)\b|\d|amazon:",
+            message,
+            re.I,
+        )
+    ):
+        # 'Same vibe but cheaper' can refer to the whole current selection.
+        # Keep its brief and use the established lower-than-shown price policy.
+        plan.intent, plan.cheaper_than_reference = "cheaper", False
     if wants_recommendations(plan) and plan.intent in {"clarify", "smalltalk"}:
         plan.intent = "refine" if state.active() else "search"
     preserve_literal_preferences(plan, message, storefront_id=state.storefront_id)

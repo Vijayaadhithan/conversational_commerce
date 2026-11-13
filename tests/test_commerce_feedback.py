@@ -84,7 +84,7 @@ def test_rejection_is_literal_and_task_scoped_then_excluded_from_future_search(r
     state.tasks.append(ShoppingTask(id=2, query="shampoo", filters=ProductFilters(max_price="30")))
     original_ids = [row["product_id"] for row in state.active().shown]
     state, result = turn(state, search, reaction, "feedback", feedback="dislike")
-    assert result["action"] == "clarify" and len(search.calls) == 1
+    assert result["action"] == "recommend" and len(search.calls) == 2
     assert rejected_ids(state.active()) == original_ids
     assert state.active().feedback[-1].evidence == reaction
     assert state.tasks[1].feedback == [] and state.active().filters.attributes == {}
@@ -96,7 +96,9 @@ def test_rejection_is_literal_and_task_scoped_then_excluded_from_future_search(r
 
 def test_explicit_like_can_reverse_a_rejection_without_losing_its_history():
     state, search = seeded()
-    state, _ = turn(state, search, "I dislike the first", "feedback", feedback="dislike")
+    state, _ = turn(
+        state, search, "I dislike the first; don't search yet", "feedback", feedback="dislike"
+    )
     state, _ = turn(state, search, "Actually I like the first", "feedback", feedback="like")
     assert len(state.active().feedback) == 2 and rejected_ids(state.active()) == []
 
@@ -131,7 +133,7 @@ def test_feedback_and_focus_survive_restart_and_reset_clears_them(tmp_path):
         commerce(client, cid, reaction)
     with TestClient(create_app(config)) as client:
         task = client.get(f"/conversations/{cid}/preferences").json()["preferences"]["tasks"][0]
-        assert task["focused_positions"] == [2] and task["feedback"][0]["evidence"] == reaction
+        assert task["focused_positions"] == [] and task["feedback"][0]["evidence"] == reaction
         assert commerce(client, cid, "Start over")["preferences"]["tasks"] == []
 
 
@@ -144,12 +146,14 @@ def test_legacy_state_still_loads_without_new_memory_fields():
 
 def test_reason_followup_belongs_to_the_prior_rejected_group():
     state, search = seeded()
-    state, _ = turn(state, search, "I dislike these", "feedback", feedback="dislike")
+    state, _ = turn(
+        state, search, "I dislike these; don't search yet", "feedback", feedback="dislike"
+    )
     ids = state.active().feedback[-1].product_ids
     state, _ = turn(state, search, "too floral", "feedback", feedback="dislike")
     assert state.active().feedback[-1].evidence == "too floral"
     assert state.active().feedback[-1].product_ids == ids
-    assert state.active().filters.attributes == {} and len(search.calls) == 1
+    assert state.active().filters.attributes == {} and len(search.calls) == 2
 
 
 def test_product_question_never_creates_tasks_or_searches():

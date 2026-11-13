@@ -15,7 +15,7 @@ from evaluation_client import evaluation_client
 
 from app.commerce_prompts import DIALOGUE_PROMPT, PLANNER_PROMPT, SCOPE_PROMPT, STOREFRONT_PROMPT
 from app.config import ROOT, Settings
-from app.conversation_evaluation import dialogue_metrics
+from app.conversation_evaluation import check_turn_expectations, dialogue_metrics
 from app.storefront_evaluation import check_storefront_response
 
 
@@ -68,6 +68,8 @@ def main():
                 "commerce_recommendations.py",
                 "commerce_taxonomy.py",
                 "commerce_storefront.py",
+                "commerce_browsing.py",
+                "commerce_retrieval.py",
                 "storefronts.py",
                 "search_normalization.py",
                 "product_search.py",
@@ -100,6 +102,10 @@ def main():
                             "http_status": response.status_code,
                             "seconds": round(time.perf_counter() - started, 4),
                             "response": response.json(),
+                            "scenario_checks": check_turn_expectations(
+                                response.json(),
+                                case.get("expectations", [{}] * len(case["turns"]))[turn_index],
+                            ),
                             "storefront_checks": check_storefront_response(
                                 case["storefront_id"],
                                 response.json(),

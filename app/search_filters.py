@@ -68,6 +68,7 @@ def product_goal_sql(goal):
         (r"\bmoisturi\w*|\bface cream\b", r"\m(moisturi[sz][a-z]*|emulsions?|creams?)\M"),
         (r"\bcleanser\b", r"\mcleansers?\M"),
         (r"\bshirts?\b", r"\mshirts?\M"),
+        (r"\bjackets?\b", r"\m(jackets?|coats?|outerwear)\M"),
         (r"\b(?:shoes?|sneakers?)\b", r"\m(shoes?|sneakers?)\M"),
         (r"\bnecklaces?\b", r"\mnecklaces?\M"),
         (r"\bserum\b", r"\mserums?\M"),

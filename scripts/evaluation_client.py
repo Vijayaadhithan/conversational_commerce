@@ -20,7 +20,7 @@ class EvaluationClient(TestClient):
 def evaluation_client(settings):
     _, token = Store(settings.database).issue_token("isolated-evaluation")
     limits = replace(
-        OperationsSettings(),
+        OperationsSettings.from_env(),
         monitor_interval=0,
         requests_per_minute=10000,
         request_burst=10000,

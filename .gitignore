@@ -8,6 +8,12 @@
 *.pem
 *.key
 
+# Server-local deployment state and pinned dependency images
+deploy/images.env
+deploy/status.json
+deploy/connection-files.sha256.json
+deploy/public-files.sha256.json
+
 # Python environments, bytecode, and tool output
 .venv/
 venv/

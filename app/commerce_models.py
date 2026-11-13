@@ -59,6 +59,14 @@ class TaskRequest(BaseModel):
     changes: list[Change] = Field(default_factory=list, max_length=20)
 
 
+class SearchInterpretation(BaseModel):
+    """Retrieval hypotheses, never evidence of user constraints or product facts."""
+
+    model_config = ConfigDict(extra="forbid")
+    query: str = Field(min_length=1, max_length=500)
+    evidence: str = Field(min_length=1, max_length=500)
+
+
 class IntentPlan(BaseModel):
     model_config = ConfigDict(extra="forbid")
     scope: Literal["shopping", "smalltalk", "off_topic", "unclear"] | None = None
@@ -92,6 +100,7 @@ class IntentPlan(BaseModel):
     task_id: int | None = Field(default=None, ge=1, le=5)
     feedback: Literal["like", "dislike"] | None = None
     cheaper_than_reference: StrictBool = False
+    interpretation: SearchInterpretation | None = None
     question_kind: Literal[
         "product_type", "skin_profile", "recipient", "reference", "multiple", "general"
     ] = "product_type"

@@ -23,15 +23,44 @@ credentials and catalog data are not baked into the image. Dependency image dige
 are selected from server-local `deploy/images.env`. Host networking is a single-host
 tradeoff: dependencies and API bind to loopback; Caddy owns public ports 80/443.
 
+### Update through Git
+
+The normal release path is local validation, commit and push to `origin/main`,
+followed by a fast-forward pull in the server checkout. Do not deploy routine
+source updates through copied files or archives. Keep both worktrees clean; inspect
+and preserve unexpected server changes before pulling.
+
+Locally, stage the intended changes, commit them, then run:
+
+```sh
+git push origin main
+git rev-parse HEAD
+```
+
+On the server:
+
 ```sh
 cd /opt/commerce/conversational_commerce
-sh scripts/server_compose.sh ps
-sh scripts/server_compose.sh --profile tools run --rm tools
+git status --short
+git pull --ff-only origin main
+git rev-parse HEAD
+```
+
+Confirm that the local, remote and server revisions match. For runtime changes,
+preserve the current API image and recovery backups before building and activating
+the pulled source:
+
+```sh
 sh scripts/server_compose.sh --profile app build api
 sh scripts/server_compose.sh --profile app up -d --no-deps --timeout 210 api
-sh scripts/server_compose.sh --profile public up -d proxy
+sh scripts/server_compose.sh ps
 curl --fail https://commerce-api.querix.co/livez
 ```
+
+A pull does not replace code inside the running Docker image. A documentation-only
+or Git synchronization change needs no service restart. Private `.env.server`,
+`data/`, `models/`, dependency pins in `deploy/images.env`, and generated deployment
+reports stay ignored and remain on the server. Avoid `git clean` during deployment.
 
 The tools preflight checks configuration, not paid quota or full runtime behavior.
 Preserve the serving image and private configuration before updates. Configuration

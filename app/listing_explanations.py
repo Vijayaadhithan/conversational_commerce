@@ -6,6 +6,17 @@ from app.listing_quality import keyword_heavy
 
 # These are text-topic aliases, not ingredient -> benefit or medical inference rules.
 TOPICS = (
+    (r"\b(?:comfy|comfort\w*)\b", r"\b(?:comfy|comfort\w*)\b", "comfort wording"),
+    (r"\bsoft\w*\b", r"\bsoft(?:ness)?\b", "soft fabric wording"),
+    (r"\b(?:warm|warmth)\b", r"\b(?:warm|warmth|insulated|thermal)\b", "warmth wording"),
+    (r"\b(?:lightweight|light weight)\b", r"\blight[ -]?weight\b", "lightweight wording"),
+    (r"\bcasual\b", r"\bcasual\b", "casual style wording"),
+    (r"\bbreathable\b", r"\bbreathab\w*\b", "breathability wording"),
+    (
+        r"\b(?:understated|minimalist)\b",
+        r"\b(?:understated|minimalist|minimal)\b",
+        "understated style wording",
+    ),
     (
         r"\b(?:lighten\w*|brighten\w*)\b",
         r"\b(?:lighten\w*|brighten\w*|brightness|radiance)\b|\beven(?:s|ing)? (?:out )?(?:skin )?tone\b",
@@ -75,6 +86,37 @@ def concern_evidence(record, concerns):
     fields = list(dict.fromkeys(evidence_fields(record)))
     result = []
     for concern in dict.fromkeys(concerns):
+        # Conjunctions describe separate preferences; one matching word cannot
+        # establish the whole compound. Preserve the original phrase and sources.
+        parts = [part.strip() for part in re.split(r"\s+(?:and|&)\s+", concern) if part.strip()]
+        if len(parts) > 1 and not VAGUE.search(concern):
+            components = concern_evidence(record, parts)
+            supports = {item["support"] for item in components}
+            support = (
+                "mixed"
+                if "mixed" in supports or {"positive", "negated"} <= supports
+                else "negated"
+                if "negated" in supports
+                else "positive"
+                if supports == {"positive"}
+                else "weak"
+                if supports & {"positive", "weak"}
+                else "unknown"
+            )
+            excerpts = [excerpt for item in components for excerpt in item["evidence"]]
+            result.append(
+                {
+                    "concern": concern,
+                    "status": "listing_mention" if excerpts else "not_stated",
+                    "support": support,
+                    "evidence": sorted(excerpts, key=lambda e: e["support"] != "negated")[:2],
+                    "topics": list(
+                        dict.fromkeys(topic for item in components for topic in item["topics"])
+                    ),
+                    "components": components,
+                }
+            )
+            continue
         item = {
             "concern": concern,
             "status": "not_stated",

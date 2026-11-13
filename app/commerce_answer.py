@@ -115,8 +115,10 @@ async def natural_answer(chat, state, message, commerce, dialogue=(), *, timings
         return model.model_validate(strict_json(result["message"]["content"]))
 
     try:
-        async with asyncio.timeout(min(chat.settings.timeout, 30)):
-            answer = await request(WRITE_PROMPT, context, GroundedAnswer, 700)
+        async with asyncio.timeout(
+            min(chat.settings.timeout, chat.settings.commerce_answer_timeout)
+        ):
+            answer = await request(WRITE_PROMPT, context, GroundedAnswer, 400)
             failure_stage = "evidence_validation"
             text = validate_answer(answer, facts, commerce["action"])
             review = await request(

@@ -26,7 +26,11 @@ def resolved_positions(task, message):
         re.I,
     ):
         return []
-    if re.search(r"\b(?:these|those|all (?:of )?them)\b", message, re.I):
+    if re.search(
+        r"\b(?:these|those|all (?:of )?them|the (?:list|results|options|selection))\b",
+        message,
+        re.I,
+    ):
         return list(range(1, len(task.shown) + 1))
     focused = [i for i in task.focused_positions if 1 <= i <= len(task.shown)]
     if len(focused) == 1 and re.search(r"\b(?:it|this|that|same|one)\b", message, re.I):
@@ -49,6 +53,8 @@ def record_feedback(state, plan, message, old_pending=""):
         raise IntentError(
             "Product feedback needs a supported sentiment and current-message evidence"
         )
+    # The planner classifies sentiment semantically. These text checks reject
+    # explicit contradictions, rather than limiting reactions to a phrase list.
     negative = re.search(
         r"\b(?:dislike|hate|reject|not (?:for me|my style)|too \w+)\b|don.t (?:like|want)|do not (?:like|want)",
         message,
@@ -66,8 +72,8 @@ def record_feedback(state, plan, message, old_pending=""):
             message,
             re.I,
         )
-        or (plan.feedback == "dislike" and not negative)
-    ) or (plan.feedback == "like" and (not positive or negative)):
+        or (plan.feedback == "dislike" and positive and not negative)
+    ) or (plan.feedback == "like" and negative):
         raise IntentError("Feedback sentiment is ambiguous; clarify without changing preferences")
     positions = resolved_positions(task, message)
     if (
@@ -84,13 +90,21 @@ def record_feedback(state, plan, message, old_pending=""):
         # reaction's products, not whichever product the model guesses.
         previous = task.feedback[-1].product_ids
         positions = [i + 1 for i, row in enumerate(task.shown) if row["product_id"] in previous]
+    if not positions and not re.search(
+        r"\b(?:option|product|number|first|second|third|fourth|fifth|sixth|seventh|eighth|ninth|tenth|it|this|that|one)\b|\d|amazon:",
+        message,
+        re.I,
+    ):
+        # A bare reaction ('meh', 'too flashy') concerns the current selection.
+        # Explicit singular/invalid references still require resolution above.
+        positions = list(range(1, len(task.shown) + 1))
     if not positions or any(not 1 <= i <= len(task.shown) for i in positions):
         return question(state, "Which displayed option do you mean?", "reference")
     reaction_scope = (
         message[: negative.start()] + message[negative.end() :] if negative else message
     )
     if len(positions) > 1 and re.search(
-        r"\b(?:but|except|over|rather than|not|to)\b", reaction_scope, re.I
+        r"\b(?:but|except|over|rather than)\b", reaction_scope, re.I
     ):
         return question(state, "Which single option should I save that reaction for?", "reference")
     item = ProductFeedback(
@@ -107,7 +121,7 @@ def record_feedback(state, plan, message, old_pending=""):
             )
         task.feedback.append(item)
     task.focused_positions = positions
-    if plan.intent == "feedback" or plan.recommendation_requested is False:
+    if plan.recommendation_requested is not True:
         return question(
             state,
             "I've saved your reaction to those options. What would you like to change?"

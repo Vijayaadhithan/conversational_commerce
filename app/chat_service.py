@@ -139,7 +139,14 @@ class ChatService:
             "type": "string",
             "enum": ["shopping", "smalltalk", "off_topic", "unclear"],
         }
-        schema["required"] = ["intent", "evidence", "changes", "recommendation_requested", "scope"]
+        schema["required"] = [
+            "intent",
+            "evidence",
+            "changes",
+            "recommendation_requested",
+            "scope",
+            "interpretation",
+        ]
         schema["properties"]["recommendation_requested"] = {
             "type": "boolean",
             "description": "Does the user want product recommendations now, in this conversation context?",

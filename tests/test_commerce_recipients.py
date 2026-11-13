@@ -56,8 +56,8 @@ def test_hiking_shoe_recipient_answer_searches_without_another_model_call(
         app.state.product_search = search = ShoeSearch()
         cid = new(client)
         first = commerce(client, cid, initial)
-        assert first["action"] == "clarify" and first["preferences"]["pending_kind"] == "recipient"
-        assert len(calls) == 1 and not search.calls
+        assert first["action"] == "recommend" and first["products"]
+        assert len(calls) == len(search.calls) == 1
         result = commerce(client, cid, answer)
         assert result["action"] == "recommend" and result["products"]
         assert result["preferences"]["pending_kind"] != "recipient"

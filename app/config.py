@@ -25,6 +25,9 @@ class Settings:
     commerce_summary: bool = field(default_factory=lambda: flag("COMMERCE_SUMMARY_ENABLED"))
     commerce_natural: bool = field(default_factory=lambda: flag("COMMERCE_NATURAL_REPLIES"))
     commerce_fast_path: bool = field(default_factory=lambda: flag("COMMERCE_FAST_PATH"))
+    commerce_answer_timeout: float = field(
+        default_factory=lambda: float(os.getenv("COMMERCE_ANSWER_TIMEOUT_SECONDS", "8"))
+    )
     ollama_url: str = os.getenv("OLLAMA_BASE_URL", "http://127.0.0.1:11434").rstrip("/")
     model: str = field(default_factory=llm_model)
     provider: str = field(default_factory=lambda: os.getenv("LLM_PROVIDER", "ollama"))

@@ -3,6 +3,7 @@
 import re
 from decimal import Decimal
 
+from app.commerce_browsing import discover_goal, retrieval_query
 from app.commerce_discovery import (
     no_results_reply,
     preference_question,
@@ -11,7 +12,8 @@ from app.commerce_discovery import (
 )
 from app.commerce_errors import IntentError
 from app.commerce_feedback import rejected_ids, resolved_positions
-from app.commerce_replies import card_reply, explain_products, task_concerns
+from app.commerce_replies import card_reply, explain_products, recommendation_reply, task_concerns
+from app.commerce_retrieval import search_with_recovery
 from app.commerce_text import (
     negated,
     normalized,
@@ -82,6 +84,7 @@ def recommend_or_inspect(state, plan, message, old_pending, search):
         guided = skin_discovery(state, task, message, old_pending, plan)
         if guided:
             return state, guided
+        discover_goal(state, task, plan, message)
         query = " ".join(part for part in (task.query, task.need) if part)
     if not task.query:
         examples = {
@@ -95,14 +98,8 @@ def recommend_or_inspect(state, plan, message, old_pending, search):
             f"What type of product are you looking for—for example {examples}?",
             "product_type",
         )
-    if task.filters.family in {"footwear", "apparel"} and not any(
-        name in task.filters.attributes for name in ("department", "age_range")
-    ):
-        return state, question(
-            state,
-            "Who are these for (for example adult men, adult women, or children)?",
-            "recipient",
-        )
+    if plan.intent != "similar":
+        query = retrieval_query(task, plan, message, state.storefront_id)
     filters = task.filters.model_copy(deep=True)
     filters.exclude_product_ids = list(
         dict.fromkeys([*filters.exclude_product_ids, *rejected_ids(task)])
@@ -190,7 +187,12 @@ def recommend_or_inspect(state, plan, message, old_pending, search):
         filters=ProductFilters.model_validate(filters.model_dump()),
         limit=min(5, 100 - len(task.seen_ids)) if plan.intent == "more" else 5,
     )
-    response = search(request)
+    literal_query = " ".join(part for part in (task.query, task.need) if part)
+    response = (
+        search_with_recovery(search, request, literal_query)
+        if plan.intent != "similar"
+        else search(request)
+    )
     products = explain_products(response["results"], task)
     new_ids = [row["product_id"] for row in products if row["product_id"] not in task.seen_ids]
     if len(task.seen_ids) + len(new_ids) > 100:
@@ -207,10 +209,7 @@ def recommend_or_inspect(state, plan, message, old_pending, search):
     if not products:
         reply = no_results_reply(task, more=plan.intent == "more")
     else:
-        reply = f"Here are {len(products)} options for {task.query}:\n" + card_reply(
-            products, compact=True
-        )
-        reply += "\nPrices are historical USD; suitability and stock are unverified. Pick a number to explore, or tell me what to change."
+        reply = recommendation_reply(task, products, plan)
     return state, {
         "action": "recommend",
         "reply": reply,

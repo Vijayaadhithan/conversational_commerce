@@ -1,0 +1,13 @@
+[
+  {"id":"reported_jacket_chat","storefront_id":"clothing","turns":["A jacket under $60","adult men","need something comgy","comfy and soft","the list you showed are not comfy and soft jackets"],"expectations":[{"products":true},{"products":true},{"products":true},{"products":true},{"products":true}]},
+  {"id":"office_clothing_goal","storefront_id":"clothing","turns":["Help me find something comfy for office","these look too formal","something softer instead"],"expectations":[{"products":true},{"products":true},{"products":true}]},
+  {"id":"beauty_goal","storefront_id":"beauty","turns":["Help me find something for my dry skin under $30","something gentler","does the first contain fragrance?"],"expectations":[{"products":true},{"products":true},{"search":false}]},
+  {"id":"hair_goal","storefront_id":"beauty","turns":["need something for frizzy hair","not those, something less strong"],"expectations":[{"products":true},{"products":true}]},
+  {"id":"walking_footwear","storefront_id":"footwear","turns":["help me find something for walking all day under $70","adult women","these don't look comfortable","same vibe but cheaper"],"expectations":[{"products":true},{"products":true},{"products":true},{}]},
+  {"id":"wedding_accessories","storefront_id":"fashion","turns":["find me something understated for a wedding under $40","too flashy","can you explain the first?"],"expectations":[{"products":true},{"products":true},{"search":false}]},
+  {"id":"pause_clothing","storefront_id":"clothing","turns":["a jacket under $60","soft, but don't search yet","okay go ahead"],"expectations":[{"products":true},{"search":false},{"products":true}]},
+  {"id":"vague_rejection","storefront_id":"footwear","turns":["show me casual shoes under $80","meh","not my vibe"],"expectations":[{"products":true},{"products":true},{"products":true}]},
+  {"id":"separate_budgets","storefront_id":"beauty","turns":["shampoo under $15 and moisturizer under $25","make the shampoo gentler"],"expectations":[{"products":true},{"products":true}]},
+  {"id":"category_switch","storefront_id":"clothing","turns":["a soft jacket under $60","now I also need a handbag"],"expectations":[{"products":true},{"action":"handoff"}]},
+  {"id":"nonsense","storefront_id":"fashion","turns":["asdf qwer zzzz"],"expectations":[{"action":"clarify","search":false}]}
+]

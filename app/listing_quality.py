@@ -101,6 +101,18 @@ def listing_quality(record, request, evidence):
                 "personalization",
                 "This listing requires personalization, which you have not requested.",
             )
+        costume = r"\b(?:costum\w*|cosplay|halloween|steampunk|vampire|medieval|renaissance|gothic|game of thrones)\b"
+        if re.search(costume, title, re.I) and not re.search(costume, context, re.I):
+            caution(
+                "unrequested_format", "This is a costume or themed item you have not requested."
+            )
+        professional = r"\b(?:salon|stylist|hairdress\w*|cosmetology|scrubs?|chef)\b"
+        if (
+            record.get("category", {}).get("family") == "apparel"
+            and re.search(professional, title, re.I)
+            and not re.search(professional, context, re.I)
+        ):
+            caution("unrequested_format", "This is specialist workwear you have not requested.")
         if re.search(CHILD, title, re.I) and not re.search(CHILD, context, re.I):
             # Mixed women/girls marketing does not establish a child-only item.
             if not re.search(r"\b(?:women|men|adult|unisex)\b", title, re.I):
@@ -170,7 +182,15 @@ def prioritize_listing_evidence(response, request):
             bool(cautions),
         )
 
-    response["results"] = sorted(response["results"], key=key)[: request.limit]
+    ordered = sorted(response["results"], key=key)
+    # Prefer fewer useful options to filling the list with contradicted preferences
+    # or unrequested specialist formats when ordinary options are available.
+    useful = [row for row in ordered if not key(row)[0]]
+    candidates = useful or ordered
+    supported = [
+        row for row in candidates if row.get("listing_quality", {}).get("supported_concerns")
+    ]
+    response["results"] = (supported or candidates)[: request.limit]
     for rank, row in enumerate(response["results"], 1):
         row["ranking"]["evidence_rank"] = rank
     response["method"] += "+listing_evidence"

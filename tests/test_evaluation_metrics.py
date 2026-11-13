@@ -277,3 +277,45 @@ def test_invalid_grades_fail_explicitly(value):
     review["cases"][0]["outcome"] = value
     with pytest.raises(ValueError, match="integer"):
         module.summarize(capture, review)
+
+
+def test_browsing_metrics_report_first_products_question_loops_and_rejected_repeats():
+    question = {
+        "http_status": 200,
+        "response": {"commerce": {"action": "clarify", "reply": "Which style?"}},
+    }
+    products = {
+        "http_status": 200,
+        "response": {
+            "commerce": {
+                "action": "recommend",
+                "products": [{"product_id": "p1"}],
+                "preferences": {
+                    "active_task_id": 1,
+                    "tasks": [
+                        {"id": 1, "feedback": [{"sentiment": "dislike", "product_ids": ["p1"]}]}
+                    ],
+                },
+            }
+        },
+    }
+    metrics = dialogue_metrics([{"observations": [question, question, products]}])
+    assert metrics["turns_with_products"] == 1
+    assert metrics["first_products_turn"]["median"] == 3
+    assert metrics["consecutive_clarification_turns"] == 1
+    assert metrics["rejected_product_repeats"] == 1
+
+
+def test_scenario_expectations_check_behaviour_without_scoring_relevance():
+    from app.conversation_evaluation import check_turn_expectations
+
+    response = {
+        "commerce": {
+            "action": "recommend",
+            "products": [{"product_id": "p1"}],
+            "timings": {"search_calls": 1},
+        }
+    }
+    assert check_turn_expectations(response, {"products": True, "search": True})["passed"]
+    assert not check_turn_expectations(response, {"search": False})["passed"]
+    assert not check_turn_expectations({"detail": "failed"}, {})["passed"]

@@ -45,7 +45,10 @@ def recipient_plan(state, message):
     if (
         not task
         or task.filters.family not in {"footwear", "apparel"}
-        or state.pending_kind != "recipient"
+        or (
+            state.pending_kind != "recipient"
+            and (not task.shown or task.recipient or task.filters.attributes.get("department"))
+        )
         or len(state.displayed_task_ids) > 1
     ):
         return None

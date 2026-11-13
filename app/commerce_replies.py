@@ -1,5 +1,6 @@
 """Replies for validated shopping conversations."""
 
+import re
 from copy import deepcopy
 from decimal import Decimal
 
@@ -19,7 +20,9 @@ def concise_reasons(row):
     }
     concerns = sorted(
         row.get("concern_evidence", []),
-        key=lambda item: item.get("support") not in {"mixed", "negated"},
+        key=lambda item: {"mixed": 0, "negated": 0, "positive": 1, "weak": 2}.get(
+            item.get("support"), 3
+        ),
     )
     for item in concerns:
         # Do not truncate a long concern into a different requirement.
@@ -32,11 +35,19 @@ def concise_reasons(row):
             label = "Preference needs clarification"
         else:
             label = labels.get(item.get("support"), "No matching listing evidence")
-        reasons.append(f"{label}: ‘{item['concern']}’. Suitability is unverified.")
+        if item.get("support") == "positive" and item.get("evidence"):
+            excerpt = item["evidence"][0]["text"]
+            reasons.append(
+                f"Related listing wording for ‘{item['concern']}’: “{excerpt}”."
+                if len(excerpt) <= 180
+                else f"The listing includes wording related to ‘{item['concern']}’."
+            )
+        else:
+            reasons.append(f"{label}: ‘{item['concern']}’. Suitability is unverified.")
     # Exact short attribute facts are preferable to repetitive budget statements.
     original = row.get("why_recommended", [])
     reasons.extend(
-        reason
+        re.sub(r"\s+\(/[^)]*\)(?=\.$)", "", reason)
         for reason in original
         if reason.startswith("The listing explicitly states ") and len(reason) <= 220
     )
@@ -45,13 +56,46 @@ def concise_reasons(row):
     return list(dict.fromkeys(reasons))
 
 
+def recommendation_reply(task, products, plan):
+    """Useful grounded wording remains available even when model writing fails."""
+    if task.need:
+        opening = f"With {task.need} in mind, here are {len(products)} options for {task.query}:"
+    else:
+        opening = f"Here are {len(products)} options for {task.query}:"
+    if plan.feedback == "dislike":
+        opening = "Let's try a different selection. " + opening
+    if task.need and not any(
+        item.get("support") == "positive"
+        for row in products
+        for item in row.get("concern_evidence", [])
+    ):
+        opening += " The listings don't explicitly confirm these preferences, so these are partial matches."
+    return (
+        opening
+        + "\n"
+        + card_reply(products, compact=True)
+        + "\nPrices are historical USD; suitability and stock are unverified. "
+        "You can explore an option or ask for a different style."
+    )
+
+
 def card_reply(products, compare=False, compact=False):
     lines = []
     for index, row in enumerate(products, 1):
         lines.append(
             f"{row.get('display_position', index)}. {row['title']} — ${row['price']['amount']} USD (historical)."
         )
-        reasons = concise_reasons(row)[:1] if compact else row.get("why_recommended", [])
+        reasons = (
+            [
+                reason
+                for reason in concise_reasons(row)
+                if not reason.startswith(
+                    ("No matching listing evidence", "Preference needs clarification")
+                )
+            ][:1]
+            if compact
+            else row.get("why_recommended", [])
+        )
         for reason in reasons:
             lines.append("   " + reason)
     if compare and len(products) > 1:

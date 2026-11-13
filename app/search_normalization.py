@@ -12,6 +12,7 @@ ALIASES = {
     "clothes": "clothing",
     "garment": "clothing",
     "garments": "clothing",
+    "comfy": "comfortable",
 }
 
 

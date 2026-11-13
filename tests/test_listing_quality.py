@@ -134,7 +134,7 @@ def test_keyword_inventory_is_weak_not_supporting_evidence():
     assert concern_evidence(listing(text), ["with pockets"])[0]["support"] == "weak"
 
 
-def test_quality_prefers_supported_concerns_and_keeps_partial_matches_visible():
+def test_quality_returns_fewer_supported_matches_and_uses_partial_matches_as_fallback():
     request = ProductSearchRequest(
         query="brightening skin care",
         product_goal="skin care",
@@ -153,7 +153,9 @@ def test_quality_prefers_supported_concerns_and_keeps_partial_matches_visible():
             }
         )
     result = prioritize_listing_evidence({"method": "test", "results": rows}, request)
-    assert [r["product_id"] for r in result["results"]] == ["1", "0", "2"]
+    assert [r["product_id"] for r in result["results"]] == ["1"]
+    partial = prioritize_listing_evidence({"method": "test", "results": [rows[0]]}, request)
+    assert partial["results"] == [rows[0]]
     assert rows[1]["listing_quality"]["unverified_concerns"] == 1
     assert rows[2]["listing_quality"]["cautions"][0]["code"] == "unrequested_format"
 

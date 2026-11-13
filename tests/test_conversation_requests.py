@@ -167,13 +167,13 @@ def test_cross_product_evidence_cannot_leak_into_another_task():
     assert not search.calls
 
 
-def test_fashion_clarification_does_not_block_ready_beauty_request():
+def test_multiple_products_browse_without_optional_recipient():
     message = "a shirt and shampoo under $15"
     state, result = handle_turn(
         {}, IntentPlan(intent="search", evidence=message), message, Search().search
     )
-    assert [group["action"] for group in result["groups"]] == ["clarify", "recommend"]
-    assert state.tasks[0].pending_kind == "recipient"
+    assert [group["action"] for group in result["groups"]] == ["recommend", "recommend"]
+    assert state.tasks[0].pending_kind == ""
     message = "the shirt is for men"
     state, result = handle_turn(
         state.model_dump(),

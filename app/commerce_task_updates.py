@@ -2,6 +2,7 @@
 
 import re
 
+from app.commerce_browsing import reconcile_concerns
 from app.commerce_discovery import question, wants_recommendations
 from app.commerce_errors import PreferenceConflict
 from app.commerce_models import (
@@ -60,6 +61,7 @@ def update_task(state, plan, message, old_pending):
         apply_changes(proposed, plan, message, storefront_id=state.storefront_id)
     except PreferenceConflict as exc:
         return state, question(state, str(exc), "budget_conflict")
+    reconcile_concerns(proposed, plan, message)
     if (
         old_pending == "preference_detail"
         and re.search(r"\b(?:i mean|by that i mean)\b", message, re.I)
