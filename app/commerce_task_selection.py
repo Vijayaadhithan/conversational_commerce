@@ -5,6 +5,7 @@ import re
 from app.commerce_browsing import continue_browsing
 from app.commerce_discovery import question, wants_recommendations
 from app.commerce_errors import IntentError
+from app.commerce_feedback import recover_reaction
 from app.commerce_goals import semantic_product_family
 from app.commerce_intent import direct_plan, fill_explicit_goal
 from app.commerce_models import (
@@ -33,6 +34,7 @@ def normalize_plan(state, plan, message):
         # Product questions inspect evidence; concern recovery must not turn
         # "does it help with dry skin?" into a new preference or search.
         return None
+    recover_reaction(state, plan, message)
     continue_browsing(state, plan, message)
     active = state.active()
     if (

@@ -74,6 +74,9 @@ def main():
                 "search_normalization.py",
                 "product_search.py",
                 "listing_explanations.py",
+                "listing_quality.py",
+                "commerce_task_selection.py",
+                "conversation_evaluation.py",
             )
         },
         "case_set_sha256": hashlib.sha256(args.cases.read_bytes()).hexdigest(),
@@ -91,6 +94,7 @@ def main():
                 created.raise_for_status()
                 session = created.json()["id"]
                 observed = {**case, "observations": []}
+                previous = None
                 for turn_index, message in enumerate(case["turns"]):
                     started = time.perf_counter()
                     response = client.post(
@@ -105,6 +109,7 @@ def main():
                             "scenario_checks": check_turn_expectations(
                                 response.json(),
                                 case.get("expectations", [{}] * len(case["turns"]))[turn_index],
+                                previous,
                             ),
                             "storefront_checks": check_storefront_response(
                                 case["storefront_id"],
@@ -118,6 +123,7 @@ def main():
                             ).json(),
                         }
                     )
+                    previous = response.json()
                     print(f"{case['id']}: HTTP {response.status_code}: {message}", flush=True)
                 report["cases"].append(observed)
                 report["mechanical_metrics"] = dialogue_metrics(report["cases"])

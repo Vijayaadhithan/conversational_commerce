@@ -9,6 +9,38 @@ from app.listing_quality import listing_quality, prioritize_listing_evidence, ti
 from app.product_search import ProductSearchRequest
 
 
+def test_duplicate_titles_do_not_fill_the_recommendation_list():
+    from copy import deepcopy
+
+    request = ProductSearchRequest(query="jacket", product_goal="jacket", limit=3)
+    first = {
+        "product_id": "one",
+        "title": "Acme Soft Jacket",
+        "brand": {"value": "Acme"},
+        "ranking": {},
+        "listing_quality": {"supported_concerns": 1},
+    }
+    duplicate = {**deepcopy(first), "product_id": "two", "title": "ACME soft jacket!"}
+    other = {**deepcopy(first), "product_id": "three", "title": "Acme Hooded Coat"}
+    response = prioritize_listing_evidence(
+        {"method": "test", "results": [first, duplicate, other]}, request
+    )
+    assert [row["product_id"] for row in response["results"]] == ["one", "three"]
+    assert response["selection"]["near_duplicates_skipped"] == 1
+
+
+def test_style_similarity_keeps_different_model_numbers_and_brands():
+    from app.listing_quality import same_listing_style
+
+    def row(title, brand="Acme"):
+        return {"title": title, "brand": {"value": brand}}
+
+    title = "Acme Casual Soft Lightweight Long Sleeve Cotton Button Down Office Shirt Breathable Everyday"
+    assert same_listing_style(row(title), row(title + " Blue"))
+    assert not same_listing_style(row(title + " Model 20"), row(title + " Model 30"))
+    assert not same_listing_style(row(title), row(title, "Another"))
+
+
 @pytest.mark.parametrize(
     "title,family,expected",
     [

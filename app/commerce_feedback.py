@@ -8,6 +8,39 @@ from app.commerce_models import ProductFeedback
 from app.commerce_text import evidence_ok, reference_positions
 
 
+def recover_reaction(state, plan, message):
+    """Recover explicit result criticism when the planner labels it a preference.
+
+    A complaint is reaction evidence, never a positive product requirement.
+    Questions, mixed reactions and new product requests retain normal validation.
+    """
+    task = state.active()
+    if not task or not task.shown or plan.intent not in {"refine", "feedback", "more", "clarify"}:
+        return
+    criticism = re.fullmatch(
+        r"\s*(?:(?:these|those|they|the (?:options|products|results|list))\s+"
+        r"(?:(?:look|feel|seem|are)\s+)?)?too\s+[^?;.!]+[.!\s]*",
+        message,
+        re.I,
+    )
+    if criticism and not re.search(r"\b(?:but|except|not|don['’]?t|do not)\b", message, re.I):
+        if plan.feedback is None:
+            plan.feedback = "dislike"
+        if plan.feedback == "dislike":
+            rejected_phrase = re.search(r"\btoo\s+.+", message, re.I).group()
+            # Only the criticized phrase is removed. Independently stated needs
+            # still pass through the ordinary evidence and polarity validators.
+            plan.changes = [
+                change
+                for change in plan.changes
+                if not (
+                    change.field == "need"
+                    and isinstance(change.value, str)
+                    and evidence_ok(change.value, rejected_phrase)
+                )
+            ]
+
+
 def resolved_positions(task, message):
     # Money is never a display position, including single-digit prices.
     references = re.sub(
@@ -120,6 +153,24 @@ def record_feedback(state, plan, message, old_pending=""):
                 "feedback_limit",
             )
         task.feedback.append(item)
+    # Retain bounded identity examples after pagination. These remain user
+    # reactions to historical listings, never evidence of product suitability.
+    examples = {
+        row["product_id"]: row for row in task.sources.get("feedback_examples", {}).get("items", [])
+    }
+    for position in positions:
+        row = task.shown[position - 1]
+        examples.pop(row["product_id"], None)
+        examples[row["product_id"]] = {
+            "product_id": row["product_id"],
+            "title": row["title"][:160],
+            "sentiment": plan.feedback,
+            "evidence": message[:160],
+        }
+    task.sources["feedback_examples"] = {
+        "source": "displayed_product_reactions",
+        "items": list(examples.values())[-5:],
+    }
     task.focused_positions = positions
     if plan.recommendation_requested is not True:
         return question(

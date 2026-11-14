@@ -55,8 +55,17 @@ A bare coordinated list can share a trailing literal concern, such as shampoo an
 conditioner for dandruff. Each preference still cites actual message text; separate
 clauses, prices, recipients and hard filters are never copied between tasks.
 
+Explicit result criticism such as “these look too formal” is retained as negative
+feedback, even when a planner proposes it as a positive concern. Rejected IDs stay
+excluded from the task. Bounded feedback examples retain displayed product titles
+after pagination so follow-ups can refer to liked options. They are untrusted soft
+style context, never product facts or hard requirements, and remain task-scoped.
+Evidence-ranked results conservatively collapse repeated titles and very similar
+same-brand listings while retaining distinct model numbers. Partial-match notices
+remain visible when only some saved concerns have listing support.
+
 With `COMMERCE_FAST_PATH=1`, validated recommendation lists and required clarification
-questions are returned directly, including multi-product results. An explicit request
+questions are returned directly, including semantic refinements and multi-product results. An explicit request
 for an explanation keeps the reviewed reply path. This avoids optional model writing
 and review calls after the backend has already prepared a complete grounded reply.
 Set `COMMERCE_FAST_PATH=0` to retain the reviewed path for these results.

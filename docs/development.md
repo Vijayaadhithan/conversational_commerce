@@ -79,6 +79,37 @@ the actual capture; historical labels cannot be assumed valid after a rebuild.
 Report execution, constraint compliance, and reviewed relevance separately, and
 identify AI-only reviews as such. Captures and summaries remain under ignored `data/`.
 
+### Demo quality gate
+
+`evals/conversations_demo.json` contains 40 journeys across the four shopping
+sections, including criticism, likes, budget changes, comparisons, task isolation,
+typos, pauses, unsupported requirements and empty results. Run it against the same
+catalog and provider configuration for baseline and candidate captures:
+
+```sh
+.venv/bin/python scripts/evaluate_conversations.py \
+  --cases evals/conversations_demo.json \
+  --output data/evaluation/demo_quality/candidate.json
+```
+
+The evaluator uses temporary conversation storage and reads the configured catalog.
+It makes real embedding, planner and reranker calls. Expectations check observable
+actions, saved filters, task counts, constraint preservation and changed products;
+the report lists failed assertions. These are regression checks, not relevance
+scores. Review every turn and listing evidence separately before accepting a demo.
+Compare latency under comparable load and distinguish warm/cold starts and model
+fallbacks. The 90% journey-success goal requires explicit review, not HTTP success.
+
+For rehearsal, use these journeys with fresh scoped conversations, then vary the
+phrasing and budget rather than memorizing product IDs:
+
+- Clothing: “Help me find something comfy for office” → “these look too formal”
+  → “something softer instead” → “compare the first two”.
+- Beauty: “Help me find something for my dry skin under $30” → “something gentler”
+  → “does the first contain fragrance?”.
+- Beauty tasks: “shampoo under $15 and moisturizer under $25” → “back to the shampoo”
+  → “under $10 instead”; verify that the moisturizer budget remains unchanged.
+
 ## Catalog import and enrichment
 
 ```dotenv

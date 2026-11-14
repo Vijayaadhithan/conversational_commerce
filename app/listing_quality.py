@@ -190,8 +190,44 @@ def prioritize_listing_evidence(response, request):
     supported = [
         row for row in candidates if row.get("listing_quality", {}).get("supported_concerns")
     ]
-    response["results"] = (supported or candidates)[: request.limit]
+    selected, duplicates = [], 0
+    for row in supported or candidates:
+        if any(same_listing_style(row, previous) for previous in selected):
+            duplicates += 1
+            continue
+        selected.append(row)
+        if len(selected) == request.limit:
+            break
+    response["results"] = selected
+    response["selection"] = {"near_duplicates_skipped": duplicates}
     for rank, row in enumerate(response["results"], 1):
         row["ranking"]["evidence_rank"] = rank
     response["method"] += "+listing_evidence"
     return response
+
+
+def same_listing_style(left, right):
+    """Conservatively collapse repeated listings within the same brand/category.
+
+    Preserve differing model numbers, quantities and sizes. Similarity never
+    introduces a new candidate or overrides the earlier evidence ranking.
+    """
+
+    def identity(row):
+        brand = row.get("brand") or {}
+        return (str(brand.get("value", "")).casefold(), row.get("category", {}))
+
+    if identity(left) != identity(right):
+        return False
+    a, b = (re.findall(r"\w+", row.get("title", "").casefold()) for row in (left, right))
+    if not a or not b:
+        return False
+    if a == b:
+        return True
+    if not identity(left)[0] or min(len(a), len(b)) < 8:
+        return False
+    if {word for word in a if any(c.isdigit() for c in word)} != {
+        word for word in b if any(c.isdigit() for c in word)
+    }:
+        return False
+    return len(set(a) & set(b)) / len(set(a) | set(b)) >= 0.92

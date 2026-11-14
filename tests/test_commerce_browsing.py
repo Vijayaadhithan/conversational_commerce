@@ -321,7 +321,7 @@ def test_unrequested_costumes_rank_below_everyday_jackets():
     assert not listing_quality(rows[0], request, [])["cautions"]
 
 
-def test_open_ended_results_use_reviewed_natural_writing_and_keep_the_products():
+def test_open_ended_results_can_use_grounded_reply_without_optional_writing():
     search = SectionSearch()
     state, value = scoped_turn(
         ShoppingState(storefront_id="clothing"),
@@ -337,12 +337,104 @@ def test_open_ended_results_use_reviewed_natural_writing_and_keep_the_products()
         [sentence("Option 1 mentions comfort in its listing.", "p1"), APPROVED],
         commerce_natural=True,
     )
-    assert response_route(chat.settings, "comfy jacket", value)["mode"] == "reviewed"
+    assert response_route(chat.settings, "comfy jacket", value)["mode"] == "fast"
+    assert response_route(chat.settings, "explain why these fit", value)["mode"] == "reviewed"
     products = deepcopy(value["products"])
     asyncio.run(natural_answer(chat, state, "comfy jacket", value))
     assert value["answer_generation"]["status"] == "generated"
     assert value["products"] == products and value["reply"].startswith("Option 1 mentions comfort")
     assert "historical USD" in value["reply"]
+
+
+def test_result_criticism_is_not_saved_as_a_positive_need_or_repeated():
+    search = SectionSearch()
+    state, previous = scoped_turn(
+        ShoppingState(storefront_id="clothing"),
+        "jacket under $60",
+        search,
+        intent="search",
+        recommendation_requested=True,
+    )
+    state, result = scoped_turn(
+        state,
+        "these look too formal",
+        search,
+        changes=[change("need", "too formal", "too formal")],
+        recommendation_requested=True,
+        interpretation={"query": "casual jacket", "evidence": "too formal"},
+    )
+    assert state.active().need == ""
+    assert state.active().feedback[-1].sentiment == "dislike"
+    assert not {r["product_id"] for r in previous["products"]} & {
+        r["product_id"] for r in result["products"]
+    }
+    assert search.calls[-1].query == "casual jacket"
+    assert search.calls[-1].filters.max_price == Decimal("59.99")
+    assert "left out the options you rejected" in result["reply"]
+
+
+@pytest.mark.parametrize(
+    "message", ["not too formal", "are these too formal?", "too formal but I like the second"]
+)
+def test_reaction_recovery_does_not_guess_questions_or_mixed_sentiment(message):
+    from app.commerce_feedback import recover_reaction
+
+    state = ShoppingState(tasks=[ShoppingTask(id=1, shown=[{"title": "Jacket"}])], active_task_id=1)
+    intent = IntentPlan(intent="refine", evidence=message)
+    recover_reaction(state, intent, message)
+    assert intent.feedback is None
+
+
+def test_feedback_examples_survive_pagination_but_stay_scoped_to_the_task():
+    import json
+
+    from app.commerce_prompts import planner_context
+
+    search = SectionSearch()
+    state, previous = scoped_turn(
+        ShoppingState(storefront_id="clothing"),
+        "jacket",
+        search,
+        intent="search",
+        recommendation_requested=True,
+    )
+    liked = previous["products"][0]
+    state, _ = scoped_turn(
+        state,
+        "I like the first",
+        search,
+        intent="feedback",
+        feedback="like",
+        recommendation_requested=False,
+    )
+    state, _ = scoped_turn(state, "more", search, intent="more", recommendation_requested=True)
+    assert liked["product_id"] not in {row["product_id"] for row in state.active().shown}
+    context = json.loads(planner_context(state, "more like the one I liked"))
+    assert context["tasks"][0]["feedback_examples"][0]["title"] == liked["title"]
+    state.tasks.append(ShoppingTask(id=2, query="shirt"))
+    state.active_task_id = 2
+    context = json.loads(planner_context(state, "more"))
+    assert all("feedback_examples" not in task for task in context["tasks"])
+
+
+def test_partial_match_notice_survives_one_confirmed_and_one_unknown_preference():
+    from app.commerce_replies import recommendation_reply
+
+    task = ShoppingTask(id=1, query="jacket", need="soft; breathable")
+    products = [
+        {
+            "title": "Soft jacket",
+            "price": {"amount": "20"},
+            "concern_evidence": [
+                {"concern": "soft", "support": "positive", "status": "listing_mention"},
+                {"concern": "breathable", "support": "unknown", "status": "not_stated"},
+            ],
+        }
+    ]
+    result = recommendation_reply(
+        task, products, IntentPlan(intent="refine", evidence="breathable")
+    )
+    assert "partial matches" in result
 
 
 @pytest.mark.parametrize("reaction", ["meh", "too flashy", "not my vibe", "wrong direction"])

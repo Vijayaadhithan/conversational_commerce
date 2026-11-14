@@ -63,13 +63,34 @@ def recommendation_reply(task, products, plan):
     else:
         opening = f"Here are {len(products)} options for {task.query}:"
     if plan.feedback == "dislike":
-        opening = "Let's try a different selection. " + opening
-    if task.need and not any(
-        item.get("support") == "positive"
-        for row in products
-        for item in row.get("concern_evidence", [])
-    ):
-        opening += " The listings don't explicitly confirm these preferences, so these are partial matches."
+        opening = "I've left out the options you rejected. " + opening
+    elif plan.feedback == "like":
+        opening = "I've saved the options you liked. " + opening
+    if plan.intent in {"refine", "cheaper", "similar", "more"} or plan.feedback:
+        constraints = []
+        if task.filters.max_price is not None:
+            constraints.append(f"maximum ${task.filters.max_price:.2f}")
+        department = task.filters.attributes.get("department")
+        if department:
+            constraints.append(f"recipient: {department}")
+        if constraints:
+            opening += " Kept your " + " and ".join(constraints) + "."
+    if task.need:
+        incomplete = [
+            concern
+            for concern in task_concerns(task)
+            if not all(
+                any(
+                    item.get("concern") == concern and item.get("support") == "positive"
+                    for item in row.get("concern_evidence", [])
+                )
+                for row in products
+            )
+        ]
+        if incomplete:
+            opening += (
+                " These are partial matches; not every listing confirms all your preferences."
+            )
     return (
         opening
         + "\n"

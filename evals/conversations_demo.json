@@ -1,0 +1,1016 @@
+[
+  {
+    "id": "reported_jacket_chat",
+    "storefront_id": "clothing",
+    "turns": [
+      "A jacket under $60",
+      "adult men",
+      "need something comgy",
+      "comfy and soft",
+      "the list you showed are not comfy and soft jackets"
+    ],
+    "expectations": [
+      {
+        "products": true,
+        "no_validation_recovery": true
+      },
+      {
+        "products": true,
+        "no_validation_recovery": true,
+        "constraints_preserved": [
+          "max_price"
+        ]
+      },
+      {
+        "products": true,
+        "no_validation_recovery": true,
+        "constraints_preserved": [
+          "max_price",
+          "attributes.department"
+        ]
+      },
+      {
+        "products": true,
+        "no_validation_recovery": true,
+        "constraints_preserved": [
+          "max_price",
+          "attributes.department"
+        ]
+      },
+      {
+        "products": true,
+        "no_validation_recovery": true,
+        "constraints_preserved": [
+          "max_price",
+          "attributes.department"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "office_clothing_goal",
+    "storefront_id": "clothing",
+    "turns": [
+      "Help me find something comfy for office",
+      "these look too formal",
+      "something softer instead"
+    ],
+    "expectations": [
+      {
+        "products": true,
+        "no_validation_recovery": true
+      },
+      {
+        "products": true,
+        "no_validation_recovery": true,
+        "constraints_preserved": [
+          "max_price",
+          "attributes.department"
+        ],
+        "products_changed": true,
+        "need_excludes": [
+          "too formal"
+        ]
+      },
+      {
+        "products": true,
+        "no_validation_recovery": true,
+        "constraints_preserved": [
+          "max_price",
+          "attributes.department"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "beauty_goal",
+    "storefront_id": "beauty",
+    "turns": [
+      "Help me find something for my dry skin under $30",
+      "something gentler",
+      "does the first contain fragrance?"
+    ],
+    "expectations": [
+      {
+        "products": true,
+        "no_validation_recovery": true
+      },
+      {
+        "products": true,
+        "no_validation_recovery": true,
+        "constraints_preserved": [
+          "max_price",
+          "attributes.department"
+        ]
+      },
+      {
+        "search": false,
+        "no_validation_recovery": true
+      }
+    ]
+  },
+  {
+    "id": "hair_goal",
+    "storefront_id": "beauty",
+    "turns": [
+      "need something for frizzy hair",
+      "not those, something less strong"
+    ],
+    "expectations": [
+      {
+        "products": true,
+        "no_validation_recovery": true
+      },
+      {
+        "products": true,
+        "no_validation_recovery": true,
+        "constraints_preserved": [
+          "max_price",
+          "attributes.department"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "walking_footwear",
+    "storefront_id": "footwear",
+    "turns": [
+      "help me find something for walking all day under $70",
+      "adult women",
+      "these don't look comfortable",
+      "same vibe but cheaper"
+    ],
+    "expectations": [
+      {
+        "products": true,
+        "no_validation_recovery": true
+      },
+      {
+        "products": true,
+        "no_validation_recovery": true,
+        "constraints_preserved": [
+          "max_price"
+        ]
+      },
+      {
+        "products": true,
+        "no_validation_recovery": true,
+        "constraints_preserved": [
+          "max_price",
+          "attributes.department"
+        ]
+      },
+      {
+        "no_validation_recovery": true
+      }
+    ]
+  },
+  {
+    "id": "wedding_accessories",
+    "storefront_id": "fashion",
+    "turns": [
+      "find me something understated for a wedding under $40",
+      "too flashy",
+      "can you explain the first?"
+    ],
+    "expectations": [
+      {
+        "products": true,
+        "no_validation_recovery": true
+      },
+      {
+        "products": true,
+        "no_validation_recovery": true,
+        "constraints_preserved": [
+          "max_price",
+          "attributes.department"
+        ]
+      },
+      {
+        "search": false,
+        "no_validation_recovery": true
+      }
+    ]
+  },
+  {
+    "id": "pause_clothing",
+    "storefront_id": "clothing",
+    "turns": [
+      "a jacket under $60",
+      "soft, but don't search yet",
+      "okay go ahead"
+    ],
+    "expectations": [
+      {
+        "products": true,
+        "no_validation_recovery": true
+      },
+      {
+        "search": false,
+        "no_validation_recovery": true
+      },
+      {
+        "products": true,
+        "no_validation_recovery": true,
+        "constraints_preserved": [
+          "max_price",
+          "attributes.department"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "vague_rejection",
+    "storefront_id": "footwear",
+    "turns": [
+      "show me casual shoes under $80",
+      "meh",
+      "not my vibe"
+    ],
+    "expectations": [
+      {
+        "products": true,
+        "no_validation_recovery": true
+      },
+      {
+        "products": true,
+        "no_validation_recovery": true,
+        "constraints_preserved": [
+          "max_price",
+          "attributes.department"
+        ]
+      },
+      {
+        "products": true,
+        "no_validation_recovery": true,
+        "constraints_preserved": [
+          "max_price",
+          "attributes.department"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "separate_budgets",
+    "storefront_id": "beauty",
+    "turns": [
+      "shampoo under $15 and moisturizer under $25",
+      "make the shampoo gentler"
+    ],
+    "expectations": [
+      {
+        "products": true,
+        "no_validation_recovery": true
+      },
+      {
+        "products": true,
+        "no_validation_recovery": true,
+        "constraints_preserved": [
+          "max_price",
+          "attributes.department"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "category_switch",
+    "storefront_id": "clothing",
+    "turns": [
+      "a soft jacket under $60",
+      "now I also need a handbag"
+    ],
+    "expectations": [
+      {
+        "products": true,
+        "no_validation_recovery": true
+      },
+      {
+        "action": "handoff",
+        "no_validation_recovery": true
+      }
+    ]
+  },
+  {
+    "id": "nonsense",
+    "storefront_id": "fashion",
+    "turns": [
+      "asdf qwer zzzz"
+    ],
+    "expectations": [
+      {
+        "action": "clarify",
+        "search": false,
+        "no_validation_recovery": true
+      }
+    ]
+  },
+  {
+    "id": "shirt_budget",
+    "storefront_id": "clothing",
+    "turns": [
+      "Show me a shirt under $30",
+      "under $25 instead"
+    ],
+    "expectations": [
+      {
+        "no_validation_recovery": true,
+        "products": true,
+        "task_count": 1,
+        "active_filters": {
+          "max_price": "29.99"
+        }
+      },
+      {
+        "no_validation_recovery": true,
+        "action": "recommend",
+        "task_count": 1,
+        "active_filters": {
+          "max_price": "24.99"
+        }
+      }
+    ]
+  },
+  {
+    "id": "dress_budget",
+    "storefront_id": "clothing",
+    "turns": [
+      "Show me a dress under $50",
+      "under $45 instead"
+    ],
+    "expectations": [
+      {
+        "no_validation_recovery": true,
+        "products": true,
+        "task_count": 1,
+        "active_filters": {
+          "max_price": "49.99"
+        }
+      },
+      {
+        "no_validation_recovery": true,
+        "action": "recommend",
+        "task_count": 1,
+        "active_filters": {
+          "max_price": "44.99"
+        }
+      }
+    ]
+  },
+  {
+    "id": "jacket_budget",
+    "storefront_id": "clothing",
+    "turns": [
+      "Show me a jacket under $60",
+      "under $55 instead"
+    ],
+    "expectations": [
+      {
+        "no_validation_recovery": true,
+        "products": true,
+        "task_count": 1,
+        "active_filters": {
+          "max_price": "59.99"
+        }
+      },
+      {
+        "no_validation_recovery": true,
+        "action": "recommend",
+        "task_count": 1,
+        "active_filters": {
+          "max_price": "54.99"
+        }
+      }
+    ]
+  },
+  {
+    "id": "sneakers_budget",
+    "storefront_id": "footwear",
+    "turns": [
+      "Show me a sneakers under $70",
+      "under $65 instead"
+    ],
+    "expectations": [
+      {
+        "no_validation_recovery": true,
+        "products": true,
+        "task_count": 1,
+        "active_filters": {
+          "max_price": "69.99"
+        }
+      },
+      {
+        "no_validation_recovery": true,
+        "action": "recommend",
+        "task_count": 1,
+        "active_filters": {
+          "max_price": "64.99"
+        }
+      }
+    ]
+  },
+  {
+    "id": "sandals_budget",
+    "storefront_id": "footwear",
+    "turns": [
+      "Show me a sandals under $40",
+      "under $35 instead"
+    ],
+    "expectations": [
+      {
+        "no_validation_recovery": true,
+        "products": true,
+        "task_count": 1,
+        "active_filters": {
+          "max_price": "39.99"
+        }
+      },
+      {
+        "no_validation_recovery": true,
+        "action": "recommend",
+        "task_count": 1,
+        "active_filters": {
+          "max_price": "34.99"
+        }
+      }
+    ]
+  },
+  {
+    "id": "bag_budget",
+    "storefront_id": "fashion",
+    "turns": [
+      "Show me a handbag under $35",
+      "under $30 instead"
+    ],
+    "expectations": [
+      {
+        "no_validation_recovery": true,
+        "products": true,
+        "task_count": 1,
+        "active_filters": {
+          "max_price": "34.99"
+        }
+      },
+      {
+        "no_validation_recovery": true,
+        "action": "recommend",
+        "task_count": 1,
+        "active_filters": {
+          "max_price": "29.99"
+        }
+      }
+    ]
+  },
+  {
+    "id": "necklace_budget",
+    "storefront_id": "fashion",
+    "turns": [
+      "Show me a necklace under $50",
+      "under $45 instead"
+    ],
+    "expectations": [
+      {
+        "no_validation_recovery": true,
+        "products": true,
+        "task_count": 1,
+        "active_filters": {
+          "max_price": "49.99"
+        }
+      },
+      {
+        "no_validation_recovery": true,
+        "action": "recommend",
+        "task_count": 1,
+        "active_filters": {
+          "max_price": "44.99"
+        }
+      }
+    ]
+  },
+  {
+    "id": "shampoo_budget",
+    "storefront_id": "beauty",
+    "turns": [
+      "Show me a shampoo under $15",
+      "under $10 instead"
+    ],
+    "expectations": [
+      {
+        "no_validation_recovery": true,
+        "products": true,
+        "task_count": 1,
+        "active_filters": {
+          "max_price": "14.99"
+        }
+      },
+      {
+        "no_validation_recovery": true,
+        "action": "recommend",
+        "task_count": 1,
+        "active_filters": {
+          "max_price": "9.99"
+        }
+      }
+    ]
+  },
+  {
+    "id": "moisturizer_budget",
+    "storefront_id": "beauty",
+    "turns": [
+      "Show me a moisturizer under $25",
+      "under $20 instead"
+    ],
+    "expectations": [
+      {
+        "no_validation_recovery": true,
+        "products": true,
+        "task_count": 1,
+        "active_filters": {
+          "max_price": "24.99"
+        }
+      },
+      {
+        "no_validation_recovery": true,
+        "action": "recommend",
+        "task_count": 1,
+        "active_filters": {
+          "max_price": "19.99"
+        }
+      }
+    ]
+  },
+  {
+    "id": "lipstick_budget",
+    "storefront_id": "beauty",
+    "turns": [
+      "Show me a lipstick under $22",
+      "under $17 instead"
+    ],
+    "expectations": [
+      {
+        "no_validation_recovery": true,
+        "products": true,
+        "task_count": 1,
+        "active_filters": {
+          "max_price": "21.99"
+        }
+      },
+      {
+        "no_validation_recovery": true,
+        "action": "recommend",
+        "task_count": 1,
+        "active_filters": {
+          "max_price": "16.99"
+        }
+      }
+    ]
+  },
+  {
+    "id": "formal_feedback",
+    "storefront_id": "clothing",
+    "turns": [
+      "Show me a jacket under $60",
+      "these look too formal"
+    ],
+    "expectations": [
+      {
+        "no_validation_recovery": true,
+        "products": true
+      },
+      {
+        "no_validation_recovery": true,
+        "products": true,
+        "products_changed": true,
+        "need_excludes": [
+          "too formal"
+        ],
+        "constraints_preserved": [
+          "max_price"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "flashy_feedback",
+    "storefront_id": "fashion",
+    "turns": [
+      "Show me a necklace under $40",
+      "too flashy"
+    ],
+    "expectations": [
+      {
+        "no_validation_recovery": true,
+        "products": true
+      },
+      {
+        "no_validation_recovery": true,
+        "products": true,
+        "products_changed": true,
+        "need_excludes": [
+          "too flashy"
+        ],
+        "constraints_preserved": [
+          "max_price"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "floral_feedback",
+    "storefront_id": "beauty",
+    "turns": [
+      "Show me a perfume under $40",
+      "these are too floral"
+    ],
+    "expectations": [
+      {
+        "no_validation_recovery": true,
+        "products": true
+      },
+      {
+        "no_validation_recovery": true,
+        "products": true,
+        "products_changed": true,
+        "need_excludes": [
+          "too floral"
+        ],
+        "constraints_preserved": [
+          "max_price"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "chunky_feedback",
+    "storefront_id": "footwear",
+    "turns": [
+      "Show me a shoes under $70",
+      "these look too chunky"
+    ],
+    "expectations": [
+      {
+        "no_validation_recovery": true,
+        "products": true
+      },
+      {
+        "no_validation_recovery": true,
+        "products": true,
+        "products_changed": true,
+        "need_excludes": [
+          "too chunky"
+        ],
+        "constraints_preserved": [
+          "max_price"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "like_jacket",
+    "storefront_id": "clothing",
+    "turns": [
+      "Show me a jacket under $60",
+      "I like the first, show me similar options",
+      "more options"
+    ],
+    "expectations": [
+      {
+        "no_validation_recovery": true,
+        "products": true
+      },
+      {
+        "no_validation_recovery": true,
+        "products": true,
+        "task_count": 1,
+        "constraints_preserved": [
+          "max_price"
+        ]
+      },
+      {
+        "no_validation_recovery": true,
+        "products": true,
+        "task_count": 1,
+        "constraints_preserved": [
+          "max_price"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "like_bag",
+    "storefront_id": "fashion",
+    "turns": [
+      "Show me a handbag under $40",
+      "I like the first, show me similar options",
+      "more options"
+    ],
+    "expectations": [
+      {
+        "no_validation_recovery": true,
+        "products": true
+      },
+      {
+        "no_validation_recovery": true,
+        "products": true,
+        "task_count": 1,
+        "constraints_preserved": [
+          "max_price"
+        ]
+      },
+      {
+        "no_validation_recovery": true,
+        "products": true,
+        "task_count": 1,
+        "constraints_preserved": [
+          "max_price"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "compare_shoes",
+    "storefront_id": "footwear",
+    "turns": [
+      "Show me a shoes under $70",
+      "compare the first two"
+    ],
+    "expectations": [
+      {
+        "no_validation_recovery": true,
+        "products": true
+      },
+      {
+        "no_validation_recovery": true,
+        "search": false,
+        "task_count": 1,
+        "constraints_preserved": [
+          "max_price"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "inspect_necklace",
+    "storefront_id": "fashion",
+    "turns": [
+      "Show me a necklace under $40",
+      "details about the second"
+    ],
+    "expectations": [
+      {
+        "no_validation_recovery": true,
+        "products": true
+      },
+      {
+        "no_validation_recovery": true,
+        "search": false,
+        "task_count": 1,
+        "constraints_preserved": [
+          "max_price"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "fragrance_question",
+    "storefront_id": "beauty",
+    "turns": [
+      "Show me a moisturizer under $30",
+      "does the first contain fragrance?"
+    ],
+    "expectations": [
+      {
+        "no_validation_recovery": true,
+        "products": true
+      },
+      {
+        "no_validation_recovery": true,
+        "search": false,
+        "task_count": 1,
+        "constraints_preserved": [
+          "max_price"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "typo_bag",
+    "storefront_id": "fashion",
+    "turns": [
+      "pls recomend a handbag under $35"
+    ],
+    "expectations": [
+      {
+        "no_validation_recovery": true,
+        "products": true,
+        "task_count": 1,
+        "active_filters": {
+          "max_price": "34.99"
+        }
+      }
+    ]
+  },
+  {
+    "id": "typo_winter",
+    "storefront_id": "clothing",
+    "turns": [
+      "male clothes for winter"
+    ],
+    "expectations": [
+      {
+        "no_validation_recovery": true,
+        "products": true,
+        "task_count": 1,
+        "active_filters": {
+          "attributes": {
+            "department": "mens"
+          }
+        }
+      }
+    ]
+  },
+  {
+    "id": "budget_isolation",
+    "storefront_id": "beauty",
+    "turns": [
+      "shampoo under $15 and moisturizer under $25",
+      "back to the shampoo",
+      "under $10 instead"
+    ],
+    "expectations": [
+      {
+        "no_validation_recovery": true,
+        "products": true,
+        "task_count": 2,
+        "task_filters": [
+          {
+            "query": "shampoo",
+            "filters": {
+              "max_price": "14.99"
+            }
+          },
+          {
+            "query": "moisturizer",
+            "filters": {
+              "max_price": "24.99"
+            }
+          }
+        ]
+      },
+      {
+        "no_validation_recovery": true,
+        "products": true,
+        "task_count": 2,
+        "active_filters": {
+          "max_price": "14.99"
+        }
+      },
+      {
+        "no_validation_recovery": true,
+        "task_count": 2,
+        "task_filters": [
+          {
+            "query": "shampoo",
+            "filters": {
+              "max_price": "9.99"
+            }
+          },
+          {
+            "query": "moisturizer",
+            "filters": {
+              "max_price": "24.99"
+            }
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "unmatched_budget",
+    "storefront_id": "fashion",
+    "turns": [
+      "a handbag under $0.01"
+    ],
+    "expectations": [
+      {
+        "no_validation_recovery": true,
+        "products": false,
+        "action": "recommend",
+        "active_filters": {
+          "max_price": "0.00"
+        }
+      }
+    ]
+  },
+  {
+    "id": "unsupported_delivery",
+    "storefront_id": "clothing",
+    "turns": [
+      "a jacket delivered by tomorrow"
+    ],
+    "expectations": [
+      {
+        "no_validation_recovery": true,
+        "products": false,
+        "search": false,
+        "action": "clarify"
+      }
+    ]
+  },
+  {
+    "id": "unsupported_currency",
+    "storefront_id": "fashion",
+    "turns": [
+      "a handbag under 2000 INR"
+    ],
+    "expectations": [
+      {
+        "no_validation_recovery": true,
+        "products": false,
+        "search": false,
+        "action": "clarify"
+      }
+    ]
+  },
+  {
+    "id": "ambiguous_reference",
+    "storefront_id": "beauty",
+    "turns": [
+      "show me moisturizer under $30",
+      "is that one better?"
+    ],
+    "expectations": [
+      {
+        "no_validation_recovery": true,
+        "products": true
+      },
+      {
+        "no_validation_recovery": true,
+        "products": false,
+        "search": false,
+        "action": "clarify"
+      }
+    ]
+  },
+  {
+    "id": "reset_preferences",
+    "storefront_id": "clothing",
+    "turns": [
+      "a jacket under $60",
+      "start over"
+    ],
+    "expectations": [
+      {
+        "no_validation_recovery": true,
+        "products": true
+      },
+      {
+        "no_validation_recovery": true,
+        "search": false,
+        "task_count": 0,
+        "action": "clarify"
+      }
+    ]
+  },
+  {
+    "id": "remove_budget",
+    "storefront_id": "beauty",
+    "turns": [
+      "shampoo under $15",
+      "remove my budget limit"
+    ],
+    "expectations": [
+      {
+        "no_validation_recovery": true,
+        "products": true
+      },
+      {
+        "no_validation_recovery": true,
+        "active_filters": {
+          "max_price": null
+        },
+        "task_count": 1
+      }
+    ]
+  },
+  {
+    "id": "explicit_pause",
+    "storefront_id": "fashion",
+    "turns": [
+      "a necklace under $40",
+      "wait, do not search"
+    ],
+    "expectations": [
+      {
+        "no_validation_recovery": true,
+        "products": true
+      },
+      {
+        "no_validation_recovery": true,
+        "search": false,
+        "constraints_preserved": [
+          "max_price"
+        ]
+      }
+    ]
+  }
+]

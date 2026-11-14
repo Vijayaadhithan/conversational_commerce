@@ -52,7 +52,6 @@ def response_route(settings, message, commerce):
             return {"mode": "fast", "reason": "validated_question"}
         if (
             commerce["action"] in {"recommend", "multi"}
-            and not commerce.get("intent", {}).get("interpretation")
             and not re.search(
                 r"\b(?:why|explain|trade.?offs?|how|better|difference|compare)\b", message, re.I
             )

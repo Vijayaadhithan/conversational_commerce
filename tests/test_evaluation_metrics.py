@@ -319,3 +319,45 @@ def test_scenario_expectations_check_behaviour_without_scoring_relevance():
     assert check_turn_expectations(response, {"products": True, "search": True})["passed"]
     assert not check_turn_expectations(response, {"search": False})["passed"]
     assert not check_turn_expectations({"detail": "failed"}, {})["passed"]
+
+
+def test_demo_expectations_detect_lost_budget_and_criticism_saved_as_need():
+    from copy import deepcopy
+
+    from app.conversation_evaluation import check_turn_expectations
+
+    response = {
+        "commerce": {
+            "products": [{"product_id": "p2"}],
+            "preferences": {
+                "active_task_id": 1,
+                "tasks": [
+                    {
+                        "id": 1,
+                        "query": "jacket",
+                        "need": "",
+                        "filters": {"max_price": "59.99", "attributes": {"department": "mens"}},
+                    }
+                ],
+            },
+        }
+    }
+    previous = deepcopy(response)
+    previous["commerce"]["products"] = [{"product_id": "p1"}]
+    expected = {
+        "products_changed": True,
+        "task_count": 1,
+        "active_filters": {"max_price": "59.99"},
+        "need_excludes": ["too formal"],
+        "constraints_preserved": ["max_price", "attributes.department"],
+        "task_filters": [{"query": "jacket", "filters": {"max_price": "59.99"}}],
+    }
+    assert check_turn_expectations(response, expected, previous)["passed"]
+    task = response["commerce"]["preferences"]["tasks"][0]
+    task["filters"]["max_price"] = None
+    task["need"] = "too formal"
+    checks = check_turn_expectations(response, expected, previous)["checks"]
+    assert not checks["constraints_preserved"] and not checks["need_excludes"]
+    assert not checks["active_filters"] and not checks["task_filters"]
+    with pytest.raises(ValueError, match="Unknown scenario"):
+        check_turn_expectations(response, {"typo": True})

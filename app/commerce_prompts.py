@@ -46,6 +46,9 @@ For 'same style but cheaper' use similar and cheaper_than_reference=true; code v
 Use feedback=like/dislike for reactions. Negative feedback defaults to refine and recommendation_requested=true unless browsing is paused.
 Interpret 'not comfy', 'wrong vibe', 'meh' and 'the list' semantically. Save negative reasons as feedback, never as positive requirements.
 'Too floral' may guide less floral retrieval but cannot become a positive floral need or a fragrance-free hard filter.
+Criticism such as 'these look too formal' is feedback=dislike, never a positive need for 'too formal'.
+Use saved feedback_examples as soft style context for similar options, including after pagination; keep all current constraints.
+Examples and reactions never establish product properties, mandatory filters or cross-task preferences.
 
 For open-ended browsing/refinement provide interpretation={query,evidence}. Query is a concise normalized retrieval hypothesis combining
 saved goal and current preferences; evidence is an exact latest-message quote. Correct typos and resolve colloquial/negative descriptions
@@ -99,6 +102,11 @@ def planner_context(state: "ShoppingState", message: str, dialogue=()) -> str:
                 **(
                     {"feedback": [item.model_dump() for item in task.feedback[-3:]]}
                     if task.feedback
+                    else {}
+                ),
+                **(
+                    {"feedback_examples": task.sources["feedback_examples"]["items"][-3:]}
+                    if "feedback_examples" in task.sources
                     else {}
                 ),
             )
