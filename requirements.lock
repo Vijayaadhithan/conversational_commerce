@@ -15,7 +15,7 @@ httpx==0.28.1
 idna==3.20
 jsonschema==4.26.0
 jsonschema-specifications==2025.9.1
-opentelemetry-api==1.45.1
+opentelemetry-api==1.45.2
 psutil==7.2.2
 psycopg==3.3.6
 psycopg-binary==3.3.6
