@@ -110,6 +110,13 @@ def product_goal_sql(goal):
         if not re.search(r"\b(?:trees?|stretchers?|holders?)\b", goal, re.I):
             clauses.append("(p.document->>'title') !~* %s")
             values.append(r"\m(shoe trees?|shoe stretchers?|boot holders?)\M")
+        if not re.search(
+            r"\b(?:goo|adhesives?|glue|repair|clips?|polish|deodorizers?)\b", goal, re.I
+        ):
+            clauses.append("(p.document->>'title') !~* %s")
+            values.append(
+                r"\m(shoe|footwear) (goo|adhesives?|glue|repair|clips?|polish|deodorizers?)\M"
+            )
         if re.search(r"\brunning\b", goal, re.I):
             clauses.append("(p.document->>'title') ~* %s")
             values.append(r"\mrunning\M")
