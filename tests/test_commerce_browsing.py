@@ -577,4 +577,6 @@ def test_negative_ranking_terms_persist_on_more_and_explicit_positive_need_overr
     assert search.calls[-1].avoid_terms == ["formal", "dressy"]
     state.active().need = "formal"
     assert "formal" not in retrieval_avoid_terms(state.active())
+    state.active().need = "less formal"
+    assert "formal" in retrieval_avoid_terms(state.active())
     assert all(not call.filters.attributes for call in search.calls)

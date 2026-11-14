@@ -75,7 +75,9 @@ Distinct recognized topics in one phrase, such as “comfy for office,” requir
 evidence for both topics before counting as a supported concern. Unrequested
 holiday/costume formats and sports uniforms rank below ordinary options.
 Product identity gates distinguish shoes from shoe trees/stretchers, and handbags
-from purse hooks or replacement straps. Explicit accessory requests remain valid.
+from purse hooks or replacement straps, and perfume from fixatives/empty bottles.
+Explicit accessory requests remain valid. Pagination after a similarity request
+retains the reference query only while the saved shopping brief still matches.
 
 With `COMMERCE_FAST_PATH=1`, validated recommendation lists and required clarification
 questions are returned directly, including semantic refinements and multi-product results. An explicit request

@@ -109,6 +109,21 @@ def recommend_or_inspect(state, plan, message, old_pending, search):
         )
     if plan.intent != "similar":
         query = retrieval_query(task, plan, message, state.storefront_id)
+    similarity = task.last_search.get("similarity_reference")
+    brief = {
+        "query": task.query,
+        "need": task.need,
+        "recipient": task.recipient,
+        "filters": task.filters.model_dump(mode="json"),
+    }
+    keep_similarity = (
+        plan.intent == "more"
+        and similarity
+        and similarity.get("requirements") == brief
+        and task.last_search.get("query")
+    )
+    if keep_similarity:
+        query = task.last_search["query"]
     filters = task.filters.model_copy(deep=True)
     filters.exclude_product_ids = list(
         dict.fromkeys([*filters.exclude_product_ids, *rejected_ids(task)])
@@ -212,6 +227,18 @@ def recommend_or_inspect(state, plan, message, old_pending, search):
         )
     task.seen_ids.extend(new_ids)
     search_metadata = {key: value for key, value in response.items() if key != "results"}
+    if plan.intent == "similar":
+        search_metadata["similarity_reference"] = {
+            "product_id": selected[0]["product_id"],
+            "requirements": {
+                "query": task.query,
+                "need": task.need,
+                "recipient": task.recipient,
+                "filters": task.filters.model_dump(mode="json"),
+            },
+        }
+    elif keep_similarity:
+        search_metadata["similarity_reference"] = similarity
     if products:
         task.shown = products
         task.focused_positions = []

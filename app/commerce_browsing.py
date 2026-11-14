@@ -152,13 +152,15 @@ def retrieval_avoid_terms(task):
         if match:
             terms.append(match.group(1))
     positive = normalize_search(task.need)
-    return list(
-        dict.fromkeys(
-            term
-            for term in terms
-            if 0 < len(term) <= 60
-            and not re.search(r"\b" + re.escape(normalize_search(term)) + r"\b", positive)
+
+    def explicitly_wanted(term):
+        pattern = r"\b" + re.escape(normalize_search(term)) + r"\b"
+        return bool(re.search(pattern, positive)) and not re.search(
+            r"\b(?:less|fewer|too|not|no|without|avoid|exclude)\s+" + pattern, positive
         )
+
+    return list(
+        dict.fromkeys(term for term in terms if 0 < len(term) <= 60 and not explicitly_wanted(term))
     )[:10]
 
 

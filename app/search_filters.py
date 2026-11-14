@@ -73,6 +73,7 @@ def product_goal_sql(goal):
         (r"\bnecklaces?\b", r"\mnecklaces?\M"),
         (r"\bserum\b", r"\mserums?\M"),
         (r"\bsunscreen\b", r"\msunscreens?\M"),
+        (r"\b(?:perfume|cologne)\b", r"\m(perfumes?|cologne|eau de parfum|eau de toilette)\M"),
     ]
     identity = "concat_ws(' ', p.document->>'title', p.attributes #>> '{product_type,value}')"
     clauses, values = [], []
@@ -96,6 +97,11 @@ def product_goal_sql(goal):
     if re.search(r"\bmoisturi\w*|\bface cream\b", goal, re.I):
         clauses.append("(p.document->>'title') !~* %s")
         values.append(r"\m(masks?|peels?|cleansers?)\M")
+    if re.search(r"\b(?:perfume|cologne)\b", goal, re.I) and not re.search(
+        r"\b(?:fixatives?|empty|supplies|making)\b", goal, re.I
+    ):
+        clauses.append("(p.document->>'title') !~* %s")
+        values.append(r"\m(fixatives?|empty perfume bottles?|perfume making supplies)\M")
     if re.search(r"\b(?:shoes?|sneakers?)\b", goal, re.I):
         clauses.append("(p.document->>'title') !~* %s")
         values.append(

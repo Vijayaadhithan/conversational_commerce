@@ -104,6 +104,20 @@ def test_similar_but_cheaper_uses_one_inspected_price_and_preserves_filters():
     assert "style" not in request.filters.attributes  # similarity is not a new mandatory claim
 
 
+def test_more_after_similarity_keeps_the_reference_style_and_discards_it_after_refinement():
+    state, search = seeded()
+    original = state.active().shown[0]["title"]
+    state, _ = turn(state, search, "show me options like the first", "similar")
+    # Lightweight search adapters can omit the query echo; production includes it.
+    state.active().last_search["query"] = original
+    state, _ = turn(state, search, "more options", "more")
+    assert search.calls[-1].query == original
+    assert state.active().last_search.get("similarity_reference")
+    state.active().need = "dry skin"
+    state, _ = turn(state, search, "more options", "more")
+    assert search.calls[-1].query != original
+
+
 def test_single_digit_budget_is_not_a_product_reference():
     state, search = seeded()
     state, _ = turn(state, search, "details about the second", "details")
