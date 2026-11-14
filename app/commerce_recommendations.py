@@ -12,7 +12,13 @@ from app.commerce_discovery import (
 )
 from app.commerce_errors import IntentError
 from app.commerce_feedback import rejected_ids, resolved_positions
-from app.commerce_replies import card_reply, explain_products, recommendation_reply, task_concerns
+from app.commerce_replies import (
+    card_reply,
+    explain_products,
+    fragrance_reply,
+    recommendation_reply,
+    task_concerns,
+)
 from app.commerce_retrieval import search_with_recovery
 from app.commerce_text import (
     negated,
@@ -57,15 +63,18 @@ def recommend_or_inspect(state, plan, message, old_pending, search):
                 if changed
                 else ""
             )
+            direct_answer = fragrance_reply(selected, message) if plan.intent == "answer" else None
             return state, {
                 "action": plan.intent,
                 "reply": note
+                + (direct_answer + "\n\n" if direct_answer else "")
                 + card_reply(
                     selected, compare=plan.intent == "compare", compact=plan.intent == "compare"
                 ),
                 "products": selected,
                 "search": task.last_search,
                 "snapshot_changed": changed,
+                **({"answer_source": "explicit_fragrance_metadata"} if direct_answer else {}),
             }
         if len(selected) != 1:
             return state, question(

@@ -63,12 +63,19 @@ style context, never product facts or hard requirements, and remain task-scoped.
 Evidence-ranked results conservatively collapse repeated titles and very similar
 same-brand listings while retaining distinct model numbers. Partial-match notices
 remain visible when only some saved concerns have listing support.
+Distinct recognized topics in one phrase, such as “comfy for office,” require
+evidence for both topics before counting as a supported concern. Unrequested
+holiday/costume formats and sports uniforms rank below ordinary options.
 
 With `COMMERCE_FAST_PATH=1`, validated recommendation lists and required clarification
 questions are returned directly, including semantic refinements and multi-product results. An explicit request
 for an explanation keeps the reviewed reply path. This avoids optional model writing
 and review calls after the backend has already prepared a complete grounded reply.
 Set `COMMERCE_FAST_PATH=0` to retain the reviewed path for these results.
+Narrow fragrance questions also use a source-backed direct answer: an explicit
+fragrance-free claim is reported as a listing claim; a scent label alone never
+establishes whether added fragrance ingredients are present. Broader ingredient
+questions keep the reviewed path, without a new search.
 
 Other natural replies use evidence-cited generation and a separate model review. Product
 identities/prices are rendered by code. Rejected or oversized generated text falls

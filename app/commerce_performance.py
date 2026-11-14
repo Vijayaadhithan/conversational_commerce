@@ -48,6 +48,11 @@ def response_route(settings, message, commerce):
         and not commerce.get("validation_recovered")
         and not commerce.get("policy_redirect")
     ):
+        if (
+            commerce["action"] == "answer"
+            and commerce.get("answer_source") == "explicit_fragrance_metadata"
+        ):
+            return {"mode": "fast", "reason": "validated_attribute_answer"}
         if commerce["action"] == "clarify":
             return {"mode": "fast", "reason": "validated_question"}
         if (

@@ -305,6 +305,19 @@ def test_compound_preferences_require_both_and_show_real_listing_excerpts():
     assert "Comfortable fit." in row["why_recommended"][-1]
 
 
+def test_compound_goal_without_and_requires_evidence_for_occasion_and_comfort():
+    full = listing("Comfortable fit for office workwear.")
+    partial = listing("Comfortable lounge clothing.")
+    concern = "Help me find something comfy for office"
+    assert concern_evidence(full, [concern])[0]["support"] == "positive"
+    evidence = concern_evidence(partial, [concern])[0]
+    assert evidence["support"] == "weak"
+    assert {item["concern"]: item["support"] for item in evidence["components"]} == {
+        "comfy": "positive",
+        "office": "unknown",
+    }
+
+
 def test_unrequested_costumes_rank_below_everyday_jackets():
     request = ProductSearchRequest(query="soft jacket", product_goal="jacket", concerns=["soft"])
     rows = []

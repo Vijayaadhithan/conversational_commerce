@@ -41,6 +41,21 @@ def test_style_similarity_keeps_different_model_numbers_and_brands():
     assert not same_listing_style(row(title), row(title, "Another"))
 
 
+@pytest.mark.parametrize("title", ["Soft Christmas Sweater", "Comfortable Cycling Jersey"])
+def test_unrequested_holiday_or_sports_uniform_is_not_an_office_match(title):
+    row = listing("Comfortable fit for office workwear.")
+    row["title"] = title
+    row["category"]["family"] = "apparel"
+    request = ProductSearchRequest(
+        query="comfortable office clothing", product_goal="clothing", concerns=["comfy for office"]
+    )
+    assert "unrequested_format" in {
+        item["code"] for item in listing_quality(row, request, [])["cautions"]
+    }
+    request.product_goal = title
+    assert not listing_quality(row, request, [])["cautions"]
+
+
 @pytest.mark.parametrize(
     "title,family,expected",
     [

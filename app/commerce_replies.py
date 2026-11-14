@@ -62,10 +62,9 @@ def concise_reasons(row):
 
 def recommendation_reply(task, products, plan):
     """Useful grounded wording remains available even when model writing fails."""
-    if task.need:
-        opening = f"With {task.need} in mind, here are {len(products)} options for {task.query}:"
-    else:
-        opening = f"Here are {len(products)} options for {task.query}:"
+    count = len(products)
+    opening = f"Here {'is' if count == 1 else 'are'} {count} {'option' if count == 1 else 'options'} for {task.query}"
+    opening += ", based on your saved preferences." if task.need else "."
     if plan.feedback == "dislike":
         opening = "I've left out the options you rejected. " + opening
     elif plan.feedback == "like":
@@ -135,6 +134,35 @@ def card_reply(products, compare=False, compact=False):
         lines.append(
             "Missing attributes remain unknown; the listings do not establish which product will work better for you."
         )
+    return "\n".join(lines)
+
+
+def fragrance_reply(products, message):
+    """Answer a narrow ingredient question without equating scent with ingredients."""
+    if (
+        not re.search(r"\bfragrance\b", message, re.I)
+        or not re.search(r"\b(?:contain|have|has|free|scent|status)\b", message, re.I)
+        or re.search(r"\b(?:and|or|also|why|better|compare)\b|;", message, re.I)
+    ):
+        return None
+    lines = []
+    for index, row in enumerate(products, 1):
+        attributes = row.get("attributes", {})
+        claim = attributes.get("fragrance_free")
+        prefix = f"Option {row.get('display_position', index)}: "
+        if claim and claim.get("value") is True:
+            lines.append(prefix + "the listing explicitly labels it fragrance-free.")
+        elif claim and claim.get("value") is False:
+            lines.append(prefix + "the listing explicitly marks it as not fragrance-free.")
+        else:
+            scent = attributes.get("scent")
+            lines.append(
+                prefix
+                + f"the listed scent is ‘{scent['value']}’. A scent label does not confirm whether added fragrance is present."
+                if scent and isinstance(scent.get("value"), str)
+                else prefix
+                + "the listing does not explicitly confirm whether added fragrance is present."
+            )
     return "\n".join(lines)
 
 

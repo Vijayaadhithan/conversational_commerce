@@ -11,6 +11,7 @@ TOPICS = (
     (r"\b(?:warm|warmth)\b", r"\b(?:warm|warmth|insulated|thermal)\b", "warmth wording"),
     (r"\b(?:lightweight|light weight)\b", r"\blight[ -]?weight\b", "lightweight wording"),
     (r"\bcasual\b", r"\bcasual\b", "casual style wording"),
+    (r"\boffice\b", r"\boffice\b|\bworkwear\b|\bbusiness (?:casual|attire)\b", "office wording"),
     (r"\bbreathable\b", r"\bbreathab\w*\b", "breathability wording"),
     (
         r"\b(?:understated|minimalist)\b",
@@ -89,6 +90,18 @@ def concern_evidence(record, concerns):
         # Conjunctions describe separate preferences; one matching word cannot
         # establish the whole compound. Preserve the original phrase and sources.
         parts = [part.strip() for part in re.split(r"\s+(?:and|&)\s+", concern) if part.strip()]
+        if len(parts) == 1:
+            # Distinct topics also form a compound without 'and': 'comfy for
+            # office' needs evidence for both comfort and office, not either.
+            topics = list(
+                dict.fromkeys(
+                    match.group()
+                    for trigger, _, _ in TOPICS
+                    for match in re.finditer(trigger, concern, re.I)
+                )
+            )
+            if len(topics) > 1:
+                parts = topics
         if len(parts) > 1 and not VAGUE.search(concern):
             components = concern_evidence(record, parts)
             supports = {item["support"] for item in components}

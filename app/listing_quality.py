@@ -101,7 +101,7 @@ def listing_quality(record, request, evidence):
                 "personalization",
                 "This listing requires personalization, which you have not requested.",
             )
-        costume = r"\b(?:costum\w*|cosplay|halloween|steampunk|vampire|medieval|renaissance|gothic|game of thrones)\b"
+        costume = r"\b(?:costum\w*|cosplay|halloween|christmas|xmas|novelty|steampunk|vampire|medieval|renaissance|gothic|game of thrones)\b"
         if re.search(costume, title, re.I) and not re.search(costume, context, re.I):
             caution(
                 "unrequested_format", "This is a costume or themed item you have not requested."
@@ -113,6 +113,19 @@ def listing_quality(record, request, evidence):
             and not re.search(professional, context, re.I)
         ):
             caution("unrequested_format", "This is specialist workwear you have not requested.")
+        sports_uniform = (
+            r"\b(?:cycling|soccer|football|basketball|baseball)\s+(?:jerseys?|uniforms?)\b"
+        )
+        if (
+            record.get("category", {}).get("family") == "apparel"
+            and re.search(sports_uniform, title, re.I)
+            and not re.search(
+                r"\b(?:cycling|soccer|football|basketball|baseball|jerseys?|uniforms?)\b",
+                context,
+                re.I,
+            )
+        ):
+            caution("unrequested_format", "This is sports teamwear you have not requested.")
         if re.search(CHILD, title, re.I) and not re.search(CHILD, context, re.I):
             # Mixed women/girls marketing does not establish a child-only item.
             if not re.search(r"\b(?:women|men|adult|unisex)\b", title, re.I):

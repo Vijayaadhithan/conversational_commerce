@@ -63,6 +63,7 @@ def main():
                 "commerce_answer.py",
                 "commerce_answer_context.py",
                 "commerce_feedback.py",
+                "commerce_replies.py",
                 "commerce_service.py",
                 "commerce_performance.py",
                 "commerce_recommendations.py",

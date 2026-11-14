@@ -43,6 +43,42 @@ def test_answer_uses_inspected_reference_without_search_or_new_preferences():
     assert state.active().filters.model_dump() == filters
 
 
+@pytest.mark.parametrize("scent", ["Unscented", "Lavender and bergamot"])
+def test_fragrance_question_does_not_infer_ingredients_from_scent(scent):
+    state, search = seeded()
+    state.active().shown[0]["attributes"]["scent"] = {"value": scent, "field": "/details/Scent"}
+    state.active().shown[0]["attributes"].pop("fragrance_free", None)
+    _, result = turn(
+        state, search, "does the first contain fragrance?", "answer", recommendation_requested=False
+    )
+    assert result["answer_source"] == "explicit_fragrance_metadata"
+    assert scent in result["reply"] and "does not confirm" in result["reply"]
+    assert len(search.calls) == 1
+    from types import SimpleNamespace
+
+    from app.commerce_performance import response_route
+
+    assert (
+        response_route(
+            SimpleNamespace(commerce_natural=True, commerce_fast_path=True),
+            "does the first contain fragrance?",
+            result,
+        )["mode"]
+        == "fast"
+    )
+
+
+def test_fragrance_question_uses_explicit_metadata_and_leaves_broad_questions_to_review():
+    from app.commerce_replies import fragrance_reply
+
+    state, _ = seeded()
+    row = state.active().shown[0]
+    row["attributes"]["fragrance_free"] = {"value": True, "field": "/features/0"}
+    assert "explicitly labels it fragrance-free" in fragrance_reply([row], "is it fragrance-free?")
+    assert fragrance_reply([row], "does it contain fragrance or alcohol?") is None
+    assert fragrance_reply([row], "what is fragrance?") is None
+
+
 @pytest.mark.parametrize(
     "message", ["Why that one?", "Details about option 99", "Tell me about the sixth"]
 )
