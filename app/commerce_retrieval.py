@@ -14,6 +14,9 @@ def quality_summary(response):
             row.get("listing_quality", {}).get("contradicted_concerns", 0) for row in rows
         ),
         "cautioned": sum(bool(row.get("listing_quality", {}).get("cautions")) for row in rows),
+        "feedback_conflicts": sum(
+            bool(row.get("listing_quality", {}).get("feedback_conflicts")) for row in rows
+        ),
     }
 
 
@@ -22,8 +25,10 @@ def search_with_recovery(search, request, literal_query):
     summary = quality_summary(first)
     fallback = normalize_search(literal_query, storefront_id=request.filters.storefront_id)
     known_quality = all("listing_quality" in row for row in first["results"])
-    weak = not first["results"] or (
-        known_quality and bool(request.concerns) and not summary["supported"]
+    weak = (
+        not first["results"]
+        or (known_quality and bool(request.concerns) and not summary["supported"])
+        or bool(summary["returned"] and summary["feedback_conflicts"] == summary["returned"])
     )
     if (
         not weak
@@ -40,6 +45,7 @@ def search_with_recovery(search, request, literal_query):
         return (
             bool(item["returned"]),
             -item["contradicted"],
+            -item["feedback_conflicts"],
             item["supported"],
             -item["cautioned"],
         )

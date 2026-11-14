@@ -60,6 +60,12 @@ feedback, even when a planner proposes it as a positive concern. Rejected IDs st
 excluded from the task. Bounded feedback examples retain displayed product titles
 after pagination so follow-ups can refer to liked options. They are untrusted soft
 style context, never product facts or hard requirements, and remain task-scoped.
+Criticism also supplies bounded literal or model-normalized `avoid_terms` for
+ranking. A listing that mentions these properties ranks below alternatives that
+do not; this never changes SQL eligibility or saved hard filters. Negated listing
+wording is not a conflict. If only overlapping candidates remain, keep explicit
+cautions and allow one bounded retrieval recovery. Explicit new positive needs
+override corresponding older negative ranking terms.
 Evidence-ranked results conservatively collapse repeated titles and very similar
 same-brand listings while retaining distinct model numbers. Partial-match notices
 remain visible when only some saved concerns have listing support.
@@ -68,6 +74,8 @@ coverage group rather than padding it with weaker matches merely to reach five.
 Distinct recognized topics in one phrase, such as “comfy for office,” require
 evidence for both topics before counting as a supported concern. Unrequested
 holiday/costume formats and sports uniforms rank below ordinary options.
+Product identity gates distinguish shoes from shoe trees/stretchers, and handbags
+from purse hooks or replacement straps. Explicit accessory requests remain valid.
 
 With `COMMERCE_FAST_PATH=1`, validated recommendation lists and required clarification
 questions are returned directly, including semantic refinements and multi-product results. An explicit request

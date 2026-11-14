@@ -547,3 +547,34 @@ def test_next_page_keeps_the_semantic_goal_after_first_scoped_search():
     state, result = scoped_turn(state, "more", search, intent="more", recommendation_requested=True)
     assert result["products"] and search.calls[-1].query == "comfortable everyday jacket"
     assert len(search.calls[-1].filters.exclude_product_ids) == 5
+
+
+def test_negative_ranking_terms_persist_on_more_and_explicit_positive_need_overrides_them():
+    from app.commerce_browsing import retrieval_avoid_terms
+
+    search = SectionSearch()
+    state, _ = scoped_turn(
+        ShoppingState(storefront_id="clothing"),
+        "jacket",
+        search,
+        intent="search",
+        recommendation_requested=True,
+    )
+    state, _ = scoped_turn(
+        state,
+        "too formal",
+        search,
+        intent="refine",
+        recommendation_requested=True,
+        interpretation={
+            "query": "casual jacket",
+            "evidence": "too formal",
+            "avoid_terms": ["formal", "dressy"],
+        },
+    )
+    assert search.calls[-1].avoid_terms == ["formal", "dressy"]
+    state, _ = scoped_turn(state, "more", search, intent="more", recommendation_requested=True)
+    assert search.calls[-1].avoid_terms == ["formal", "dressy"]
+    state.active().need = "formal"
+    assert "formal" not in retrieval_avoid_terms(state.active())
+    assert all(not call.filters.attributes for call in search.calls)

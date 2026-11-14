@@ -80,6 +80,8 @@ def recommendation_reply(task, products, plan):
     }.get(department)
     if recipient:
         opening += f" For {recipient}."
+    if any(row.get("listing_quality", {}).get("feedback_conflicts") for row in products):
+        opening += " Some listings still mention properties related to your feedback; check their cautions."
     if task.need:
         incomplete = [
             concern

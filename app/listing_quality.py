@@ -101,6 +101,12 @@ def listing_quality(record, request, evidence):
                 "personalization",
                 "This listing requires personalization, which you have not requested.",
             )
+        crafts = r"\b(?:DIY|jewelry making|craft supplies)\b"
+        if re.search(crafts, title, re.I) and not re.search(crafts, context, re.I):
+            caution(
+                "unrequested_format",
+                "This listing is for craft or jewelry-making supplies you have not requested.",
+            )
         costume = r"\b(?:costum\w*|cosplay|halloween|christmas|xmas|novelty|steampunk|vampire|medieval|renaissance|gothic|game of thrones)\b"
         if re.search(costume, title, re.I) and not re.search(costume, context, re.I):
             caution(
@@ -162,6 +168,34 @@ def listing_quality(record, request, evidence):
             text,
         )
         cautions[-1]["other_evidence"] = [{"field": f, "text": t} for f, t in sources[1:2]]
+    feedback_conflicts = []
+    if request.avoid_terms:
+        from app.listing_explanations import evidence_fields, support_for
+
+        fields = list(evidence_fields(record))
+        for term in request.avoid_terms:
+            pattern = r"(?<!\w)" + re.escape(term).replace(r"\ ", r"\s+") + r"(?:s|es)?(?!\w)"
+            found = next(
+                (
+                    (field, text, match)
+                    for field, text in fields
+                    for match in re.finditer(pattern, text, re.I)
+                    if support_for(text, match) != "negated"
+                    and not re.search(
+                        r"\bnon[- ]$", text[max(0, match.start() - 5) : match.start()], re.I
+                    )
+                ),
+                None,
+            )
+            if found:
+                field, text, match = found
+                feedback_conflicts.append(term)
+                caution(
+                    "feedback_overlap",
+                    f"This listing mentions ‘{term}’, wording related to your negative feedback.",
+                    field,
+                    text[max(0, match.start() - 50) : match.end() + 100],
+                )
     supported = sum(item.get("support") == "positive" for item in evidence)
     contradicted = sum(item.get("support") in {"negated", "mixed"} for item in evidence)
     return {
@@ -169,6 +203,7 @@ def listing_quality(record, request, evidence):
         "supported_concerns": supported,
         "contradicted_concerns": contradicted,
         "unverified_concerns": sum(item.get("support") != "positive" for item in evidence),
+        "feedback_conflicts": feedback_conflicts,
     }
 
 
@@ -190,7 +225,9 @@ def prioritize_listing_evidence(response, request):
             for c in cautions
         )
         return (
-            bool(quality.get("contradicted_concerns")) or serious,
+            bool(quality.get("contradicted_concerns"))
+            or serious
+            or bool(quality.get("feedback_conflicts")),
             -quality.get("supported_concerns", 0),
             bool(cautions),
         )

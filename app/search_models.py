@@ -120,6 +120,13 @@ class ProductSearchRequest(BaseModel):
         max_length=20,
         description="Soft concerns for separate source-backed explanations; not mandatory filters.",
     )
+    avoid_terms: list[
+        Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=60)]
+    ] = Field(
+        default_factory=list,
+        max_length=10,
+        description="Soft retrieval hypotheses from task-scoped criticism; never eligibility filters or verified product facts.",
+    )
 
     @field_validator("query")
     @classmethod

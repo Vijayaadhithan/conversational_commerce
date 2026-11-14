@@ -127,6 +127,7 @@ def retrieval_query(task, plan, message, storefront_id=None):
     if interpretation and evidence_ok(interpretation.evidence, message):
         task.sources["retrieval_interpretation"] = {
             "query": interpretation.query,
+            "avoid_terms": interpretation.avoid_terms,
             "evidence": interpretation.evidence,
             "source": "semantic_retrieval_hypothesis",
             "requirements": brief,
@@ -135,6 +136,30 @@ def retrieval_query(task, plan, message, storefront_id=None):
     # A saved rewrite is valid only for the exact brief it described.
     query = saved.get("query") if saved.get("requirements") == brief else None
     return query or literal
+
+
+def retrieval_avoid_terms(task):
+    """Use criticism as soft ranking context; explicit positive needs take priority."""
+    from app.commerce_feedback import rejected_ids
+
+    saved = task.sources.get("retrieval_interpretation", {})
+    terms = list(saved.get("avoid_terms", []))
+    rejected = set(rejected_ids(task))
+    for item in task.feedback[-3:]:
+        if item.sentiment != "dislike" or not rejected.intersection(item.product_ids):
+            continue
+        match = re.search(r"\btoo\s+([\w-]+)", item.evidence, re.I)
+        if match:
+            terms.append(match.group(1))
+    positive = normalize_search(task.need)
+    return list(
+        dict.fromkeys(
+            term
+            for term in terms
+            if 0 < len(term) <= 60
+            and not re.search(r"\b" + re.escape(normalize_search(term)) + r"\b", positive)
+        )
+    )[:10]
 
 
 def discover_goal(state, task, plan, message):

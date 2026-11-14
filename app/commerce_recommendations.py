@@ -3,7 +3,7 @@
 import re
 from decimal import Decimal
 
-from app.commerce_browsing import discover_goal, retrieval_query
+from app.commerce_browsing import discover_goal, retrieval_avoid_terms, retrieval_query
 from app.commerce_discovery import (
     no_results_reply,
     preference_question,
@@ -193,6 +193,7 @@ def recommend_or_inspect(state, plan, message, old_pending, search):
         query=query,
         product_goal=product_goal,
         concerns=task_concerns(task),
+        avoid_terms=retrieval_avoid_terms(task),
         filters=ProductFilters.model_validate(filters.model_dump()),
         limit=min(5, 100 - len(task.seen_ids)) if plan.intent == "more" else 5,
     )

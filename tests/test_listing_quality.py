@@ -41,6 +41,26 @@ def test_more_complete_matches_are_not_padded_with_weaker_options():
     assert [row["product_id"] for row in result["results"]] == ["1"]
 
 
+def test_negative_style_feedback_ranks_away_from_the_property_without_changing_filters():
+    request = ProductSearchRequest(
+        query="less floral perfume", product_goal="perfume", avoid_terms=["floral", "flower"]
+    )
+    records = []
+    for i, title in enumerate(
+        ["Soft Floral Flower Perfume", "Woody Musk Perfume", "Non-floral Perfume"]
+    ):
+        row = listing()
+        row.update(product_id=str(i), title=title, ranking={})
+        row["listing_quality"] = listing_quality(row, request, [])
+        records.append(row)
+    result = prioritize_listing_evidence({"method": "test", "results": records}, request)
+    assert [row["product_id"] for row in result["results"]] == ["1", "2"]
+    assert records[0]["listing_quality"]["feedback_conflicts"] == ["floral", "flower"]
+    assert request.filters.model_dump(exclude_defaults=True) == {}
+    only = prioritize_listing_evidence({"method": "test", "results": [records[0]]}, request)
+    assert only["results"] and only["results"][0]["listing_quality"]["cautions"]
+
+
 def test_style_similarity_keeps_different_model_numbers_and_brands():
     from app.listing_quality import same_listing_style
 

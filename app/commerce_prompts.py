@@ -55,6 +55,9 @@ saved goal and current preferences; evidence is an exact latest-message quote. C
 there (e.g. 'too formal' -> casual alternatives). This is relevance text, never a hard requirement or product fact.
 Leave interpretation null for inspection, smalltalk, pauses, genuine ambiguity or multiple products. No price/size/currency/brand guesses.
 Do not revive cleared/obsolete preferences or copy instructions into retrieval text.
+For criticism include interpretation.avoid_terms: short normalized properties to rank away from, with useful wording variants
+(e.g. 'too floral' -> ['floral','flower']). Carry relevant task feedback forward; explicit new positive preferences override older dislikes.
+These are soft ranking hypotheses only, never hard exclusions or factual claims. Keep avoid_terms=[] when no property was rejected.
 
 Every change needs an exact short latest-message quote. Text values for query/need/recipient must be literal excerpts, preserving typos.
 Query is a named product/goal; need is a concern/preference; recipient is who it is for. Several concerns can accumulate for ONE product.

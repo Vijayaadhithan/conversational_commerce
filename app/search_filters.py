@@ -101,6 +101,9 @@ def product_goal_sql(goal):
         values.append(
             r"\m(charms?|keychain|key chain|zipper pull|cleaning|cleaner|stain remover|insoles?|laces?|socks?|shorts?|pants?|leggings?)\M"
         )
+        if not re.search(r"\b(?:trees?|stretchers?|holders?)\b", goal, re.I):
+            clauses.append("(p.document->>'title') !~* %s")
+            values.append(r"\m(shoe trees?|shoe stretchers?|boot holders?)\M")
         if re.search(r"\brunning\b", goal, re.I):
             clauses.append("(p.document->>'title') ~* %s")
             values.append(r"\mrunning\M")
@@ -111,6 +114,13 @@ def product_goal_sql(goal):
         values.append(
             r"\m(organizers?|inserts?|liners?|cosmetic|makeup|toiletry|keychain|charms?)\M"
         )
+        if not re.search(
+            r"\b(?:holders?|hooks?|replacement)\b|\b(?:purse|handbag) straps?\b", goal, re.I
+        ):
+            clauses.append("(p.document->>'title') !~* %s")
+            values.append(
+                r"\m((handbag|purse|bag) (holders?|hooks?)|purse hooks?|strap replacement|replacement [a-z ]*straps?)\M"
+            )
     if re.search(r"\bcrossbody\b", goal, re.I):
         clauses.append("(p.document->>'title') ~* %s")
         values.append(r"\mcross[ -]?body\M")
