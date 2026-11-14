@@ -276,21 +276,22 @@ request (`shampoo under $15 and shirt for men under $40`), comparison, more
 options, refresh, and two tabs with different sections. If a constraint yields
 no matching listing, the response should say so without broadening it.
 
-While both servers are running, check the browser-facing gateway and shopping flows:
-
-```bash
-.venv/bin/python scripts/check_frontend_live.py
-```
-
-The check uses real models and temporary test conversations; it removes those test
-conversations afterward. Live products retain historical prices and unknown stock
-or variant facts. Optional sample mode is separate and visibly labelled.
+Sign in with an authorized portal account to check the browser-facing gateway.
+Run the frontend repository's tests for gateway authentication, scoped sessions,
+history and component behavior. The backend's isolated live checks are
+`scripts/check_shopping_journeys.py` and the demo evaluation above. Live products
+retain historical prices and unknown stock or variant facts. Optional sample mode
+is separate and visibly labelled.
 
 ## Evaluation boundaries
 
-Use `scripts/check_commerce.py`, `scripts/check_shopping_journeys.py`,
-`scripts/check_frontend_live.py` and `scripts/evaluate_conversations.py` only when
+Use `scripts/check_shopping_journeys.py` and `scripts/evaluate_conversations.py` only when
 live inference is intended: they can use provider quota. Unit tests use mocks.
 Use each script's `--help` for supported options; keep captures under ignored data/.
 Report execution, constraint compliance and human-reviewed relevance separately.
 A small successful sample is not a production latency or answer-quality guarantee.
+
+Create review labels for each capture with `scripts/prepare_conversation_review.py`.
+Historical 20k/50k review files and pre-portal check scripts were retired; Git history
+retains them. Their labels and anonymous-session assumptions do not apply to the
+current catalog and authenticated portal.

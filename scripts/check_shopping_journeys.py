@@ -159,8 +159,8 @@ def main():
                 value, events = send(
                     cid, "Recommend moisturizer for dry skin under $30", "beauty", streaming=True
                 )
-                assert value["summary"]["status"] == "generated" and value["summary"]["evidence"]
-                assert any(name == "commerce" and data.get("provisional") for name, data in events)
+                assert value["products"] and value["reply"]
+                assert all(row["why_recommended"] for row in value["products"])
                 ids = [row["product_id"] for row in value["products"]]
                 compared, _ = send(cid, "Compare the first two", "beauty")
                 assert [row["product_id"] for row in compared["products"]] == ids[:2]

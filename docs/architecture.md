@@ -94,6 +94,8 @@ identities/prices are rendered by code. Rejected or oversized generated text fal
 back to a validated deterministic reply. Generation cannot modify filters or call
 tools. This review is not a guarantee of factual accuracy or recommendation quality.
 The optional older evidence-selection summary applies when natural mode is disabled.
+`COMMERCE_ANSWER_TIMEOUT_SECONDS` bounds writing and review together (default eight
+seconds). On failure, the prepared grounded reply remains available.
 
 With `Accept: text/event-stream`, the API emits progress, commerce metadata and
 reply deltas. Only validated backend replies or reviewed generated content are sent

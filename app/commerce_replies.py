@@ -83,17 +83,16 @@ def recommendation_reply(task, products, plan):
     if any(row.get("listing_quality", {}).get("feedback_conflicts") for row in products):
         opening += " Some listings still mention properties related to your feedback; check their cautions."
     if task.need:
-        incomplete = [
-            concern
-            for concern in task_concerns(task)
-            if not all(
+        incomplete = any(
+            not all(
                 any(
                     item.get("concern") == concern and item.get("support") == "positive"
                     for item in row.get("concern_evidence", [])
                 )
                 for row in products
             )
-        ]
+            for concern in task_concerns(task)
+        )
         if incomplete:
             opening += (
                 " These are partial matches; not every listing confirms all your preferences."

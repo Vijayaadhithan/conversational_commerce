@@ -110,16 +110,10 @@ def recommend_or_inspect(state, plan, message, old_pending, search):
     if plan.intent != "similar":
         query = retrieval_query(task, plan, message, state.storefront_id)
     similarity = task.last_search.get("similarity_reference")
-    brief = {
-        "query": task.query,
-        "need": task.need,
-        "recipient": task.recipient,
-        "filters": task.filters.model_dump(mode="json"),
-    }
     keep_similarity = (
         plan.intent == "more"
         and similarity
-        and similarity.get("requirements") == brief
+        and similarity.get("requirements") == task.requirements()
         and task.last_search.get("query")
     )
     if keep_similarity:
@@ -230,12 +224,7 @@ def recommend_or_inspect(state, plan, message, old_pending, search):
     if plan.intent == "similar":
         search_metadata["similarity_reference"] = {
             "product_id": selected[0]["product_id"],
-            "requirements": {
-                "query": task.query,
-                "need": task.need,
-                "recipient": task.recipient,
-                "filters": task.filters.model_dump(mode="json"),
-            },
+            "requirements": task.requirements(),
         }
     elif keep_similarity:
         search_metadata["similarity_reference"] = similarity

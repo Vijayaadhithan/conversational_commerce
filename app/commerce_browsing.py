@@ -116,12 +116,8 @@ def continue_browsing(state, plan, message):
 def retrieval_query(task, plan, message, storefront_id=None):
     """Keep hypotheses out of filters, identity gates and user preference evidence."""
     literal = " ".join(part for part in (task.query, task.need) if part)
-    brief = {
-        "goal": task.query,
-        "need": task.need,
-        "recipient": task.recipient,
-        "filters": task.filters.model_dump(mode="json"),
-    }
+    snapshot = task.requirements()
+    brief = {"goal": snapshot.pop("query"), **snapshot}
     brief["filters"]["storefront_id"] = storefront_id or task.filters.storefront_id
     interpretation = plan.interpretation
     if interpretation and evidence_ok(interpretation.evidence, message):

@@ -138,6 +138,15 @@ class ShoppingTask(BaseModel):
     focused_positions: list[int] = Field(default_factory=list, max_length=5)
     feedback: list[ProductFeedback] = Field(default_factory=list, max_length=20)
 
+    def requirements(self):
+        """Snapshot the shopping brief without mutating saved filters or evidence."""
+        return {
+            "query": self.query,
+            "need": self.need,
+            "recipient": self.recipient,
+            "filters": self.filters.model_dump(mode="json"),
+        }
+
 
 class ShoppingState(BaseModel):
     model_config = ConfigDict(extra="forbid")
