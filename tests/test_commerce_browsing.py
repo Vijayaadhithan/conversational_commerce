@@ -437,6 +437,27 @@ def test_partial_match_notice_survives_one_confirmed_and_one_unknown_preference(
     assert "partial matches" in result
 
 
+def test_budget_correction_is_described_as_current_budget_with_readable_recipient():
+    from app.commerce_replies import recommendation_reply
+
+    task = ShoppingTask(
+        id=1,
+        query="jacket",
+        filters=ProductFilters(max_price="19.99", attributes={"department": "mens"}),
+    )
+    row = {
+        "title": "Jacket",
+        "price": {"amount": "18.99"},
+        "why_recommended": ["Its listed historical price is within your $19.99 maximum."],
+    }
+    result = recommendation_reply(
+        task, [row], IntentPlan(intent="refine", evidence="under $20 instead")
+    )
+    assert result.count("19.99") == 1
+    assert "Budget: up to $19.99" in result and "For adult men" in result
+    assert "Kept" not in result and "mens" not in result
+
+
 @pytest.mark.parametrize("reaction", ["meh", "too flashy", "not my vibe", "wrong direction"])
 def test_bare_rejection_applies_to_the_latest_selection_without_another_question(reaction):
     search = SectionSearch()

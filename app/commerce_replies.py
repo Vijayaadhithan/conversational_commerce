@@ -52,7 +52,11 @@ def concise_reasons(row):
         if reason.startswith("The listing explicitly states ") and len(reason) <= 220
     )
     if not reasons:
-        reasons.extend(reason for reason in original if len(reason) <= 220)
+        reasons.extend(
+            reason
+            for reason in original
+            if len(reason) <= 220 and not reason.startswith("Its listed historical price")
+        )
     return list(dict.fromkeys(reasons))
 
 
@@ -66,15 +70,17 @@ def recommendation_reply(task, products, plan):
         opening = "I've left out the options you rejected. " + opening
     elif plan.feedback == "like":
         opening = "I've saved the options you liked. " + opening
-    if plan.intent in {"refine", "cheaper", "similar", "more"} or plan.feedback:
-        constraints = []
-        if task.filters.max_price is not None:
-            constraints.append(f"maximum ${task.filters.max_price:.2f}")
-        department = task.filters.attributes.get("department")
-        if department:
-            constraints.append(f"recipient: {department}")
-        if constraints:
-            opening += " Kept your " + " and ".join(constraints) + "."
+    if task.filters.max_price is not None:
+        opening += f" Budget: up to ${task.filters.max_price:.2f}."
+    department = task.filters.attributes.get("department")
+    recipient = {
+        "mens": "adult men",
+        "womens": "adult women",
+        "boys": "boys",
+        "girls": "girls",
+    }.get(department)
+    if recipient:
+        opening += f" For {recipient}."
     if task.need:
         incomplete = [
             concern
