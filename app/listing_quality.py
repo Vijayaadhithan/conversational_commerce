@@ -200,8 +200,14 @@ def prioritize_listing_evidence(response, request):
     # or unrequested specialist formats when ordinary options are available.
     useful = [row for row in ordered if not key(row)[0]]
     candidates = useful or ordered
+    best_support = max(
+        (row.get("listing_quality", {}).get("supported_concerns", 0) for row in candidates),
+        default=0,
+    )
     supported = [
-        row for row in candidates if row.get("listing_quality", {}).get("supported_concerns")
+        row
+        for row in candidates
+        if best_support and row.get("listing_quality", {}).get("supported_concerns") == best_support
     ]
     selected, duplicates = [], 0
     for row in supported or candidates:

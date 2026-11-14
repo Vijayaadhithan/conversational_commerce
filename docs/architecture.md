@@ -63,6 +63,8 @@ style context, never product facts or hard requirements, and remain task-scoped.
 Evidence-ranked results conservatively collapse repeated titles and very similar
 same-brand listings while retaining distinct model numbers. Partial-match notices
 remain visible when only some saved concerns have listing support.
+When candidates cover different numbers of saved concerns, return the strongest
+coverage group rather than padding it with weaker matches merely to reach five.
 Distinct recognized topics in one phrase, such as “comfy for office,” require
 evidence for both topics before counting as a supported concern. Unrequested
 holiday/costume formats and sports uniforms rank below ordinary options.

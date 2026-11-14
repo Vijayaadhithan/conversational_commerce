@@ -29,6 +29,18 @@ def test_duplicate_titles_do_not_fill_the_recommendation_list():
     assert response["selection"]["near_duplicates_skipped"] == 1
 
 
+def test_more_complete_matches_are_not_padded_with_weaker_options():
+    request = ProductSearchRequest(
+        query="soft office jacket", product_goal="jacket", concerns=["comfy for office", "soft"]
+    )
+    rows = [
+        {"product_id": str(i), "ranking": {}, "listing_quality": {"supported_concerns": count}}
+        for i, count in enumerate([1, 2, 1])
+    ]
+    result = prioritize_listing_evidence({"method": "test", "results": rows}, request)
+    assert [row["product_id"] for row in result["results"]] == ["1"]
+
+
 def test_style_similarity_keeps_different_model_numbers_and_brands():
     from app.listing_quality import same_listing_style
 
