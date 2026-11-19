@@ -697,3 +697,15 @@ Back up the SQLite database consistently: it now contains account hashes, sessio
 grants and the audit trail as well as conversation state. Never delete it to clear
 chat history. During rollback preserve the additive portal tables and keep the
 Worker token restricted; rolling back to anonymous browsing requires explicit review.
+
+### Shopping latency and relevance review
+
+Replay `evals/storefront_latency.json` with `scripts/evaluate_conversations.py` on the same catalog and provider configuration for each revision. The capture uses an isolated conversation database. Its products-ready timing is measured inside the application. The stream-first-product histogram measures delivery by the API. Keep these measurements distinct when comparing runs.
+
+Run `python scripts/review_storefront_replay.py --capture capture.json --output worksheet.json`. Each turn includes the shopper's earlier requests and the first five displayed cards in order, with listing evidence. After a reviewer fills the relevance, evidence and question labels, run the same command with `--review worksheet.json --output scores.json`. An unfinished worksheet cannot produce a score.
+
+### Server monitoring
+
+The optional `monitoring` Compose profile runs Prometheus on loopback port 9090, stores up to 14 days of metrics under `../state/prometheus`, and evaluates `monitoring/alerts.yml`. Before first start, create the state directory owned by UID 10001 and provision a dedicated admin-role token scoped to `ops` using `scripts/manage_api_users.py issue`, with token file `data/credentials/prometheus-ops.token`. Pin `PROMETHEUS_IMAGE` in the private `deploy/images.env`, start only the `prometheus` service, and rotate its token before expiry. After changing a token file mounted individually, recreate Prometheus to mount the replacement inode.
+
+Use the Prometheus targets and rules pages over SSH to check scrape health and firing rules. Configure an Alertmanager destination for external notifications if required. `commerce_reranker_fallback_reason_total` counts successful CPU fallbacks by upstream cause. HTTP 429 groups quota exhaustion and throttling. The usage endpoint sums reported token counts separately from the existing estimated or reserved spend.

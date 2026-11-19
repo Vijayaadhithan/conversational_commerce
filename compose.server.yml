@@ -134,6 +134,30 @@ services:
       retries: 3
       start_period: 30s
 
+  prometheus:
+    profiles: [monitoring]
+    image: ${PROMETHEUS_IMAGE:-prom/prometheus:v3.16.0}
+    restart: unless-stopped
+    user: "10001:10001"
+    network_mode: host
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    command:
+      - --config.file=/etc/commerce-monitoring/prometheus.yml
+      - --web.listen-address=127.0.0.1:9090
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=14d
+      - --storage.tsdb.retention.size=512MB
+    volumes:
+      - ./monitoring:/etc/commerce-monitoring:ro
+      - ./data/credentials/prometheus-ops.token:/etc/prometheus/secrets/commerce-admin.token:ro
+      - ../state/prometheus:/prometheus
+    mem_limit: 384m
+    cpus: 0.25
+    pids_limit: 64
+    logging: *logging
+
   tools:
     <<: *application
     profiles: [tools]

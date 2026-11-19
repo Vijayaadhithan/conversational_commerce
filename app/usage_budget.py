@@ -109,6 +109,10 @@ class UsageBudget:
         known = all(type(value) is int and value >= 0 for value in counts)
         with self.store.connect() as db:
             row = db.execute("SELECT * FROM provider_usage WHERE id=?", (identity,)).fetchone()
+            if row["operation"] == "rerank":
+                tokens = usage.get("rerank_tokens")
+                known = type(tokens) is int and 0 <= tokens < 2**63
+                counts = [tokens, None]
             charge = row["reserved_microusd"]
             if known and row["operation"] == "llm" and (self.input_rate or self.output_rate):
                 charge = math.ceil(counts[0] * self.input_rate + counts[1] * self.output_rate)
@@ -134,6 +138,8 @@ class UsageBudget:
                     for row in db.execute(
                         "SELECT provider,model,operation,count(*) AS calls,"
                         "sum(status='unknown') AS unknown_usage_calls,"
+                        "sum(prompt_tokens) AS reported_input_tokens,"
+                        "sum(completion_tokens) AS reported_output_tokens,"
                         "sum(charged_microusd)/1000000.0 AS estimated_or_reserved_usd "
                         "FROM provider_usage WHERE day=? GROUP BY provider,model,operation",
                         (day,),

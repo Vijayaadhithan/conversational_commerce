@@ -39,6 +39,20 @@ def fill_explicit_goal(plan, message):
         plan.changes.append(Change(field="query", value=match.group(), evidence=match.group()))
 
 
+def budget_refinement_plan(state, message):
+    """A standalone price ceiling applies only to one established shopping task."""
+    active = state.active()
+    if not active or not active.query or len(state.tasks) != 1:
+        return None
+    if not re.fullmatch(
+        r"(?:under|below|less than|up to|at most) \$[1-9]\d{0,6}(?:\.\d{1,2})?(?: instead)?",
+        normalized(message).rstrip(".!"),
+    ):
+        return None
+    # Existing price validation applies inclusive/exclusive bounds from the literal message.
+    return IntentPlan(intent="refine", evidence=message, recommendation_requested=True)
+
+
 def recipient_plan(state, message):
     """Resolve a complete answer to a saved recipient question without model inference."""
     task = state.active()

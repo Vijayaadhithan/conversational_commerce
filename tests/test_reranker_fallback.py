@@ -23,6 +23,9 @@ def test_api_failure_uses_local_without_retry(monkeypatch, status):
     reranker = RerankerWithFallback(primary, fallback)
     result = reranker.rank("query", ["a", "b"], 1, preserve_query=True)
     assert result == fallback.rank.return_value
+    assert reranker.fallback_reasons() == {
+        {401: "auth", 429: "rate_limit", 500: "upstream_5xx", 503: "upstream_5xx"}[status]: 1
+    }
     assert len(calls) == 1
     fallback.rank.assert_called_once_with("query", ["a", "b"], 1, preserve_query=True)
     assert reranker.fallback_calls == 1 and reranker.last_backend == "local"
@@ -64,3 +67,22 @@ def test_fallback_failure_is_not_hidden():
     fallback.rank.side_effect = RuntimeError("local failed")
     with pytest.raises(RuntimeError, match="local failed"):
         RerankerWithFallback(primary, fallback).rank("q", ["doc"], 1)
+
+
+def test_reranker_accounts_for_reported_tokens(monkeypatch):
+    monkeypatch.setenv("VOYAGE_API_KEY", "test")
+    finish = Mock()
+    monkeypatch.setattr("app.usage_budget.finish_call", finish)
+    primary = VoyageReranker(
+        transport=httpx.MockTransport(
+            lambda _: httpx.Response(
+                200,
+                json={
+                    "data": [{"index": 0, "relevance_score": 0.5}],
+                    "usage": {"total_tokens": 24},
+                },
+            )
+        )
+    )
+    primary.rank("q", ["doc"], 1)
+    finish.assert_called_once_with(None, {"rerank_tokens": 24})

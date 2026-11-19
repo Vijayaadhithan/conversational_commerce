@@ -117,7 +117,7 @@ class Metrics:
                 "queued_model_workloads": admission.waiting,
             }
 
-    def prometheus(self, admission, *, reranker_fallback_calls=0):
+    def prometheus(self, admission, *, reranker_fallback_reasons=None):
         lines = []
         with self.lock:
             for key, value in sorted(self.counts.items()):
@@ -128,7 +128,12 @@ class Metrics:
                     )
                 else:
                     lines.append(f"commerce_{key} {value}")
-            lines.append(f"commerce_reranker_fallback_total {reranker_fallback_calls}")
+            reasons = reranker_fallback_reasons or {}
+            lines.append(f"commerce_reranker_fallback_total {sum(reasons.values())}")
+            for reason, count in sorted(reasons.items()):
+                lines.append(
+                    f"commerce_reranker_fallback_reason_total{{reason={json.dumps(reason)}}} {count}"
+                )
             for (outcome, status), count in sorted(self.stream_turns.items()):
                 lines.append(
                     f'commerce_stream_turns_total{{outcome="{outcome}",status="{status}"}} {count}'

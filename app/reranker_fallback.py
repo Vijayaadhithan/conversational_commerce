@@ -6,11 +6,13 @@ import json
 import math
 import os
 import threading
+from collections import Counter
 from pathlib import Path
 
 from fastapi import HTTPException
 
 from app.request_runtime import check_deadline
+from app.reranker import VoyageFailure
 
 MODEL_ID = "cross-encoder/ms-marco-MiniLM-L6-v2"
 MODEL_REVISION = "233902d25c440f23af6f7d6e94d2946bac0bee0a"
@@ -123,8 +125,18 @@ class RerankerWithFallback:
     def __init__(self, primary, fallback):
         self.primary, self.fallback = primary, fallback
         self.model = primary.model
-        self.fallback_calls = 0
+        self._reasons = Counter()
+        self._lock = threading.Lock()
         self.last_backend = None
+
+    def fallback_reasons(self):
+        with self._lock:
+            return dict(self._reasons)
+
+    @property
+    def fallback_calls(self):
+        with self._lock:
+            return self._reasons.total()
 
     def rank(self, query, documents, top_k, *, preserve_query=False):
         try:
@@ -133,13 +145,17 @@ class RerankerWithFallback:
             # Never bypass application spending caps or an expired turn deadline.
             if exc.status_code != 503:
                 raise
+            reason = "circuit_open"
+        except VoyageFailure as exc:
+            reason = exc.reason
         except RuntimeError:
-            pass
+            reason = "unavailable"
         else:
             self.last_backend = "voyage"
             return result
         check_deadline()
         result = self.fallback.rank(query, documents, top_k, preserve_query=preserve_query)
-        self.fallback_calls += 1
+        with self._lock:
+            self._reasons[reason] += 1
         self.last_backend = "local"
         return result

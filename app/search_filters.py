@@ -75,72 +75,72 @@ def product_goal_sql(goal):
         (r"\bsunscreen\b", r"\msunscreens?\M"),
         (r"\b(?:perfume|cologne)\b", r"\m(perfumes?|cologne|eau de parfum|eau de toilette)\M"),
     ]
-    identity = "concat_ws(' ', p.document->>'title', p.attributes #>> '{product_type,value}')"
+    identity = "concat_ws(' ', p.title, p.attributes #>> '{product_type,value}')"
     clauses, values = [], []
     for trigger, pattern in rules:
         if re.search(trigger, goal, re.I):
             clauses.append(identity + " ~* %s")
             values.append(pattern)
             break
-    full_text = "concat_ws(' ', p.document->>'title', p.document #>> '{content,features}', p.document #>> '{content,description}')"
+    full_text = "concat_ws(' ', p.title, p.document #>> '{content,features}', p.document #>> '{content,description}')"
     # Product names can describe a container/accessory or a different use entirely.
     if re.search(r"\blipsticks?\b", goal, re.I):
-        clauses.append("(p.document->>'title') !~* %s")
+        clauses.append("(p.title) !~* %s")
         values.append(r"\m(empty|containers?|holders?|organizers?|brooch|lapel|keychain|keyring)\M")
     if re.search(r"\brazor blades?\b", goal, re.I):
         clauses.append(full_text + " !~* %s")
         values.append(r"\m(scrapers?|scraping|paint|decals?|utility knife|box cutter)\M")
         clauses.append(full_text + " ~* %s")
         values.append(r"\m(shav[a-z]*|beards?|barbers?|safety razors?)\M")
-        clauses.append("((p.document->>'title') !~* %s OR (p.document->>'title') ~* %s)")
+        clauses.append("((p.title) !~* %s OR (p.title) ~* %s)")
         values.extend([r"\m(disposable|shavers?)\M", r"\m(refills?|replacement|cartridges?)\M"])
     if re.search(r"\bmoisturi\w*|\bface cream\b", goal, re.I):
-        clauses.append("(p.document->>'title') !~* %s")
+        clauses.append("(p.title) !~* %s")
         values.append(r"\m(masks?|peels?|cleansers?)\M")
     if re.search(r"\b(?:perfume|cologne)\b", goal, re.I) and not re.search(
         r"\b(?:fixatives?|empty|supplies|making)\b", goal, re.I
     ):
-        clauses.append("(p.document->>'title') !~* %s")
+        clauses.append("(p.title) !~* %s")
         values.append(r"\m(fixatives?|empty perfume bottles?|perfume making supplies)\M")
     if re.search(r"\b(?:shoes?|sneakers?)\b", goal, re.I):
-        clauses.append("(p.document->>'title') !~* %s")
+        clauses.append("(p.title) !~* %s")
         values.append(
             r"\m(charms?|keychain|key chain|zipper pull|cleaning|cleaner|stain remover|insoles?|laces?|socks?|shorts?|pants?|leggings?)\M"
         )
         if not re.search(r"\b(?:trees?|stretchers?|holders?)\b", goal, re.I):
-            clauses.append("(p.document->>'title') !~* %s")
+            clauses.append("(p.title) !~* %s")
             values.append(r"\m(shoe trees?|shoe stretchers?|boot holders?)\M")
         if not re.search(
             r"\b(?:goo|adhesives?|glue|repair|clips?|polish|deodorizers?)\b", goal, re.I
         ):
-            clauses.append("(p.document->>'title') !~* %s")
+            clauses.append("(p.title) !~* %s")
             values.append(
                 r"\m(shoe|footwear) (goo|adhesives?|glue|repair|clips?|polish|deodorizers?)\M"
             )
         if re.search(r"\brunning\b", goal, re.I):
-            clauses.append("(p.document->>'title') ~* %s")
+            clauses.append("(p.title) ~* %s")
             values.append(r"\mrunning\M")
     if re.search(r"\b(?:handbag|purse|crossbody)s?\b", goal, re.I) and not re.search(
         r"\b(?:cosmetic|makeup|toiletry)\b", goal, re.I
     ):
-        clauses.append("(p.document->>'title') !~* %s")
+        clauses.append("(p.title) !~* %s")
         values.append(
             r"\m(organizers?|inserts?|liners?|cosmetic|makeup|toiletry|keychain|charms?)\M"
         )
         if not re.search(
             r"\b(?:holders?|hooks?|replacement)\b|\b(?:purse|handbag) straps?\b", goal, re.I
         ):
-            clauses.append("(p.document->>'title') !~* %s")
+            clauses.append("(p.title) !~* %s")
             values.append(
                 r"\m((handbag|purse|bag) (holders?|hooks?)|purse hooks?|strap replacement|replacement [a-z ]*straps?)\M"
             )
     if re.search(r"\bcrossbody\b", goal, re.I):
-        clauses.append("(p.document->>'title') ~* %s")
+        clauses.append("(p.title) ~* %s")
         values.append(r"\mcross[ -]?body\M")
     if re.search(r"\bnecklaces?\b", goal, re.I) and not re.search(
         r"\b(?:holder|organizer|display|extender|clasp)\b", goal, re.I
     ):
-        clauses.append("(p.document->>'title') !~* %s")
+        clauses.append("(p.title) !~* %s")
         values.append(r"\m(holders?|organizers?|display|extenders?|clasps?|jewelry box)\M")
     # A selected shade or title must support an explicitly named color. Generic
     # marketing about other shades elsewhere in a listing is not selected-variant evidence.
@@ -149,7 +149,7 @@ def product_goal_sql(goal):
     if clauses and len(requested_colors) == 1:
         color = requested_colors.pop()
         clauses.append(
-            "concat_ws(' ', p.document->>'title', p.attributes #>> '{color,value}', p.attributes #>> '{material,value}') ~* %s"
+            "concat_ws(' ', p.title, p.attributes #>> '{color,value}', p.attributes #>> '{material,value}') ~* %s"
         )
         values.append(r"\m" + color + r"\M")
         clauses.append(
@@ -164,7 +164,7 @@ def product_goal_sql(goal):
         values.extend([r"\mpockets?\M", r"\m(no|without|fake|faux) (chest |side )?pockets?\M"])
     if clauses and re.search(r"\bface|\bfacial", goal, re.I):
         clauses.append(
-            "concat_ws(' ', p.document->>'title', p.document #>> '{content,features}', p.document #>> '{content,description}') ~* %s"
+            "concat_ws(' ', p.title, p.document #>> '{content,features}', p.document #>> '{content,description}') ~* %s"
         )
         values.append(r"\m(face|facial)\M")
     return (" AND " + " AND ".join(clauses)) if clauses else "", values

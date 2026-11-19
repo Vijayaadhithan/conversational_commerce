@@ -187,3 +187,18 @@ def test_fast_budget_refinement_still_searches_with_exact_saved_constraints(tmp_
         assert search.calls[-1].filters.max_price == 10 and search.calls[-1].filters.brand == "Acme"
         assert value["timings"]["search_calls"] == 1
         assert value["timings"]["search_stages_seconds"]["reranking_seconds"] == 0.02
+
+
+def test_budget_shortcut_requires_one_named_task_and_a_complete_price_request():
+    from app.commerce_intent import budget_refinement_plan
+    from app.commerce_models import ShoppingState, ShoppingTask
+
+    state = ShoppingState()
+    assert budget_refinement_plan(state, "Under $30 instead") is None
+    state.tasks = [ShoppingTask(id=1, query="shirt")]
+    state.active_task_id = 1
+    assert budget_refinement_plan(state, "Under $30 instead").intent == "refine"
+    for message in ("Under $30 and cotton", "Same shoes, under $50", "Not under $30", "Under $30?"):
+        assert budget_refinement_plan(state, message) is None
+    state.tasks.append(ShoppingTask(id=2, query="shampoo"))
+    assert budget_refinement_plan(state, "Under $30 instead") is None

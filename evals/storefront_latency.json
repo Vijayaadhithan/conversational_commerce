@@ -1,0 +1,146 @@
+[
+  {
+    "id": "clothing_shopping",
+    "storefront_id": "clothing",
+    "turns": [
+      "Recommend a shirt under $50",
+      "Under $30 instead",
+      "Show me more"
+    ],
+    "expectations": [
+      {
+        "products": true,
+        "task_count": 1,
+        "active_filters": {
+          "max_price": "49.99"
+        }
+      },
+      {
+        "products": true,
+        "task_count": 1,
+        "active_filters": {
+          "max_price": "29.99"
+        }
+      },
+      {
+        "products": true,
+        "task_count": 1,
+        "active_filters": {
+          "max_price": "29.99"
+        },
+        "constraints_preserved": [
+          "max_price"
+        ],
+        "products_changed": true
+      }
+    ]
+  },
+  {
+    "id": "beauty_shopping",
+    "storefront_id": "beauty",
+    "turns": [
+      "Recommend shampoo under $30",
+      "Under $20 instead",
+      "I don't like these"
+    ],
+    "expectations": [
+      {
+        "products": true,
+        "task_count": 1,
+        "active_filters": {
+          "max_price": "29.99"
+        }
+      },
+      {
+        "products": true,
+        "task_count": 1,
+        "active_filters": {
+          "max_price": "19.99"
+        }
+      },
+      {
+        "products": true,
+        "task_count": 1,
+        "active_filters": {
+          "max_price": "19.99"
+        },
+        "constraints_preserved": [
+          "max_price"
+        ],
+        "products_changed": true
+      }
+    ]
+  },
+  {
+    "id": "footwear_shopping",
+    "storefront_id": "footwear",
+    "turns": [
+      "Recommend running shoes under $100",
+      "Under $75 instead",
+      "Show me more"
+    ],
+    "expectations": [
+      {
+        "products": true,
+        "task_count": 1,
+        "active_filters": {
+          "max_price": "99.99"
+        }
+      },
+      {
+        "products": true,
+        "task_count": 1,
+        "active_filters": {
+          "max_price": "74.99"
+        }
+      },
+      {
+        "products": true,
+        "task_count": 1,
+        "active_filters": {
+          "max_price": "74.99"
+        },
+        "constraints_preserved": [
+          "max_price"
+        ],
+        "products_changed": true
+      }
+    ]
+  },
+  {
+    "id": "fashion_shopping",
+    "storefront_id": "fashion",
+    "turns": [
+      "Recommend a silver necklace under $50",
+      "Under $30 instead",
+      "Something less flashy"
+    ],
+    "expectations": [
+      {
+        "products": true,
+        "task_count": 1,
+        "active_filters": {
+          "max_price": "49.99"
+        }
+      },
+      {
+        "products": true,
+        "task_count": 1,
+        "active_filters": {
+          "max_price": "29.99"
+        }
+      },
+      {
+        "products": true,
+        "task_count": 1,
+        "active_filters": {
+          "max_price": "29.99"
+        },
+        "constraints_preserved": [
+          "max_price"
+        ],
+        "products_changed": true
+      }
+    ]
+  }
+]

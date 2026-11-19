@@ -115,6 +115,12 @@ class LocalReranker:
             }
 
 
+class VoyageFailure(RuntimeError):
+    def __init__(self, reason):
+        self.reason = reason
+        super().__init__(f"Voyage reranking failed ({reason})")
+
+
 class VoyageReranker:
     """Hosted reranking with full index/score validation and no silent truncation."""
 
@@ -187,7 +193,9 @@ class VoyageReranker:
                 seen.add(index)
                 results.append({"index": index, "score": float(score), "text": documents[index]})
             results.sort(key=lambda row: (-row["score"], row["index"]))
-            finish_call(ticket)
+            usage = payload.get("usage")
+            tokens = usage.get("total_tokens") if isinstance(usage, dict) else None
+            finish_call(ticket, {"rerank_tokens": tokens})
             successful = True
             return {
                 "model": self.model,
@@ -197,10 +205,18 @@ class VoyageReranker:
                 "max_pair_tokens": None,
                 "results": results,
             }
-        except (httpx.HTTPError, TimeoutError, ValueError, TypeError, KeyError):
-            raise RuntimeError(
-                "Voyage reranking failed; check credentials, quota, input limits and timeout"
-            ) from None
+        except httpx.HTTPStatusError as exc:
+            status = exc.response.status_code
+            reason = {401: "auth", 403: "auth", 429: "rate_limit"}.get(
+                status, "upstream_5xx" if status >= 500 else "upstream_rejected"
+            )
+            raise VoyageFailure(reason) from None
+        except (httpx.TimeoutException, TimeoutError):
+            raise VoyageFailure("timeout") from None
+        except httpx.HTTPError:
+            raise VoyageFailure("transport") from None
+        except (ValueError, TypeError, KeyError):
+            raise VoyageFailure("invalid_response") from None
         finally:
             if breaker:
                 breaker.finish("voyage", successful or ticket is None)

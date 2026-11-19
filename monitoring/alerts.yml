@@ -22,3 +22,28 @@ groups:
           severity: warning
         annotations:
           summary: Commerce API reports an operational alert
+      - alert: CommerceSlowFirstProduct
+        expr: (increase(commerce_stream_first_product_seconds_count[15m]) - ignoring(le) increase(commerce_stream_first_product_seconds_bucket{le="10"}[15m])) > 2
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: More than two fresh streams took over ten seconds to deliver products
+      - alert: CommerceRerankerFallback
+        expr: increase(commerce_reranker_fallback_total[15m]) >= 2
+        labels:
+          severity: warning
+        annotations:
+          summary: Repeated CPU fallback; inspect commerce_reranker_fallback_reason_total
+      - alert: CommerceStreamErrors
+        expr: sum by (job, instance) (increase(commerce_stream_turns_total{outcome="error"}[15m])) >= 2
+        labels:
+          severity: warning
+        annotations:
+          summary: Repeated shopping stream failures
+      - alert: CommerceModelQueueWait
+        expr: (increase(commerce_model_queue_wait_seconds_count[15m]) - ignoring(le) increase(commerce_model_queue_wait_seconds_bucket{le="2"}[15m])) > 2
+        labels:
+          severity: warning
+        annotations:
+          summary: More than two model admissions waited over two seconds

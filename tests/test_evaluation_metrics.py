@@ -361,3 +361,40 @@ def test_demo_expectations_detect_lost_budget_and_criticism_saved_as_need():
     assert not checks["active_filters"] and not checks["task_filters"]
     with pytest.raises(ValueError, match="Unknown scenario"):
         check_turn_expectations(response, {"typo": True})
+
+
+def test_storefront_review_rejects_missing_or_reordered_grades():
+    from copy import deepcopy
+
+    from scripts.review_storefront_replay import score, worksheet
+
+    cards = [{"product_id": str(i), "title": str(i), "price": {"amount": "10"}} for i in range(6)]
+    capture = {
+        "cases": [
+            {
+                "id": "sample",
+                "storefront_id": "clothing",
+                "turns": ["shirts"],
+                "observations": [
+                    {
+                        "http_status": 200,
+                        "response": {"commerce": {"action": "recommend", "products": cards}},
+                    }
+                ],
+            }
+        ]
+    }
+    sheet = worksheet(capture, "digest")
+    judgment = deepcopy(sheet)
+    judgment.update(reviewer="reviewer", human_reviewed=True)
+    turn = judgment["turns"][0]
+    assert len(turn["cards"]) == 5
+    with pytest.raises(ValueError):
+        score(sheet, judgment)
+    turn["unnecessary_question"] = False
+    for card in turn["cards"]:
+        card.update(relevance=2, explanation_supported=True)
+    assert score(sheet, judgment)["by_storefront"]["clothing"]["strong"] == 5
+    turn["cards"].reverse()
+    with pytest.raises(ValueError):
+        score(sheet, judgment)

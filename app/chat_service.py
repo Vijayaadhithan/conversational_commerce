@@ -8,7 +8,12 @@ from starlette.datastructures import State
 
 from app.catalog import strict_json
 from app.commerce_errors import InvalidShoppingIntent
-from app.commerce_intent import direct_plan, preserve_literal_metal_goal, recipient_plan
+from app.commerce_intent import (
+    budget_refinement_plan,
+    direct_plan,
+    preserve_literal_metal_goal,
+    recipient_plan,
+)
 from app.commerce_models import IntentPlan
 from app.commerce_policy import handoff_plan
 from app.commerce_prompts import (
@@ -106,7 +111,10 @@ class ChatService:
 
     async def shopping_plan(self, state, user, repair_reason="", *, dialogue=()):
         deterministic = (
-            direct_plan(user) or recipient_plan(state, user) or handoff_plan(state, user)
+            direct_plan(user)
+            or budget_refinement_plan(state, user)
+            or recipient_plan(state, user)
+            or handoff_plan(state, user)
         )
         if deterministic:
             return deterministic.model_copy(

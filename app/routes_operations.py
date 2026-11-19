@@ -33,7 +33,11 @@ def register_routes(app, settings, operations, refresh_status):
         return Response(
             app.state.metrics.prometheus(
                 app.state.admission,
-                reranker_fallback_calls=getattr(app.state.reranker, "fallback_calls", 0),
+                reranker_fallback_reasons=(
+                    app.state.reranker.fallback_reasons()
+                    if hasattr(app.state.reranker, "fallback_reasons")
+                    else {}
+                ),
             ),
             media_type="text/plain; version=0.0.4",
         )
