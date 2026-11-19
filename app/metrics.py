@@ -20,6 +20,10 @@ class Metrics:
         self.counts = Counter()
         self.latency = Counter()
         self.duration_sum = 0
+        self.durations = {
+            name: Counter() for name in ("model_queue_wait", "stream_first_product", "stream_done")
+        }
+        self.stream_turns = Counter()
         self.recent = deque(maxlen=10000)
         self.started = time.monotonic()
         self.dependencies = {}
@@ -30,13 +34,32 @@ class Metrics:
         with self.lock:
             self.counts[name] += amount
 
-    def request(self, route, method, status, elapsed):
+    def observe_duration(self, name, elapsed):
+        with self.lock:
+            self._observe_duration(name, elapsed)
+
+    def _observe_duration(self, name, elapsed):
+        duration = self.durations[name]
+        duration["sum"] += elapsed
+        for bound in self.buckets:
+            if elapsed <= bound:
+                duration[bound] += 1
+
+    def request(self, route, method, status, elapsed, *, stream=None):
         with self.lock:
             self.counts[f"http:{method}:{route}:{status}"] += 1
             self.duration_sum += elapsed
             for bound in self.buckets:
                 if elapsed <= bound:
                     self.latency[bound] += 1
+            if stream is not None:
+                self.stream_turns[stream.outcome, stream.error_status or status] += 1
+                if not stream.replayed:
+                    if stream.product_seconds is not None:
+                        self._observe_duration("stream_first_product", stream.product_seconds)
+                    if stream.done_seconds is not None:
+                        self._observe_duration("stream_done", stream.done_seconds)
+                status = stream.error_status or status
             # Operational probes must not dilute workload error/latency alerts.
             if route not in {"/livez", "/health", "/ready", "/ops/metrics", "/ops/status"}:
                 self.recent.append((time.monotonic(), status, elapsed))
@@ -94,7 +117,7 @@ class Metrics:
                 "queued_model_workloads": admission.waiting,
             }
 
-    def prometheus(self, admission):
+    def prometheus(self, admission, *, reranker_fallback_calls=0):
         lines = []
         with self.lock:
             for key, value in sorted(self.counts.items()):
@@ -105,6 +128,19 @@ class Metrics:
                     )
                 else:
                     lines.append(f"commerce_{key} {value}")
+            lines.append(f"commerce_reranker_fallback_total {reranker_fallback_calls}")
+            for (outcome, status), count in sorted(self.stream_turns.items()):
+                lines.append(
+                    f'commerce_stream_turns_total{{outcome="{outcome}",status="{status}"}} {count}'
+                )
+            for name, duration in self.durations.items():
+                metric = f"commerce_{name}_seconds"
+                lines.append(f"# TYPE {metric} histogram")
+                for bound in self.buckets:
+                    label = "+Inf" if math.isinf(bound) else str(bound)
+                    lines.append(f'{metric}_bucket{{le="{label}"}} {duration[bound]}')
+                lines.append(f"{metric}_count {duration[float('inf')]}")
+                lines.append(f"{metric}_sum {duration['sum']}")
             for bound in self.buckets:
                 label = "+Inf" if math.isinf(bound) else str(bound)
                 lines.append(

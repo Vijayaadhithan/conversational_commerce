@@ -9,8 +9,9 @@ from fastapi.responses import StreamingResponse
 
 from app.api_models import ChatRequest, NewConversation
 from app.commerce_models import preference_view, shopping_state_for
-from app.commerce_stream import ProgressQueue, stream_turn
+from app.commerce_stream import ProgressQueue, StreamObservation, stream_turn
 from app.operations import finish_on_disconnect
+from app.request_runtime import check_deadline
 from app.storefronts import StorefrontID
 
 
@@ -111,10 +112,10 @@ def register_routes(app, access, service):
 
             try:
                 access.model_rate(request)
-                async with (
-                    app.state.admission.workload(access.owner(request)),
-                    app.state.admission.conversation(key),
+                async with app.state.admission.workload(
+                    access.owner(request), conversation_key=key
                 ):
+                    check_deadline()
                     return await service.process_message(
                         key,
                         body,
@@ -126,8 +127,14 @@ def register_routes(app, access, service):
                 await app.state.db_call(app.state.store.release_request, identity)
 
         if streaming:
+            observation = StreamObservation(replayed=replay is not None)
+            request.state.turn_stream = observation
             return StreamingResponse(
-                stream_turn(lambda: app.state.runtime.run(work, access.owner(request)), progress),
+                stream_turn(
+                    lambda: app.state.runtime.run(work, access.owner(request)),
+                    progress,
+                    observation=observation,
+                ),
                 media_type="text/event-stream",
                 headers={"Cache-Control": "no-cache, no-store", "X-Accel-Buffering": "no"},
             )

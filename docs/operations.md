@@ -386,7 +386,10 @@ local workloads outside this API are not governed by these limits. Bucket memory
 is bounded to 4096 identities, so dormant entries may be evicted.
 
 Every model path shares admission, including chat, shopping, embeddings/search
-and direct reranking. Separate locks serialize each conversation's mutations.
+and direct reranking. Conversation turns wait for their conversation lock before
+acquiring a model slot. Waiting on either resource counts toward the global
+queue and per-user workload limit, under the same admission timeout. A ready
+request can use a free model slot while other conversations wait for their locks.
 A cancelled HTTP coroutine retains its admission slot until model/thread work
 finishes, allowing a later retry to recover the saved result. Requests are capped
 at 256 KiB before JSON parsing, with a 15-second timeout between body chunks.
@@ -417,11 +420,24 @@ to this process and reset at restart. Route labels never contain conversation
 UUIDs or query text. JSON request logs include a generated `X-Request-ID`, route,
 status and elapsed time; they exclude tokens, user messages and raw URLs.
 
+For streamed turns, `commerce_stream_turns_total` counts completed, replayed,
+failed and interrupted streams. After response headers have been sent, the
+terminal error event supplies the workload status for alerts. HTTP counters
+retain the transport status. Request logs include the stream outcome and
+terminal error status when present.
+
+Use `histogram_quantile(0.95, sum by (le) (rate(commerce_stream_done_seconds_bucket[5m])))`
+for streamed time to `done`. Substitute `commerce_stream_first_product_seconds_bucket`
+for time to first product or `commerce_model_queue_wait_seconds_bucket` for
+successful admission wait. Stream latencies start when the stream opens and
+exclude replays. Queue timeouts, intent repairs, successful reranker fallbacks
+and grounded answer fallbacks have separate counters.
+
 Alert transitions are emitted immediately by the background monitor as JSON
 `alert_state_changed` logs and are available in the status/metrics endpoints.
 They cover dependency outages, queue saturation, high memory, and a five-minute
 request window (bounded to 10,000 samples). Defaults: at least 10 workload samples
-and 10% HTTP 5xx, p95 >= 60 seconds, process RSS >= 8192 MiB. Configure the
+and 10% workload 5xx, p95 >= 60 seconds, process RSS >= 8192 MiB. Configure the
 `API_ALERT_*` settings in `.env.example`. Probes do not dilute workload metrics.
 
 `monitoring/prometheus.yml` and `monitoring/alerts.yml` provide scrape/rule

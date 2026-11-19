@@ -7,7 +7,7 @@ from fastapi import HTTPException
 from fastapi.testclient import TestClient
 from test_commerce import Search, harness, new, plan
 
-from app.commerce_stream import stream_turn
+from app.commerce_stream import StreamObservation, stream_turn
 
 
 def frames(text):
@@ -47,6 +47,12 @@ def test_streamed_turn_replay_matches_json_and_commits_once(tmp_path):
         )
         assert ordinary.json() == result and len(calls) == 1
         assert len(client.get(url).json()["messages"]) == 2
+        metrics = client.get("/ops/metrics").text
+        assert 'commerce_stream_turns_total{outcome="done",status="200"} 1' in metrics
+        assert 'commerce_stream_turns_total{outcome="replayed",status="200"} 1' in metrics
+        assert "commerce_stream_first_product_seconds_count 1" in metrics
+        assert "commerce_stream_done_seconds_count 1" in metrics
+        assert "commerce_model_queue_wait_seconds_count 1" in metrics
 
 
 def test_stream_reports_safe_errors_and_retry_delay():
@@ -72,7 +78,8 @@ def test_stream_closing_waits_for_work_instead_of_cancelling_it():
             completed.set()
             return {"reply": "Saved", "message_id": 2}
 
-        stream = stream_turn(work, asyncio.Queue())
+        observation = StreamObservation(replayed=False)
+        stream = stream_turn(work, asyncio.Queue(), observation=observation)
         assert "status" in await anext(stream)
         await started.wait()
         closing = asyncio.create_task(stream.aclose())
@@ -81,5 +88,6 @@ def test_stream_closing_waits_for_work_instead_of_cancelling_it():
         release.set()
         await closing
         assert completed.is_set()
+        assert observation.outcome == "interrupted"
 
     asyncio.run(check())

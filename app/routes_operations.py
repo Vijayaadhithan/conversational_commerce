@@ -31,7 +31,10 @@ def register_routes(app, settings, operations, refresh_status):
     async def operational_metrics():
         app.state.metrics.evaluate(operations, app.state.admission)
         return Response(
-            app.state.metrics.prometheus(app.state.admission),
+            app.state.metrics.prometheus(
+                app.state.admission,
+                reranker_fallback_calls=getattr(app.state.reranker, "fallback_calls", 0),
+            ),
             media_type="text/plain; version=0.0.4",
         )
 

@@ -2,6 +2,8 @@
 
 import asyncio
 import json
+import time
+from dataclasses import dataclass
 
 from fastapi import HTTPException
 
@@ -10,6 +12,33 @@ from app.operations import finish_on_disconnect
 
 def event(name, value):
     return f"event: {name}\ndata: {json.dumps(value, ensure_ascii=False)}\n\n"
+
+
+@dataclass
+class StreamObservation:
+    replayed: bool
+    product_seconds: float | None = None
+    done_seconds: float | None = None
+    error_status: int | None = None
+
+    @property
+    def outcome(self):
+        if self.error_status is not None:
+            return "error"
+        if self.done_seconds is not None:
+            return "replayed" if self.replayed else "done"
+        return "interrupted"
+
+    def record(self, name, value, elapsed):
+        if name == "error":
+            self.error_status = value["status"]
+        elif name in {"commerce", "done"}:
+            commerce = value
+            if name == "done":
+                self.done_seconds = elapsed
+                commerce = value.get("commerce") or {}
+            if self.product_seconds is None and commerce.get("products"):
+                self.product_seconds = elapsed
 
 
 class ProgressQueue(asyncio.Queue):
@@ -81,7 +110,7 @@ class ProgressQueue(asyncio.Queue):
             self.get_nowait()
 
 
-async def stream_turn(work, progress):
+async def stream_turn(work, progress, *, observation=None):
     async def run():
         try:
             result = await work()
@@ -117,6 +146,7 @@ async def stream_turn(work, progress):
                 )
             )
 
+    started = time.monotonic()
     task = asyncio.create_task(run())
     try:
         yield event("status", {"text": "Waiting for your shopping companion…"})
@@ -127,6 +157,8 @@ async def stream_turn(work, progress):
                 yield ": keep-alive\n\n"
                 continue
             yield event(name, value)
+            if observation is not None:
+                observation.record(name, value, time.monotonic() - started)
             if name in {"done", "error"}:
                 break
     finally:

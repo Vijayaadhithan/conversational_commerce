@@ -6,7 +6,7 @@ import logging
 import math
 import time
 from collections import OrderedDict
-from contextlib import asynccontextmanager
+from contextlib import AsyncExitStack, asynccontextmanager
 from uuid import uuid4
 
 from fastapi import HTTPException
@@ -45,7 +45,7 @@ class Admission:
         self.owners = {}
 
     @asynccontextmanager
-    async def workload(self, owner=None):
+    async def workload(self, owner=None, *, conversation_key=None):
         if owner is not None and self.owners.get(owner, 0) >= self.settings.user_workloads:
             raise HTTPException(
                 429, "Too many workloads for this user", headers={"Retry-After": "5"}
@@ -53,7 +53,7 @@ class Admission:
         if owner is not None:
             self.owners[owner] = self.owners.get(owner, 0) + 1
         try:
-            async with self._workload():
+            async with self._workload(conversation_key):
                 yield
         finally:
             if owner is not None:
@@ -62,8 +62,9 @@ class Admission:
                     del self.owners[owner]
 
     @asynccontextmanager
-    async def _workload(self):
-        if self.active + self.waiting >= self.settings.model_concurrency + self.settings.queue_size:
+    async def _workload(self, conversation_key):
+        queued = self.semaphore.locked() or conversation_key in self.conversations
+        if queued and self.waiting >= self.settings.queue_size:
             self.metrics.increment("model_rejected_total")
             raise HTTPException(
                 503,
@@ -71,10 +72,14 @@ class Admission:
                 headers={"Retry-After": "5"},
             )
         started = time.monotonic()
-        self.waiting += 1
-        try:
+        if queued:
+            self.waiting += 1
+        async with AsyncExitStack() as locks:
             try:
-                await asyncio.wait_for(self.semaphore.acquire(), self.settings.queue_timeout)
+                async with asyncio.timeout(self.settings.queue_timeout):
+                    if conversation_key is not None:
+                        await locks.enter_async_context(self.conversation(conversation_key))
+                    await self.semaphore.acquire()
             except TimeoutError as exc:
                 self.metrics.increment("model_queue_timeouts_total")
                 raise HTTPException(
@@ -82,16 +87,19 @@ class Admission:
                     "Model queue wait expired; retry with the same request key",
                     headers={"Retry-After": "5"},
                 ) from exc
-        finally:
-            self.waiting -= 1
-        self.active += 1
-        self.metrics.increment("model_workloads_total")
-        self.metrics.increment("model_queue_wait_seconds_total", time.monotonic() - started)
-        try:
-            yield
-        finally:
-            self.active -= 1
-            self.semaphore.release()
+            finally:
+                if queued:
+                    self.waiting -= 1
+            self.active += 1
+            try:
+                elapsed = time.monotonic() - started
+                self.metrics.increment("model_workloads_total")
+                self.metrics.increment("model_queue_wait_seconds_total", elapsed)
+                self.metrics.observe_duration("model_queue_wait", elapsed)
+                yield
+            finally:
+                self.active -= 1
+                self.semaphore.release()
 
     @asynccontextmanager
     async def conversation(self, key):
@@ -278,6 +286,7 @@ class OperationalMiddleware:
             route = scope.get("route")
             route = getattr(route, "path", "unmatched")
             elapsed = time.monotonic() - started
+            stream = scope["state"].get("turn_stream")
             self.state.metrics.request(
                 route,
                 scope["method"]
@@ -285,7 +294,13 @@ class OperationalMiddleware:
                 else "OTHER",
                 status,
                 elapsed,
+                stream=stream,
             )
+            stream_fields = {}
+            if stream is not None:
+                stream_fields["stream_outcome"] = stream.outcome
+                if stream.error_status is not None:
+                    stream_fields["stream_error_status"] = stream.error_status
             log.info(
                 json.dumps(
                     {
@@ -294,6 +309,7 @@ class OperationalMiddleware:
                         "route": route,
                         "status": status,
                         "seconds": round(elapsed, 4),
+                        **stream_fields,
                     }
                 )
             )

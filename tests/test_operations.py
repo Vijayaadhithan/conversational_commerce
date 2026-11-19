@@ -143,6 +143,40 @@ def test_http_and_model_rate_limits(secured):
         assert send(client, users, cid, key="message-next").status_code == 429
 
 
+def test_stream_error_counts_as_workload_failure_and_same_key_can_retry(secured):
+    _, store, users, _ = secured
+    fail = True
+
+    def model(request):
+        return httpx.Response(500) if fail else response(request)
+
+    app = build(secured, model)
+    with TestClient(app) as client:
+        cid = create(client, users).json()["id"]
+        url = f"/conversations/{cid}/messages"
+        headers = {
+            **users["alice"],
+            "Accept": "text/event-stream",
+            "Idempotency-Key": "stream-failed",
+        }
+        failed = client.post(url, json={"message": "hello"}, headers=headers)
+        assert failed.status_code == 200
+        assert "event: error" in failed.text and '"status": 502' in failed.text
+        assert store.messages(cid) == []
+        status = client.get("/ops/status", headers=users["admin"]).json()
+        assert status["error_ratio"] == 0.5
+        metrics = client.get("/ops/metrics", headers=users["admin"]).text
+        assert 'commerce_stream_turns_total{outcome="error",status="502"} 1' in metrics
+        assert (
+            'commerce_http_requests_total{method="POST",route="/conversations/{conversation_id}/messages",status="200"} 1'
+            in metrics
+        )
+        assert "commerce_stream_done_seconds_count 0" in metrics
+        fail = False
+        assert "event: done" in client.post(url, json={"message": "hello"}, headers=headers).text
+        assert len(store.messages(cid)) == 2
+
+
 def test_bounded_queue_and_per_conversation_serialization(secured):
     _, store, users, _ = secured
     started, release = threading.Event(), threading.Event()
@@ -285,25 +319,43 @@ def test_atomic_failure_rolls_back_messages_and_request(secured, monkeypatch):
         assert len(store.messages(cid)) == 2
 
 
-def test_multiple_slots_still_serialize_same_conversation(secured):
+def test_a_queued_turn_does_not_take_a_model_slot_from_another_conversation(secured):
     _, _, users, _ = secured
-    contexts = []
+    first_started, release = threading.Event(), threading.Event()
+    contexts = {}
 
     async def model(request):
         import json
 
-        contexts.append(len(json.loads(request.content)["messages"]))
-        await asyncio.sleep(0.05)
+        messages = json.loads(request.content)["messages"]
+        text = messages[-1]["content"]
+        contexts[text] = len(messages)
+        if text == "first":
+            first_started.set()
+            await asyncio.to_thread(release.wait, 5)
         return response(request)
 
-    with (
-        TestClient(build(secured, model, model_concurrency=2)) as client,
-        ThreadPoolExecutor() as pool,
-    ):
+    app = build(secured, model, model_concurrency=2, queue_size=1)
+    with TestClient(app) as client, ThreadPoolExecutor() as pool:
         cid = create(client, users).json()["id"]
-        futures = [pool.submit(send, client, users, cid, f"parallel-{i}") for i in range(2)]
-        assert all(f.result().status_code == 200 for f in futures)
-        assert contexts == [2, 4]
+        other = create(client, users, name="bob").json()["id"]
+        first = pool.submit(send, client, users, cid, "parallel-first", "first")
+        try:
+            assert first_started.wait(2)
+            second = pool.submit(send, client, users, cid, "parallel-second", "second")
+            deadline = time.monotonic() + 2
+            admission = app.state.admission
+            while admission.waiting != 1 and time.monotonic() < deadline:
+                time.sleep(0.01)
+            assert admission.waiting == 1 and admission.active == 1
+            independent = pool.submit(send, client, users, other, "other-turn", "other", "bob")
+            assert independent.result(timeout=2).status_code == 200
+            assert not second.done()
+        finally:
+            release.set()
+        assert first.result(timeout=2).status_code == 200
+        assert second.result(timeout=2).status_code == 200
+        assert contexts == {"first": 2, "other": 2, "second": 4}
 
 
 def test_schema_documents_authentication_and_keys(secured):

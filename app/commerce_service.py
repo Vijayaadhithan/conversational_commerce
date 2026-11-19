@@ -53,6 +53,8 @@ class CommerceTurnService:
         repair_reason, inference, result = "", [], {}
         attempts = 1 if direct_plan(message) else 2
         for attempt in range(attempts):
+            if attempt:
+                self.state.metrics.increment("intent_repairs_total")
             if progress:
                 progress(
                     "Understanding your request…" if not attempt else "Checking your preferences…"
@@ -141,6 +143,8 @@ class CommerceTurnService:
             inference.extend(
                 await natural_answer(self.chat, state, message, commerce, dialogue, timings=timings)
             )
+            if commerce["answer_generation"]["status"] == "fallback":
+                self.state.metrics.increment("grounded_answer_fallback_total")
             commerce["preferences"] = preference_view(state)
         elif self.settings.commerce_summary and (
             commerce.get("products") or commerce.get("groups")
