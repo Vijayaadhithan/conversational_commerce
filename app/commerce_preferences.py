@@ -27,6 +27,23 @@ from app.search_models import ProductFilters
 from app.search_normalization import normalize_search
 
 
+def explicit_size(value, evidence):
+    """Match the same numeric size and system on either side of the word 'size'."""
+    number = r"\d{1,3}(?:\.\d{1,2})?"
+    pattern = rf"(?<![\w.])(?:(US|UK|EU)\s+(?:size\s+)?({number})|(?:size\s+)?({number})\s+(US|UK|EU))(?!\w|[./-]\d)"
+    proposed = re.fullmatch(pattern, value.strip(), re.I)
+    if not proposed:
+        return None
+
+    def pair(match):
+        return ((match[1] or match[4]).upper(), match[2] or match[3])
+
+    for match in re.finditer(pattern, evidence, re.I):
+        if pair(match) == pair(proposed):
+            return match.group()
+    raise IntentError("Size or sizing system was not stated in the evidence")
+
+
 def apply_changes(task, plan, message, *, storefront_id=None):
     fields = task.filters.model_dump(mode="json")
     scope = plan.requested_storefront or storefront_id or task.filters.storefront_id
@@ -91,7 +108,11 @@ def apply_changes(task, plan, message, *, storefront_id=None):
             raise IntentError(
                 "Silver/gold alone is not a style. Preserve the literal phrase in query/need; use color or material filters only when explicitly specified"
             )
+        size_evidence = None
         if key == "attribute.size" and isinstance(value, str):
+            size_evidence = explicit_size(value, change.evidence)
+            if size_evidence and negated(size_evidence, message):
+                raise IntentError("Excluded size cannot become a positive requirement")
             system = re.search(r"\b(US|UK|EU)\b", message)
             if system and system.group().casefold() not in normalized(value).split():
                 raise IntentError("Required sizing system was omitted")
@@ -297,7 +318,9 @@ def apply_changes(task, plan, message, *, storefront_id=None):
                     ):
                         raise IntentError("Negative fragrance claim was not stated")
                 elif not isinstance(value, str) or not (
-                    (recipient and normalized(value) == recipient[1]) or evidence_ok(value, quote)
+                    (recipient and normalized(value) == recipient[1])
+                    or size_evidence
+                    or evidence_ok(value, quote)
                 ):
                     raise IntentError("Attribute value was not stated")
                 elif negated(value, message):

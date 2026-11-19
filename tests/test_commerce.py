@@ -922,3 +922,33 @@ def test_task_scoped_filter_edits_and_budget_interruption_preserve_other_fields(
         state, _ = handle_turn(state.model_dump(), direct_plan(text), text, search.search)
         assert search.calls[-1].filters.max_price == amount
         assert search.calls[-1].filters.attributes == {"size": "US 9", "color": "black"}
+
+
+@pytest.mark.parametrize(
+    ("evidence", "value", "valid"),
+    [
+        ("US size 9", "US 9", True),
+        ("size 9 UK", "UK 9", True),
+        ("EU size 39.5", "39.5 EU", True),
+        ("US size 9", "US 9.5", False),
+        ("US 9.5", "US 9", False),
+        ("US size 9.", "US 9", True),
+        ("US size 9", "UK 9", False),
+        ("not US size 9", "US 9", False),
+    ],
+)
+def test_shopping_size_evidence_preserves_literal_system_and_number(evidence, value, valid):
+    from app.commerce_errors import IntentError
+    from app.commerce_preferences import apply_changes
+
+    task = ShoppingTask(id=1, query="running shoes")
+    message = "Running shoes, " + evidence
+    proposal = IntentPlan.model_validate(
+        plan("refine", message, change("attribute.size", value, evidence))
+    )
+    if valid:
+        apply_changes(task, proposal, message)
+        assert task.filters.attributes["size"] == value
+    else:
+        with pytest.raises(IntentError):
+            apply_changes(task, proposal, message)
