@@ -4,6 +4,7 @@ from collections.abc import Callable
 
 from app.catalog import CatalogError
 from app.commerce_errors import IntentError, PreferenceConflict, ScopeConflict
+from app.commerce_intent import filter_edit_plan
 from app.commerce_models import IntentPlan, ShoppingState
 from app.commerce_requests import multi_requests
 from app.commerce_text import evidence_ok, negated, product_mentions
@@ -36,6 +37,8 @@ def route_request(
     """A handoff is an offer to open a scoped request, never a state transfer."""
     if not evidence_ok(plan.evidence, message):
         raise IntentError("Intent lacks current-message evidence")
+    if filter_edit_plan(message):
+        return None
     if plan.intent in {
         "details",
         "compare",

@@ -4,16 +4,61 @@ import re
 
 from app.commerce_discovery import question
 from app.commerce_errors import IntentError, PreferenceConflict
+from app.commerce_intent import filter_edit_plan
 from app.commerce_models import IntentPlan, ShoppingState, ShoppingTask
+from app.commerce_recommendations import recommend_or_inspect
 from app.commerce_requests import multi_requests
 from app.commerce_single_turn import _handle_single_turn
 from app.commerce_text import evidence_ok, product_mentions, task_matches
+from app.search_models import ProductFilters
 
 
 def handle_turn(saved, plan, message, search):
     state = ShoppingState.model_validate(saved or {}).model_copy(deep=True)
     if not evidence_ok(plan.evidence, message):
         raise IntentError("Intent lacks current-message evidence")
+    edit = filter_edit_plan(message)
+    if edit:
+        task = next((item for item in state.tasks if item.id == edit.task_id), None)
+        if not task:
+            return state, question(
+                state, "Which saved item would you like to change?", "task_selection"
+            )
+        change = edit.changes[0]
+        filters = task.filters.model_dump()
+        field = change.field.removeprefix("attribute.")
+        if change.field.startswith("attribute."):
+            previous = filters["attributes"].pop(field, None)
+            if change.value is not None:
+                filters["attributes"][field] = change.value
+            # A copied modifier in the saved product name would otherwise keep
+            # enforcing the old color or material during catalog eligibility.
+            if (
+                field in {"color", "material"}
+                and isinstance(previous, str)
+                and previous != change.value
+            ):
+                stripped = re.sub(
+                    r"(?<!\w)" + re.escape(previous) + r"(?!\w)", "", task.query, flags=re.I
+                )
+                stripped = " ".join(stripped.split())
+                if stripped != task.query and product_mentions(stripped):
+                    task.query = stripped
+                    task.sources["query"] = {
+                        "source": "preference_edit",
+                        "value": stripped,
+                        "evidence": message,
+                    }
+        else:
+            filters[field] = change.value.lstrip("$") if change.value else None
+        task.filters = ProductFilters.model_validate(filters)
+        task.sources[change.field] = {"source": "user", "value": change.value, "evidence": message}
+        state.active_task_id = task.id
+        state.displayed_task_ids = [task.id]
+        state.turns += 1
+        task.pending_question = state.pending_question = ""
+        task.pending_kind = state.pending_kind = ""
+        return recommend_or_inspect(state, edit, message, "", search)
     if (
         state.active()
         and re.search(r"\ballerg(?:y|ies|ic)\b", message, re.I)

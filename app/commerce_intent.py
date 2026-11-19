@@ -45,7 +45,7 @@ def budget_refinement_plan(state, message):
     if not active or not active.query or len(state.tasks) != 1:
         return None
     if not re.fullmatch(
-        r"(?:under|below|less than|up to|at most) \$[1-9]\d{0,6}(?:\.\d{1,2})?(?: instead)?",
+        r"(?:(?:wait|actually)[, ]+)?(?:under|below|less than|up to|at most) \$[1-9]\d{0,6}(?:\.\d{1,2})?(?: instead)?(?:,? same size)?",
         normalized(message).rstrip(".!"),
     ):
         return None
@@ -109,8 +109,42 @@ def simple_budget_requests(message):
     return True
 
 
+def filter_edit_plan(message):
+    # Explicit, task-scoped preference edits from the composer use the same
+    # validation and search as a spoken refinement. Preserve case in sizes.
+    edit = re.fullmatch(
+        r"For task ([1-5]), (remove|set) (maximum price|minimum price|color|size|material|style|scent)"
+        r"(?: to (.{1,120}))?",
+        message,
+        re.I,
+    )
+    if edit:
+        task_id, verb, label, value = edit.groups()
+        label = label.casefold()
+        if (verb.casefold() == "remove") == (value is None):
+            field = {"maximum price": "max_price", "minimum price": "min_price"}.get(
+                label, "attribute." + label
+            )
+            if (
+                value is None
+                or field.startswith("attribute.")
+                or re.fullmatch(r"\$?[0-9]{1,12}(?:\.[0-9]{1,2})?", value)
+            ):
+                return IntentPlan(
+                    intent="refine",
+                    task_id=int(task_id),
+                    evidence=message,
+                    recommendation_requested=True,
+                    changes=[Change(field=field, value=value, evidence=message)],
+                )
+    return None
+
+
 def direct_plan(message):
     text = normalized(message).rstrip(".!?")
+    edit = filter_edit_plan(message)
+    if edit:
+        return edit
     if simple_budget_requests(message):
         return IntentPlan(intent="search", evidence=message, recommendation_requested=True)
     # UI actions carry an explicit task suffix. Route only otherwise complete

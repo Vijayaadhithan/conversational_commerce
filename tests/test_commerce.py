@@ -886,3 +886,39 @@ def test_legacy_generic_question_does_not_lose_a_new_issue_when_model_omits_chan
     assert (
         state.active().needs[-1].value == message and state.active().needs[-1].evidence == message
     )
+
+
+def test_task_scoped_filter_edits_and_budget_interruption_preserve_other_fields():
+    from app.commerce_intent import budget_refinement_plan, direct_plan
+
+    first = ShoppingTask(
+        id=1,
+        query="black running shoes",
+        filters=ProductFilters(max_price="99.99", attributes={"size": "US 9", "color": "black"}),
+    )
+    state = ShoppingState(tasks=[first], active_task_id=1)
+    search = Search()
+    message = "Wait, under $50, same size"
+    state, _ = handle_turn(
+        state.model_dump(), budget_refinement_plan(state, message), message, search.search
+    )
+    assert state.active().filters.max_price == Decimal("49.99")
+    state.tasks.append(ShoppingTask(id=2, query="boots", filters=ProductFilters(max_price=80)))
+    state.active_task_id = 2
+    for text, color in [
+        ("For task 1, remove color", None),
+        ("For task 1, set color to black", "black"),
+    ]:
+        state, _ = handle_turn(state.model_dump(), direct_plan(text), text, search.search)
+        assert search.calls[-1].product_goal == "running shoes"
+        assert search.calls[-1].filters.attributes.get("color") == color
+        assert search.calls[-1].filters.attributes["size"] == "US 9"
+        assert state.active().filters.max_price == Decimal("49.99")
+        assert state.tasks[1].filters.max_price == 80
+    for text, amount in [
+        ("For task 1, set maximum price to $39.99", Decimal("39.99")),
+        ("For task 1, remove maximum price", None),
+    ]:
+        state, _ = handle_turn(state.model_dump(), direct_plan(text), text, search.search)
+        assert search.calls[-1].filters.max_price == amount
+        assert search.calls[-1].filters.attributes == {"size": "US 9", "color": "black"}
