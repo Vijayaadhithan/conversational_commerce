@@ -363,6 +363,15 @@ def test_product_identity_gates_both_retrieval_paths_and_department_aliases(
         ("running shoes", "Women's Running Shoes", "", True),
         ("running shoes", "Women's Running Shorts Black Tap Shoe", "", False),
         ("running shoes", "Running Shoe Socks", "", False),
+        (
+            "running shoes",
+            "Thorlos Lite Running Crew 3-Pair Pack (Men's Shoe 10.5-11.5)",
+            "",
+            False,
+        ),
+        ("running shoes", "Reflective Shoelaces with Metallic Tips for Running Shoes", "", False),
+        ("running shoes", "Girls Kawa Slide (GS/PS) Running Shoe", "", False),
+        ("running shoes", "Slide-resistant Running Shoes with Reflective Shoelaces", "", True),
         ("shoes", "Adjustable Shoe Tree Stretcher Boot Holder", "", False),
         ("shoes", "Foam Shoe Trees for Pointed Toed Shoes", "", False),
         ("shoe tree", "Adjustable Shoe Tree Stretcher Boot Holder", "", True),
@@ -388,9 +397,9 @@ def test_misleading_product_name_gate(pg, goal, title, content, expected):
     suffix, values = product_goal_sql(goal)
     document = {"title": title, "content": {"features": [content], "description": []}}
     result = pg.execute(
-        "SELECT count(*) FROM (SELECT %s::jsonb AS document, '{}'::jsonb AS attributes) p WHERE true"
+        "SELECT count(*) FROM (SELECT %s::text AS title, %s::jsonb AS document, '{}'::jsonb AS attributes) p WHERE true"
         + suffix,
-        [Jsonb(document), *values],
+        [title, Jsonb(document), *values],
     ).fetchone()[0]
     assert bool(result) == expected
 
@@ -416,9 +425,9 @@ def test_material_conflicts_and_wrong_selected_color_cannot_satisfy_filters(pg):
     attributes = {"color": {"value": "Pink"}}
     assert (
         pg.execute(
-            "SELECT count(*) FROM (SELECT %s::jsonb AS document, %s::jsonb AS attributes) p WHERE true"
+            "SELECT count(*) FROM (SELECT %s::text AS title, %s::jsonb AS document, %s::jsonb AS attributes) p WHERE true"
             + suffix,
-            [Jsonb(document), Jsonb(attributes), *params],
+            [document["title"], Jsonb(document), Jsonb(attributes), *params],
         ).fetchone()[0]
         == 0
     )

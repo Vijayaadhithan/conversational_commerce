@@ -117,9 +117,19 @@ def product_goal_sql(goal):
             values.append(
                 r"\m(shoe|footwear) (goo|adhesives?|glue|repair|clips?|polish|deodorizers?)\M"
             )
+        if not re.search(r"\b(?:shoelaces?|laces?)\b", goal, re.I):
+            # A lace listing often names the shoes it fits after "for".
+            clauses.append("p.title !~* %s")
+            values.append(r"\mshoelaces?\M.*\mfor\M.*\m(shoes?|sneakers?|boots?)\M")
         if re.search(r"\brunning\b", goal, re.I):
-            clauses.append("(p.title) ~* %s")
-            values.append(r"\mrunning\M")
+            clauses.extend(["p.title ~* %s", "p.title !~* %s", "p.title !~* %s"])
+            values.extend(
+                [
+                    r"\mrunning\M",
+                    r"\m[0-9]+[- ]pair pack\M.*\([^)]*\mshoe( size)? [0-9]",
+                    r"\m(slides?|sandals?)\M(?![- ]resistant)",
+                ]
+            )
     if re.search(r"\b(?:handbag|purse|crossbody)s?\b", goal, re.I) and not re.search(
         r"\b(?:cosmetic|makeup|toiletry)\b", goal, re.I
     ):
